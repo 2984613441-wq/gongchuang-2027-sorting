@@ -1,0 +1,8 @@
+# Preserve upstream/vendor formatting while keeping whitespace checks enabled
+# for project-owned application code and documentation.
+电控/firmware/stm32f407_m144z/Drivers/** -whitespace
+电控/firmware/stm32f407_m144z/Core/Src/system_stm32f4xx.c -whitespace
+电控/firmware/stm32f407_m144z/.mxproject -whitespace
+电控/firmware/stm32f407_m144z/MDK-ARM/RTE/** -whitespace
+电控/firmware/stm32f407_m144z/MDK-ARM/*.uvprojx -whitespace
+电控/firmware/stm32f407_m144z/MDK-ARM/*.uvoptx -whitespace

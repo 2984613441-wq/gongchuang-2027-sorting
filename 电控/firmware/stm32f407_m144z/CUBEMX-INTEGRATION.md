@@ -1,6 +1,6 @@
 # CubeMX/HAL 代码接入说明
 
-> 本目录不提供 `.ioc`。CubeMX 配置由用户完成；本说明只规定代码所依赖的符号和安全门禁。
+> 本目录已纳入当前通过静态验收的 `.ioc`。CubeMX 配置仍由用户维护；本说明规定代码所依赖的符号、安全门禁和重新生成后的复核项。
 
 ## 1. CubeMX 标签与句柄契约
 
@@ -22,17 +22,21 @@ GPIO 必须使用交接基线中的标签：
 将 `App/Src` 全部 C 文件加入 Keil 工程，并直接加入以下既有核心源码：
 
 ```text
-../../stm32_logic/src/ec_crc32.c
-../../stm32_logic/src/ec_dedup.c
-../../stm32_logic/src/ec_state_machine.c
+../../../stm32_logic/src/ec_crc32.c
+../../../stm32_logic/src/ec_dedup.c
+../../../stm32_logic/src/ec_state_machine.c
 ```
 
 包含目录：
 
 ```text
-App/Inc
-../../stm32_logic/include
+../App/Inc
+../../../stm32_logic/include
 ```
+
+以上路径均以 `MDK-ARM/diankongv1.0.uvprojx` 所在目录为基准。
+
+CubeMX 的 `USER CODE` 保护只覆盖源文件中的标记区域，不保证保留手工加入 Keil 的 App/Logic 工程组、包含路径和诊断宏。每次重新生成后，都必须重新核对 `.uvprojx` 中的九个源文件、两条包含路径及 `EC_DIAGNOSTIC_BUILD=1`。
 
 诊断构建增加宏：
 

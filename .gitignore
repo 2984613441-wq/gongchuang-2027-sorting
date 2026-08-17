@@ -67,6 +67,7 @@ env/
 *.scvd
 JLinkLog.txt
 *.jlink
+电控/firmware/stm32f407_m144z/MDK-ARM/diankongv1.0/
 
 # ===== 系统镜像与磁盘映像 =====
 *.img
