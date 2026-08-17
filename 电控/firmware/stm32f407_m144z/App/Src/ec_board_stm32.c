@@ -102,11 +102,48 @@ bool ec_step_port_start(ec_axis_t axis, uint32_t frequency_hz)
     timer = step_timer_for_axis(axis);
     if (timer == NULL) return false;
 
-    ec_step_port_disable_all();
     __HAL_TIM_SET_COUNTER(timer, 0U);
     __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1,
                           (timer->Init.Period + 1U) / 2U);
     return HAL_TIM_PWM_Start(timer, TIM_CHANNEL_1) == HAL_OK;
+}
+
+bool ec_step_port_set_direction(ec_axis_t axis, ec_direction_t direction)
+{
+    GPIO_PinState state = (direction == EC_DIRECTION_1) ?
+                          GPIO_PIN_SET : GPIO_PIN_RESET;
+
+    switch (axis) {
+    case EC_AXIS_X:
+        HAL_GPIO_WritePin(DIR_X_GPIO_Port, DIR_X_Pin, state);
+        return true;
+    case EC_AXIS_Y:
+        HAL_GPIO_WritePin(DIR_Y_GPIO_Port, DIR_Y_Pin, state);
+        return true;
+    case EC_AXIS_Z:
+        HAL_GPIO_WritePin(DIR_Z_GPIO_Port, DIR_Z_Pin, state);
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool ec_step_port_enable_axis(ec_axis_t axis)
+{
+    ec_step_port_disable_all();
+    switch (axis) {
+    case EC_AXIS_X:
+        HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
+        return true;
+    case EC_AXIS_Y:
+        HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
+        return true;
+    case EC_AXIS_Z:
+        HAL_GPIO_WritePin(ENABLE_Z_GPIO_Port, ENABLE_Z_Pin, GPIO_PIN_RESET);
+        return true;
+    default:
+        return false;
+    }
 }
 
 void ec_step_port_stop_all(void)

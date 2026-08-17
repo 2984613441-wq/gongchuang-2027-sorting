@@ -12,6 +12,10 @@ void test_diag(void) {
   ec_diag_process_line("STEP X 999"); TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_NONE); TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
   ec_diag_process_line("INPUTS"); TEST_ASSERT(strstr(tx_log, "INPUTS RAW=01FF STABLE=01FF ACTIVE=0000") != NULL);
   ec_diag_process_line("STATUS"); TEST_ASSERT(strstr(tx_log, "SAFE_LOCK=1") != NULL);
+  ec_diag_process_line("MOVE X DIR0"); TEST_ASSERT(strstr(tx_log, "ERR MOTION_NOT_ARMED_OR_INHIBITED") != NULL);
+  ec_diag_process_line("MOTION ARM"); TEST_ASSERT(ec_motion_test_is_armed());
+  ec_diag_process_line("MOVE X DIR0"); TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_ARMING);
+  ec_diag_process_line("STEP STOP"); TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
 
   tx_log[0] = '\0'; tx_used = 0U;
   ec_diag_on_rx_byte('S'); ec_diag_on_rx_byte('T'); ec_diag_on_rx_byte('A');

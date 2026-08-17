@@ -8,7 +8,8 @@ add_executable(ec_firmware_host_tests
     ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c
     ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c)
 target_include_directories(ec_firmware_host_tests PRIVATE ../App/Inc ../../../stm32_logic/include)
-target_compile_definitions(ec_firmware_host_tests PRIVATE EC_DIAGNOSTIC_BUILD=1)
+target_compile_definitions(ec_firmware_host_tests PRIVATE
+    EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1)
 if(MSVC)
   target_compile_options(ec_firmware_host_tests PRIVATE /W4 /WX)
 else()

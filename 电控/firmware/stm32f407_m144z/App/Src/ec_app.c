@@ -36,13 +36,16 @@ void ec_app_init(void)
 
 void ec_app_poll(uint32_t now_ms)
 {
+    ec_input_snapshot_t inputs;
+
     if ((uint32_t)(now_ms - last_input_sample_ms) >=
         EC_INPUT_SAMPLE_PERIOD_MS) {
         last_input_sample_ms = now_ms;
         ec_board_poll_inputs(now_ms);
     }
 
-    ec_step_test_poll(now_ms);
+    inputs = ec_board_read_inputs();
+    ec_step_test_poll(now_ms, inputs.active_mask);
     ec_diag_poll();
     ec_diag_tick(now_ms);
 }

@@ -8,6 +8,10 @@
 #define EC_DIAGNOSTIC_BUILD 0
 #endif
 
+#ifndef EC_MOTION_TEST_BUILD
+#define EC_MOTION_TEST_BUILD 0
+#endif
+
 #define EC_DIAG_LINE_CAPACITY 64U
 #define EC_DIAG_RX_CAPACITY 128U
 
@@ -38,6 +42,7 @@ static void consume_rx_byte(uint8_t byte)
         if ((rx_used != 0U) || (line_overflow != 0U)) {
             rx_line[rx_used] = '\0';
             if (line_overflow != 0U) {
+                ec_step_test_stop();
                 ec_diag_port_write("ERR LINE_TOO_LONG\r\n");
             } else {
                 ec_diag_process_line(rx_line);
@@ -69,10 +74,17 @@ void ec_diag_init(void)
 void ec_diag_process_line(const char *line)
 {
     if (strcmp(line, "HELP") == 0) {
-        ec_diag_port_write("HELP STATUS INPUTS STEP X STEP Y STEP Z STEP STOP\r\n");
+        ec_diag_port_write(
+            "HELP STATUS INPUTS STEP X|Y|Z STEP STOP MOTION ARM "
+            "MOVE X|Y|Z DIR0|DIR1\r\n");
     } else if (strcmp(line, "STATUS") == 0) {
-        char output[64];
-        (void)snprintf(output, sizeof(output), "STATUS SAFE_LOCK=1 STEP_AXIS=%u\r\n",
+        char output[96];
+        (void)snprintf(output, sizeof(output),
+                       "STATUS SAFE_LOCK=1 MOTION_TEST=%u ARMED=%u "
+                       "MODE=%u STEP_AXIS=%u\r\n",
+                       (unsigned)EC_MOTION_TEST_BUILD,
+                       ec_motion_test_is_armed() ? 1U : 0U,
+                       (unsigned)ec_step_test_mode(),
                        (unsigned)ec_step_test_active_axis());
         ec_diag_port_write(output);
     } else if (strcmp(line, "INPUTS") == 0) {
@@ -86,6 +98,32 @@ void ec_diag_process_line(const char *line)
     } else if (strcmp(line, "STEP STOP") == 0) {
         ec_step_test_stop();
         ec_diag_port_write("OK STEP STOP\r\n");
+#if EC_MOTION_TEST_BUILD
+    } else if (strcmp(line, "MOTION ARM") == 0) {
+        ec_input_snapshot_t inputs = ec_board_read_inputs();
+        ec_diag_port_write(ec_motion_test_arm(inputs.active_mask) ?
+                           "OK MOTION ARMED 10S\r\n" :
+                           "ERR MOTION_INHIBITED\r\n");
+    } else if ((strcmp(line, "MOVE X DIR0") == 0) ||
+               (strcmp(line, "MOVE X DIR1") == 0) ||
+               (strcmp(line, "MOVE Y DIR0") == 0) ||
+               (strcmp(line, "MOVE Y DIR1") == 0) ||
+               (strcmp(line, "MOVE Z DIR0") == 0) ||
+               (strcmp(line, "MOVE Z DIR1") == 0)) {
+        ec_input_snapshot_t inputs = ec_board_read_inputs();
+        ec_axis_t axis = (line[5] == 'X') ? EC_AXIS_X :
+                         ((line[5] == 'Y') ? EC_AXIS_Y : EC_AXIS_Z);
+        ec_direction_t direction = (line[10] == '1') ?
+                                   EC_DIRECTION_1 : EC_DIRECTION_0;
+        ec_diag_port_write(ec_motion_test_start(axis, direction,
+                                                inputs.active_mask) ?
+                           "OK MOTION STARTING\r\n" :
+                           "ERR MOTION_NOT_ARMED_OR_INHIBITED\r\n");
+#else
+    } else if ((strcmp(line, "MOTION ARM") == 0) ||
+               (strncmp(line, "MOVE ", 5U) == 0)) {
+        ec_diag_port_write("ERR MOTION_TEST_DISABLED\r\n");
+#endif
     } else {
         ec_diag_port_write("ERR BAD_COMMAND\r\n");
     }
@@ -106,6 +144,7 @@ void ec_diag_on_rx_byte(uint8_t byte)
 void ec_diag_poll(void)
 {
     if (rx_queue_overflow != 0U) {
+        ec_step_test_stop();
         rx_queue_overflow = 0U;
         rx_tail = rx_head;
         rx_used = 0U;
