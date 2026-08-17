@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="Claude" modified="2026-08-14T00:00:00.000Z" agent="Claude Code" version="30.0.2">
+  <diagram id="m144z-pcb-map" name="M144Z-M4 Pin PCB Map">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="M144Z-M4 实测引脚与 PCB 接口总图（候选，未冻结）" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=24;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1700" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="绿色：GPIO/外设功能已实测　　黄色：JP_L/JP_R 位置仍待官方资料或万用表连续性验证　　红色：安全边界" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="300" y="80" width="1200" height="45" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="10" value="三轴运动输出&lt;br&gt;&lt;br&gt;X: PC6 STEP / PA7 DIR / PA5 ENABLE&lt;br&gt;Y: PB6 STEP / PC7 DIR / PD7 ENABLE&lt;br&gt;Z: PE5 STEP / PE6 DIR / PG15 ENABLE&lt;br&gt;&lt;br&gt;PCB：三轴 STEP/DIR/ENABLE 各独立&lt;br&gt;X/Y A4988 与板外接口二选一（DNP）&lt;br&gt;Z 轴仅板外控制接口" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="50" y="170" width="520" height="250" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="PWM 与补光&lt;br&gt;&lt;br&gt;PB0 TIM3_CH3　BARRIER 1&lt;br&gt;PB1 TIM3_CH4　BARRIER 2&lt;br&gt;PF6 TIM10_CH1　BARRIER 3&lt;br&gt;PF7 TIM11_CH1　BARRIER 4&lt;br&gt;PB10 TIM2_CH3　GRIP&lt;br&gt;PB11 TIM2_CH4　WRIST（DNP）&lt;br&gt;PC0 GPIO　LIGHT_EN&lt;br&gt;&lt;br&gt;每路独立接口 + GND_LOGIC + 测试点" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="50" y="450" width="520" height="315" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="20" value="M144Z-M4 Mini Board&lt;br&gt;STM32F407ZGT6&lt;br&gt;&lt;br&gt;GPIO 功能已实测&lt;br&gt;排母位置候选、未冻结" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=3;fontSize=19;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="675" y="165" width="450" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="JP_L（2x25）实测功能所用针&lt;br&gt;&lt;br&gt;9 PD9　USART3_RX&lt;br&gt;10 PD8　USART3_TX&lt;br&gt;29 PF6　PWM3&lt;br&gt;30 PF7　PWM4&lt;br&gt;31 PF8　RESET_SIG&lt;br&gt;32 PF11　Z_UP&lt;br&gt;34 PB1　PWM2&lt;br&gt;35 PB0　PWM1&lt;br&gt;38 PA7　DIR_X&lt;br&gt;39 PA5　ENABLE_X&lt;br&gt;40 PA4　START&lt;br&gt;41 PA3　USART2_RX&lt;br&gt;44 PA2　USART2_TX" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;verticalAlign=top;spacingTop=12;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="625" y="310" width="270" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="JP_R（2x25）实测功能所用针&lt;br&gt;&lt;br&gt;1 PC6　STEP_X&lt;br&gt;2 PC7　DIR_Y&lt;br&gt;4 PD7　ENABLE_Y&lt;br&gt;5 PG15　ENABLE_Z&lt;br&gt;13 PG6　X_END&lt;br&gt;14 PG7　X_HOME&lt;br&gt;19 PB6　STEP_Y&lt;br&gt;22 PB11　WRIST_PWM&lt;br&gt;23 PB10　GRIP_PWM&lt;br&gt;29 PD5　Y_END&lt;br&gt;30 PG9　Y_HOME&lt;br&gt;36 PC0　LIGHT_EN&lt;br&gt;37 PE6　DIR_Z&lt;br&gt;38 PE5　STEP_Z&lt;br&gt;43 PG13　ESTOP_FB&lt;br&gt;44 PG14　Z_DOWN" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;verticalAlign=top;spacingTop=12;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="905" y="310" width="270" height="450" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="30" value="安全与人工输入&lt;br&gt;&lt;br&gt;PG7 X_HOME　PG6 X_END&lt;br&gt;PG9 Y_HOME　PD5 Y_END&lt;br&gt;PF11 Z_UP　PG14 Z_DOWN&lt;br&gt;PG13 ESTOP_FB（只读反馈）&lt;br&gt;PA4 START　PF8 MANUAL_RESET&lt;br&gt;&lt;br&gt;输入接口预留：上拉、RC、串联限流/保护位&lt;br&gt;急停主回路必须在板外切断危险动力" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#f8cecc;strokeColor=#b85450;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="170" width="520" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="31" value="双 UART（独立接口，禁止并接）&lt;br&gt;&lt;br&gt;J_UART_MAIN&lt;br&gt;PD8 USART3_TX → 树莓派 RX&lt;br&gt;PD9 USART3_RX ← 树莓派 TX&lt;br&gt;GND_LOGIC&lt;br&gt;&lt;br&gt;J_UART_BACKUP&lt;br&gt;PA2 USART2_TX → 对端 RX&lt;br&gt;PA3 USART2_RX ← 对端 TX&lt;br&gt;GND_LOGIC&lt;br&gt;&lt;br&gt;两路均已在 115200 8N1 下实测" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="480" width="520" height="285" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="40" value="PCB 必须保留&lt;br&gt;&lt;br&gt;2x25 排母与方向丝印　|　三轴控制接口　|　六路 PWM/补光接口　|　六路限位&lt;br&gt;ESTOP/START/RESET　|　主/备 UART　|　STEP/DIR/ENABLE/PWM/UART/电源测试点&lt;br&gt;SWD、TF/SDIO、USB-OTG、板载 USB-UART 净空　|　连接器方向/1 脚/网名丝印" style="rounded=1;whiteSpace=wrap;html=1;align=center;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="50" y="820" width="1120" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="41" value="板外，不集成到载板&lt;br&gt;&lt;br&gt;DC/DC 电源模块&lt;br&gt;树莓派供电模块&lt;br&gt;舵机大电流电源&lt;br&gt;Z 轴驱动功率级与电机相线&lt;br&gt;急停主回路&lt;br&gt;&lt;br&gt;公共逻辑地连续，不用急停切断 GND" style="rounded=1;whiteSpace=wrap;html=1;align=center;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="820" width="520" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="42" value="冻结前门禁：M144Z-M4 官方针序或连续性验证 + 连接器/板框/安装孔尺寸 + 真实 EDA 原理图 + ERC/逐网审查 + 独立审核" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="1050" width="1200" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="100" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="20" target="10"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="101" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="20" target="11"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="102" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="20" target="30"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="103" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="20" target="31"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="104" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="21" target="40"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="105" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="22" target="40"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

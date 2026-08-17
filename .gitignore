@@ -1,0 +1,136 @@
+# 工创赛 · 智能分拣装置
+
+# ===== 操作系统 =====
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+.directory
+.Trash-*
+*~
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.so
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+*.ipynb
+
+# ===== 数据集与模型（大文件） =====
+视觉/datasets/*
+视觉/models/*
+*.weights
+*.h5
+*.hdf5
+*.pth
+*.pt
+*.onnx
+*.kmodel
+*.tflite
+*.tar.gz
+
+# 但保留目录结构
+!视觉/datasets/.gitkeep
+!视觉/models/.gitkeep
+
+# ===== 编译与构建输出 =====
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.out
+
+# STM32 / Keil
+*.uvguix.*
+*.scvd
+JLinkLog.txt
+*.jlink
+
+# ===== 系统镜像与磁盘映像 =====
+*.img
+*.img.gz
+*.img.xz
+*.7z
+*.dmg
+
+# ===== IDE 与编辑器 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ===== 日志 =====
+*.log
+logs/
+*.journal
+
+# ===== 临时文件 =====
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.orig
+
+# ===== 敏感配置 =====
+*.pem
+*.key
+*-key.pem
+.env.local
+.env.*.local
+
+# ===== 树莓派 =====
+# 系统镜像已在上面被 *.img 覆盖
+# SD 卡备份
+
+# ===== MATLAB =====
+*.m~*
+*.asv
+*.slxc
+*.slprj
+*.mlappinstall
+*.mltbx
+sccprj/
+slprj/
+
+# ===== Office 临时文件 =====
+~$*.docx
+~$*.xlsx
+~$*.pptx
+~$*.pdf
+*.tmp.docx
+*.tmp.xlsx
+*.tmp.pptx
+
+# ===== 文档转换中间产物 =====
+# doc-to-md 转换的临时文件（如有）
+*.convert.tmp
+
+# ===== 其他 =====
+node_modules/
+.DS_Store

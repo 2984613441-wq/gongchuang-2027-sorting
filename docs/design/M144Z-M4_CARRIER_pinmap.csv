@@ -1,0 +1,101 @@
+﻿排针,行,列,物理针号,GPIO/板载名,功能/定时器,设计网名,功能说明,状态/证据边界
+JP_L,1,外列,1,PB15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,1,内列,2,PF12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,2,外列,3,PF0,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,2,内列,4,PF1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,3,外列,5,PF2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,3,内列,6,PF3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,4,外列,7,PF4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,4,内列,8,PD10,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,5,外列,9,PD9,USART3_RX,UART_MAIN_RX,主 UART RX <- 树莓派 TX,已实测 115200 8N1
+JP_L,5,内列,10,PD8,USART3_TX,UART_MAIN_TX,主 UART TX -> 树莓派 RX,已实测 115200 8N1
+JP_L,6,外列,11,PD14,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,6,内列,12,PE15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,7,外列,13,PD15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,7,内列,14,PE7,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,8,外列,15,PE8,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,8,内列,16,PE9,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,9,外列,17,PE14,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,9,内列,18,PE13,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,10,外列,19,PE12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,10,内列,20,PE10,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,11,外列,21,PE11,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,11,内列,22,PF13,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,12,外列,23,PD13,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,12,内列,24,PD12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,13,外列,25,PD11,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,13,内列,26,PF5,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,14,外列,27,PB13,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,14,内列,28,PB12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,15,外列,29,PF6,TIM10_CH1,BARRIER_PWM_3,挡板舵机 3 PWM,已实测 PWM；排针位置待验
+JP_L,15,内列,30,PF7,TIM11_CH1,BARRIER_PWM_4,挡板舵机 4 PWM,已实测 PWM；排针位置待验
+JP_L,16,外列,31,PF8,GPIO_IN_PU,MANUAL_RESET_SIG,人工复位输入,已实测输入；排针位置待验
+JP_L,16,内列,32,PF11,GPIO_IN_PU,Z_UP,Z 上限位,已实测输入/联动；排针位置待验
+JP_L,17,外列,33,PB2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,17,内列,34,PB1,TIM3_CH4,BARRIER_PWM_2,挡板舵机 2 PWM,已实测 PWM；排针位置待验
+JP_L,18,外列,35,PB0,TIM3_CH3,BARRIER_PWM_1,挡板舵机 1 PWM,已实测 PWM；排针位置待验
+JP_L,18,内列,36,PC5,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,19,外列,37,PC4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,19,内列,38,PA7,GPIO_OUT,DIR_X,X 轴 DIR,已实测输出；排针位置待验
+JP_L,20,外列,39,PA5,GPIO_OUT,ENABLE_X,X 轴 ENABLE（低有效）,已实测联动；排针位置待验
+JP_L,20,内列,40,PA4,GPIO_IN_PU,START_SIG,启动输入,已实测输入；排针位置待验
+JP_L,21,外列,41,PA3,USART2_RX,UART_BACKUP_RX,备用 UART RX,已实测 115200 8N1
+JP_L,21,内列,42,PC2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,22,外列,43,PC3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,22,内列,44,PA2,USART2_TX,UART_BACKUP_TX,备用 UART TX,已实测 115200 8N1
+JP_L,23,外列,45,PA1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_L,23,内列,46,UREF,TBD,,UREF 用途待确认,不贴网络标签；暂不连接，确认定义后再处理
+JP_L,24,外列,47,RST,SYSTEM,,主控复位脚,当前不接硬件复位则放不连接标记；若使用再命名 MCU_NRST
+JP_L,24,内列,48,3.3V,POWER_BACKUP,VLOGIC_3V3_BACKUP,主控 3.3V 备选供电/参考,仅作备选；必须确认可直接输入；与 5V/USB 互斥，不得默认同时连接
+JP_L,25,外列,49,GND,POWER,GND_LOGIC,逻辑地,必须接公共逻辑地；不作为电机/舵机动力回路
+JP_L,25,内列,50,3.3V,POWER_BACKUP,VLOGIC_3V3_BACKUP,主控 3.3V 备选供电/参考,仅作备选；必须确认可直接输入；与 5V/USB 互斥，不得默认同时连接
+JP_R,1,外列,1,PC6,TIM8_CH1,STEP_X,X 轴 STEP,已实测输出；排针位置待验
+JP_R,1,内列,2,PC7,GPIO_OUT,DIR_Y,Y 轴 DIR,已实测输出；排针位置待验
+JP_R,2,外列,3,PD6,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,2,内列,4,PD7,GPIO_OUT,ENABLE_Y,Y 轴 ENABLE（低有效）,已实测联动；排针位置待验
+JP_R,3,外列,5,PG15,GPIO_OUT,ENABLE_Z,Z 轴 ENABLE（低有效）,已实测联动；排针位置待验
+JP_R,3,内列,6,PC10,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,4,外列,7,PC11,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,4,内列,8,PD2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,5,外列,9,PC12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,5,内列,10,PA8,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,6,外列,11,PC8,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,6,内列,12,PC9,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,7,外列,13,PG6,GPIO_IN_PU,X_END,X 终点限位,已实测输入；排针位置待验
+JP_R,7,内列,14,PG7,GPIO_IN_PU,X_HOME,X 原点限位,已实测输入/联动；排针位置待验
+JP_R,8,外列,15,PG8,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,8,内列,16,PA11,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,9,外列,17,PA12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,9,内列,18,PA6,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,10,外列,19,PB6,TIM4_CH1,STEP_Y,Y 轴 STEP,已实测输出；排针位置待验
+JP_R,10,内列,20,PB5,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,11,外列,21,PB3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,11,内列,22,PB11,TIM2_CH4,WRIST_PWM,腕部旋转预留 PWM,DNP；排针位置待验
+JP_R,12,外列,23,PB10,TIM2_CH3,GRIP_PWM,三指夹爪 PWM,已实测 PWM；排针位置待验
+JP_R,12,内列,24,PA15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,13,外列,25,PD0,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,13,内列,26,PD1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,14,外列,27,PD3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,14,内列,28,PD4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,15,外列,29,PD5,GPIO_IN_PU,Y_END,Y 终点限位,已实测输入；排针位置待验
+JP_R,15,内列,30,PG9,GPIO_IN_PU,Y_HOME,Y 原点限位,已实测输入/联动；排针位置待验
+JP_R,16,外列,31,PG10,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,16,内列,32,PB7,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,17,外列,33,PE0,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,17,内列,34,PE1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,18,外列,35,PC1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,18,内列,36,PC0,GPIO_OUT,LIGHT_EN,补光使能,已实测输出；排针位置待验
+JP_R,19,外列,37,PE6,GPIO_OUT,DIR_Z,Z 轴 DIR,已实测输出；排针位置待验
+JP_R,19,内列,38,PE5,TIM9_CH1,STEP_Z,Z 轴 STEP,已实测输出；排针位置待验
+JP_R,20,外列,39,PE2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,20,内列,40,PE3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,21,外列,41,PG11,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,21,内列,42,PG12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,22,外列,43,PG13,GPIO_IN_PU,ESTOP_FB,急停辅助反馈（只读）,已实测输入；板载冲突待验
+JP_R,22,内列,44,PG14,GPIO_IN_PU,Z_DOWN,Z 下限位,已实测输入/联动；排针位置待验
+JP_R,23,外列,45,PB4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
+JP_R,23,内列,46,VBAT,SYSTEM,,RTC 备用电源,不使用则放不连接标记；不得接 5V
+JP_R,24,外列,47,GND,POWER,GND_LOGIC,逻辑地,必须接公共逻辑地；不作为电机/舵机动力回路
+JP_R,24,内列,48,5V,POWER_IN,VLOGIC_5V,主控 5V 主供电候选,外部 DC/DC 5V 候选；与 3.3V 备选/USB 供电互斥；输入方向和额定待验
+JP_R,25,外列,49,GND,POWER,GND_LOGIC,逻辑地,必须接公共逻辑地；不作为电机/舵机动力回路
+JP_R,25,内列,50,5V,POWER_IN,VLOGIC_5V,主控 5V 主供电候选,外部 DC/DC 5V 候选；与 3.3V 备选/USB 供电互斥；输入方向和额定待验

@@ -1,0 +1,318 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1700" viewBox="0 0 1800 1700">
+<style>text{font-family:Arial,"Microsoft YaHei",sans-serif} .title{font-size:30px;font-weight:700} .hdr{font-size:18px;font-weight:700} .pin{font-size:14px} .note{font-size:15px}</style>
+<rect width="100%" height="100%" fill="white"/>
+<text x="900" y="45" text-anchor="middle" class="title">M144Z-M4 Mini Board 完整 2×25 排针物理针位图（候选/待验）</text>
+<text x="900" y="75" text-anchor="middle" class="note">奇数=外列，偶数=内列；行号从 TF 卡端开始；针号为实物排针编号，不是 MCU 封装脚号</text>
+<rect x="80" y="110" width="780" height="1450" rx="10" fill="#fff4cf" stroke="#c79518" stroke-width="2"/>
+<text x="470" y="145" text-anchor="middle" class="hdr">JP_L（2×25）</text>
+<text x="190" y="175" text-anchor="middle" class="note">外列 / 奇数</text>
+<text x="750" y="175" text-anchor="middle" class="note">内列 / 偶数</text>
+<rect x="108" y="187" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="201" class="pin">01  PB15</text>
+<text x="118" y="218" class="pin">NC / SPARE</text>
+<rect x="468" y="187" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="201" class="pin">02  PF12</text>
+<text x="478" y="218" class="pin">NC / SPARE</text>
+<rect x="108" y="238" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="252" class="pin">03  PF0</text>
+<text x="118" y="269" class="pin">NC / SPARE</text>
+<rect x="468" y="238" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="252" class="pin">04  PF1</text>
+<text x="478" y="269" class="pin">NC / SPARE</text>
+<rect x="108" y="289" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="303" class="pin">05  PF2</text>
+<text x="118" y="320" class="pin">NC / SPARE</text>
+<rect x="468" y="289" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="303" class="pin">06  PF3</text>
+<text x="478" y="320" class="pin">NC / SPARE</text>
+<rect x="108" y="340" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="354" class="pin">07  PF4</text>
+<text x="118" y="371" class="pin">NC / SPARE</text>
+<rect x="468" y="340" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="354" class="pin">08  PD10</text>
+<text x="478" y="371" class="pin">NC / SPARE</text>
+<rect x="108" y="391" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="405" class="pin">09  PD9</text>
+<text x="118" y="422" class="pin">UART_MAIN_RX</text>
+<rect x="468" y="391" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="405" class="pin">10  PD8</text>
+<text x="478" y="422" class="pin">UART_MAIN_TX</text>
+<rect x="108" y="442" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="456" class="pin">11  PD14</text>
+<text x="118" y="473" class="pin">NC / SPARE</text>
+<rect x="468" y="442" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="456" class="pin">12  PE15</text>
+<text x="478" y="473" class="pin">NC / SPARE</text>
+<rect x="108" y="493" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="507" class="pin">13  PD15</text>
+<text x="118" y="524" class="pin">NC / SPARE</text>
+<rect x="468" y="493" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="507" class="pin">14  PE7</text>
+<text x="478" y="524" class="pin">NC / SPARE</text>
+<rect x="108" y="544" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="558" class="pin">15  PE8</text>
+<text x="118" y="575" class="pin">NC / SPARE</text>
+<rect x="468" y="544" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="558" class="pin">16  PE9</text>
+<text x="478" y="575" class="pin">NC / SPARE</text>
+<rect x="108" y="595" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="609" class="pin">17  PE14</text>
+<text x="118" y="626" class="pin">NC / SPARE</text>
+<rect x="468" y="595" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="609" class="pin">18  PE13</text>
+<text x="478" y="626" class="pin">NC / SPARE</text>
+<rect x="108" y="646" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="660" class="pin">19  PE12</text>
+<text x="118" y="677" class="pin">NC / SPARE</text>
+<rect x="468" y="646" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="660" class="pin">20  PE10</text>
+<text x="478" y="677" class="pin">NC / SPARE</text>
+<rect x="108" y="697" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="711" class="pin">21  PE11</text>
+<text x="118" y="728" class="pin">NC / SPARE</text>
+<rect x="468" y="697" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="711" class="pin">22  PF13</text>
+<text x="478" y="728" class="pin">NC / SPARE</text>
+<rect x="108" y="748" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="762" class="pin">23  PD13</text>
+<text x="118" y="779" class="pin">NC / SPARE</text>
+<rect x="468" y="748" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="762" class="pin">24  PD12</text>
+<text x="478" y="779" class="pin">NC / SPARE</text>
+<rect x="108" y="799" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="813" class="pin">25  PD11</text>
+<text x="118" y="830" class="pin">NC / SPARE</text>
+<rect x="468" y="799" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="813" class="pin">26  PF5</text>
+<text x="478" y="830" class="pin">NC / SPARE</text>
+<rect x="108" y="850" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="864" class="pin">27  PB13</text>
+<text x="118" y="881" class="pin">NC / SPARE</text>
+<rect x="468" y="850" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="864" class="pin">28  PB12</text>
+<text x="478" y="881" class="pin">NC / SPARE</text>
+<rect x="108" y="901" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="915" class="pin">29  PF6</text>
+<text x="118" y="932" class="pin">BARRIER_PWM_3</text>
+<rect x="468" y="901" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="915" class="pin">30  PF7</text>
+<text x="478" y="932" class="pin">BARRIER_PWM_4</text>
+<rect x="108" y="952" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="966" class="pin">31  PF8</text>
+<text x="118" y="983" class="pin">MANUAL_RESET_SIG</text>
+<rect x="468" y="952" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="966" class="pin">32  PF11</text>
+<text x="478" y="983" class="pin">Z_UP</text>
+<rect x="108" y="1003" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="1017" class="pin">33  PB2</text>
+<text x="118" y="1034" class="pin">NC / SPARE</text>
+<rect x="468" y="1003" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="1017" class="pin">34  PB1</text>
+<text x="478" y="1034" class="pin">BARRIER_PWM_2</text>
+<rect x="108" y="1054" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="1068" class="pin">35  PB0</text>
+<text x="118" y="1085" class="pin">BARRIER_PWM_1</text>
+<rect x="468" y="1054" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="1068" class="pin">36  PC5</text>
+<text x="478" y="1085" class="pin">NC / SPARE</text>
+<rect x="108" y="1105" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="1119" class="pin">37  PC4</text>
+<text x="118" y="1136" class="pin">NC / SPARE</text>
+<rect x="468" y="1105" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="1119" class="pin">38  PA7</text>
+<text x="478" y="1136" class="pin">DIR_X</text>
+<rect x="108" y="1156" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="1170" class="pin">39  PA5</text>
+<text x="118" y="1187" class="pin">ENABLE_X</text>
+<rect x="468" y="1156" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="1170" class="pin">40  PA4</text>
+<text x="478" y="1187" class="pin">START_SIG</text>
+<rect x="108" y="1207" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="118" y="1221" class="pin">41  PA3</text>
+<text x="118" y="1238" class="pin">UART_BACKUP_RX</text>
+<rect x="468" y="1207" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="478" y="1221" class="pin">42  PC2</text>
+<text x="478" y="1238" class="pin">NC / SPARE</text>
+<rect x="108" y="1258" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="1272" class="pin">43  PC3</text>
+<text x="118" y="1289" class="pin">NC / SPARE</text>
+<rect x="468" y="1258" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="478" y="1272" class="pin">44  PA2</text>
+<text x="478" y="1289" class="pin">UART_BACKUP_TX</text>
+<rect x="108" y="1309" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="118" y="1323" class="pin">45  PA1</text>
+<text x="118" y="1340" class="pin">NC / SPARE</text>
+<rect x="468" y="1309" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="478" y="1323" class="pin">46  UREF</text>
+<text x="478" y="1340" class="pin">NC / TBD</text>
+<rect x="108" y="1360" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="118" y="1374" class="pin">47  RST</text>
+<text x="118" y="1391" class="pin">NC / TBD</text>
+<rect x="468" y="1360" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="478" y="1374" class="pin">48  3.3V</text>
+<text x="478" y="1391" class="pin">VLOGIC_3V3_BACKUP</text>
+<rect x="108" y="1411" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="118" y="1425" class="pin">49  GND</text>
+<text x="118" y="1442" class="pin">GND_LOGIC</text>
+<rect x="468" y="1411" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="478" y="1425" class="pin">50  3.3V</text>
+<text x="478" y="1442" class="pin">VLOGIC_3V3_BACKUP</text>
+<text x="470" y="1535" text-anchor="middle" class="note">GPIO 复用已实测不等于排针连续性已验证</text>
+<rect x="940" y="110" width="780" height="1450" rx="10" fill="#fff4cf" stroke="#c79518" stroke-width="2"/>
+<text x="1330" y="145" text-anchor="middle" class="hdr">JP_R（2×25）</text>
+<text x="1050" y="175" text-anchor="middle" class="note">外列 / 奇数</text>
+<text x="1610" y="175" text-anchor="middle" class="note">内列 / 偶数</text>
+<rect x="968" y="187" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="201" class="pin">01  PC6</text>
+<text x="978" y="218" class="pin">STEP_X</text>
+<rect x="1328" y="187" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="201" class="pin">02  PC7</text>
+<text x="1338" y="218" class="pin">DIR_Y</text>
+<rect x="968" y="238" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="252" class="pin">03  PD6</text>
+<text x="978" y="269" class="pin">NC / SPARE</text>
+<rect x="1328" y="238" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="252" class="pin">04  PD7</text>
+<text x="1338" y="269" class="pin">ENABLE_Y</text>
+<rect x="968" y="289" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="303" class="pin">05  PG15</text>
+<text x="978" y="320" class="pin">ENABLE_Z</text>
+<rect x="1328" y="289" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="303" class="pin">06  PC10</text>
+<text x="1338" y="320" class="pin">NC / SPARE</text>
+<rect x="968" y="340" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="354" class="pin">07  PC11</text>
+<text x="978" y="371" class="pin">NC / SPARE</text>
+<rect x="1328" y="340" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="354" class="pin">08  PD2</text>
+<text x="1338" y="371" class="pin">NC / SPARE</text>
+<rect x="968" y="391" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="405" class="pin">09  PC12</text>
+<text x="978" y="422" class="pin">NC / SPARE</text>
+<rect x="1328" y="391" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="405" class="pin">10  PA8</text>
+<text x="1338" y="422" class="pin">NC / SPARE</text>
+<rect x="968" y="442" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="456" class="pin">11  PC8</text>
+<text x="978" y="473" class="pin">NC / SPARE</text>
+<rect x="1328" y="442" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="456" class="pin">12  PC9</text>
+<text x="1338" y="473" class="pin">NC / SPARE</text>
+<rect x="968" y="493" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="507" class="pin">13  PG6</text>
+<text x="978" y="524" class="pin">X_END</text>
+<rect x="1328" y="493" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="507" class="pin">14  PG7</text>
+<text x="1338" y="524" class="pin">X_HOME</text>
+<rect x="968" y="544" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="558" class="pin">15  PG8</text>
+<text x="978" y="575" class="pin">NC / SPARE</text>
+<rect x="1328" y="544" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="558" class="pin">16  PA11</text>
+<text x="1338" y="575" class="pin">NC / SPARE</text>
+<rect x="968" y="595" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="609" class="pin">17  PA12</text>
+<text x="978" y="626" class="pin">NC / SPARE</text>
+<rect x="1328" y="595" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="609" class="pin">18  PA6</text>
+<text x="1338" y="626" class="pin">NC / SPARE</text>
+<rect x="968" y="646" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="660" class="pin">19  PB6</text>
+<text x="978" y="677" class="pin">STEP_Y</text>
+<rect x="1328" y="646" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="660" class="pin">20  PB5</text>
+<text x="1338" y="677" class="pin">NC / SPARE</text>
+<rect x="968" y="697" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="711" class="pin">21  PB3</text>
+<text x="978" y="728" class="pin">NC / SPARE</text>
+<rect x="1328" y="697" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="711" class="pin">22  PB11</text>
+<text x="1338" y="728" class="pin">WRIST_PWM</text>
+<rect x="968" y="748" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="762" class="pin">23  PB10</text>
+<text x="978" y="779" class="pin">GRIP_PWM</text>
+<rect x="1328" y="748" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="762" class="pin">24  PA15</text>
+<text x="1338" y="779" class="pin">NC / SPARE</text>
+<rect x="968" y="799" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="813" class="pin">25  PD0</text>
+<text x="978" y="830" class="pin">NC / SPARE</text>
+<rect x="1328" y="799" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="813" class="pin">26  PD1</text>
+<text x="1338" y="830" class="pin">NC / SPARE</text>
+<rect x="968" y="850" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="864" class="pin">27  PD3</text>
+<text x="978" y="881" class="pin">NC / SPARE</text>
+<rect x="1328" y="850" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="864" class="pin">28  PD4</text>
+<text x="1338" y="881" class="pin">NC / SPARE</text>
+<rect x="968" y="901" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="915" class="pin">29  PD5</text>
+<text x="978" y="932" class="pin">Y_END</text>
+<rect x="1328" y="901" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="915" class="pin">30  PG9</text>
+<text x="1338" y="932" class="pin">Y_HOME</text>
+<rect x="968" y="952" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="966" class="pin">31  PG10</text>
+<text x="978" y="983" class="pin">NC / SPARE</text>
+<rect x="1328" y="952" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="966" class="pin">32  PB7</text>
+<text x="1338" y="983" class="pin">NC / SPARE</text>
+<rect x="968" y="1003" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="1017" class="pin">33  PE0</text>
+<text x="978" y="1034" class="pin">NC / SPARE</text>
+<rect x="1328" y="1003" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="1017" class="pin">34  PE1</text>
+<text x="1338" y="1034" class="pin">NC / SPARE</text>
+<rect x="968" y="1054" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="1068" class="pin">35  PC1</text>
+<text x="978" y="1085" class="pin">NC / SPARE</text>
+<rect x="1328" y="1054" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="1068" class="pin">36  PC0</text>
+<text x="1338" y="1085" class="pin">LIGHT_EN</text>
+<rect x="968" y="1105" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="1119" class="pin">37  PE6</text>
+<text x="978" y="1136" class="pin">DIR_Z</text>
+<rect x="1328" y="1105" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="1119" class="pin">38  PE5</text>
+<text x="1338" y="1136" class="pin">STEP_Z</text>
+<rect x="968" y="1156" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="1170" class="pin">39  PE2</text>
+<text x="978" y="1187" class="pin">NC / SPARE</text>
+<rect x="1328" y="1156" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="1170" class="pin">40  PE3</text>
+<text x="1338" y="1187" class="pin">NC / SPARE</text>
+<rect x="968" y="1207" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="1221" class="pin">41  PG11</text>
+<text x="978" y="1238" class="pin">NC / SPARE</text>
+<rect x="1328" y="1207" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="1338" y="1221" class="pin">42  PG12</text>
+<text x="1338" y="1238" class="pin">NC / SPARE</text>
+<rect x="968" y="1258" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="978" y="1272" class="pin">43  PG13</text>
+<text x="978" y="1289" class="pin">ESTOP_FB</text>
+<rect x="1328" y="1258" width="335" height="36" fill="#d9f0d0" stroke="#aaaaaa"/>
+<text x="1338" y="1272" class="pin">44  PG14</text>
+<text x="1338" y="1289" class="pin">Z_DOWN</text>
+<rect x="968" y="1309" width="335" height="36" fill="#eeeeee" stroke="#aaaaaa"/>
+<text x="978" y="1323" class="pin">45  PB4</text>
+<text x="978" y="1340" class="pin">NC / SPARE</text>
+<rect x="1328" y="1309" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="1338" y="1323" class="pin">46  VBAT</text>
+<text x="1338" y="1340" class="pin">NC / TBD</text>
+<rect x="968" y="1360" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="978" y="1374" class="pin">47  GND</text>
+<text x="978" y="1391" class="pin">GND_LOGIC</text>
+<rect x="1328" y="1360" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="1338" y="1374" class="pin">48  5V</text>
+<text x="1338" y="1391" class="pin">VLOGIC_5V</text>
+<rect x="968" y="1411" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="978" y="1425" class="pin">49  GND</text>
+<text x="978" y="1442" class="pin">GND_LOGIC</text>
+<rect x="1328" y="1411" width="335" height="36" fill="#f8dfc2" stroke="#aaaaaa"/>
+<text x="1338" y="1425" class="pin">50  5V</text>
+<text x="1338" y="1442" class="pin">VLOGIC_5V</text>
+<text x="1330" y="1535" text-anchor="middle" class="note">GPIO 复用已实测不等于排针连续性已验证</text>
+<rect x="80" y="1590" width="1640" height="60" fill="#f5d1d1" stroke="#be4b4b"/>
+<text x="900" y="1627" text-anchor="middle" class="note">来源：用户 2026-08-13 手工抄录；JP_R-1=PC6 外列、JP_R-2=PC7 内列；冻结前必须 1:1 打印/万用表连续性核对</text>
+</svg>

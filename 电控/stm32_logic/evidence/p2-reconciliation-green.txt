@@ -1,0 +1,16 @@
+REVIEW-011 P2 reconciliation GREEN evidence
+Date: 2026-08-13
+Source: Claude independent read-only regression report REVIEW-20260813-011, section 1.1; retained as a summary, not a replacement for raw logs.
+
+Fresh verification summary:
+- C explicit tests: ALL 35 STM32 LOGIC TESTS PASSED; exit code 0.
+- CTest: 1/1 passed; exit code 0.
+- Python suites: protocol 24/24, state_machine 19/19, drivers 12/12, integration 14/14, rpi 21/21; total 90/90; exit code 0.
+- Python compileall: exit code 0.
+- Python/C CRC vector: CRC_MATCH=470B99F4; exit code 0.
+- Forbidden-token scan: 0 matches.
+- git diff --check: exit code 0.
+
+P2-003 note: the reported initial failure was in the test expectation (an uninserted `first` identity was treated as inserted); the assertion was corrected before the passing run. No production logic change was reported.
+
+Limit: this summary does not establish Linux/WSL, target STM32, real serial, display, motor, limit-switch, emergency-stop, wiring, power-on, flashing, board submission, procurement, or physical-motion validation.
