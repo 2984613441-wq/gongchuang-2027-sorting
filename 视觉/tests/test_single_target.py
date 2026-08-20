@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+import json
+import sys
+import unittest
+from pathlib import Path
+
+SRC = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC))
+
+from sorting_vision.backends import FakeBackend
+from sorting_vision.errors import ConfigurationError
+from sorting_vision.single_target import (
+    SingleTargetLoopConfig,
+    SingleTargetResult,
+    format_diagnostic_text,
+    process_single_target_frame,
+    render_diagnostic,
+    run_vision_loop,
+    to_single_target_json,
+)
+from sorting_vision.types import (
+    BackendOutput,
+    BoundingBox,
+    Coordinate,
+    DetectionResult,
+    FakeImage,
+    RawDetection,
+    ResultStatus,
+)
+
+
+def raw(class_id: int, confidence: float, bbox: tuple[float, float, float, float]) -> RawDetection:
+    return RawDetection(class_id, confidence, BoundingBox(*bbox))
+
+
+def success_output() -> BackendOutput:
+    return BackendOutput(100, 80, (raw(0, 0.90, (10, 10, 30, 30)),))
+
+
+class LoopFakeBackend(FakeBackend):
+    name = "loop-fake"
+
+    def __init__(self, outputs, frames: int) -> None:
+        super().__init__(outputs)
+        self._frames = [FakeImage("single", 100, 80) for _ in range(frames)]
+        self.released = False
+
+    def capture(self):
+        return self._frames.pop(0) if self._frames else None
+
+    def release(self) -> None:
+        self.released = True
+
+
+class SingleTargetTests(unittest.TestCase):
+    def assert_failed(self, result: SingleTargetResult, code: str) -> None:
+        self.assertIs(ResultStatus.FAILED, result.status)
+        self.assertIsNone(result.detection)
+        self.assertFalse(result.motion_ready)
+        self.assertEqual(code, result.issues[0].code)
+
+    def test_single_target_success_without_calibration_is_not_motion_ready(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend({"single": success_output()})
+        result = process_single_target_frame(
+            config, backend, FakeImage("single", 100, 80), frame_id=5
+        )
+
+        self.assertIs(ResultStatus.OK, result.status)
+        self.assertEqual(5, result.frame_id)
+        self.assertEqual("fake", result.backend)
+        self.assertEqual("block", result.detection.class_name)
+        self.assertEqual((20.0, 20.0), result.detection.center_pixel)
+        self.assertFalse(result.detection.motion_ready)
+        self.assertFalse(result.motion_ready)
+        self.assertEqual((), result.issues)
+        self.assertGreaterEqual(result.elapsed_ms, 0.0)
+
+    def test_low_confidence_fails_closed_as_empty_detection(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend(
+            {"single": BackendOutput(100, 80, (raw(0, 0.20, (10, 10, 30, 30)),))}
+        )
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "EMPTY_DETECTION")
+
+    def test_unknown_class_fails_closed(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend(
+            {"single": BackendOutput(100, 80, (raw(7, 0.90, (10, 10, 30, 30)),))}
+        )
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "UNKNOWN_CLASS")
+
+    def test_out_of_image_bbox_fails_closed(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend(
+            {"single": BackendOutput(100, 80, (raw(0, 0.90, (95, 10, 110, 20)),))}
+        )
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "INVALID_DETECTION")
+
+    def test_overlapping_duplicate_boxes_fail_closed(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend(
+            {
+                "single": BackendOutput(
+                    100,
+                    80,
+                    (
+                        raw(0, 0.95, (10, 10, 40, 40)),
+                        raw(0, 0.90, (11, 11, 39, 39)),
+                    ),
+                )
+            }
+        )
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "DUPLICATE_DETECTION")
+
+    def test_two_non_overlapping_targets_fail_closed_as_ambiguous(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend(
+            {
+                "single": BackendOutput(
+                    100,
+                    80,
+                    (
+                        raw(0, 0.90, (10, 10, 30, 30)),
+                        raw(0, 0.80, (60, 10, 80, 30)),
+                    ),
+                )
+            }
+        )
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "AMBIGUOUS_TARGET")
+
+    def test_missing_labels_fail_closed_when_detection_appears(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt")
+        backend = FakeBackend({"single": success_output()})
+        result = process_single_target_frame(config, backend, FakeImage("single", 100, 80))
+        self.assert_failed(result, "UNKNOWN_CLASS")
+
+    def test_corrupted_input_fails_closed(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend({"single": success_output()})
+        result = process_single_target_frame(
+            config, backend, FakeImage("single", 100, 80, corrupted=True)
+        )
+        self.assert_failed(result, "INVALID_INPUT")
+
+    def test_unexpected_backend_exception_fails_closed(self) -> None:
+        class ExplodingBackend:
+            name = "exploding"
+
+            def infer(self, image):
+                raise RuntimeError("boom")
+
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        result = process_single_target_frame(config, ExplodingBackend(), FakeImage("single", 100, 80))
+        self.assert_failed(result, "UNEXPECTED_BACKEND_FAILURE")
+
+    def test_loop_honors_max_frames_and_releases_backend(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt", labels=("block",), max_frames=3
+        )
+        backend = LoopFakeBackend({"single": success_output()}, frames=4)
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual(3, len(results))
+        self.assertEqual([1, 2, 3], [result.frame_id for result in results])
+        self.assertTrue(all(result.status is ResultStatus.OK for result in results))
+        self.assertTrue(backend.released)
+
+    def test_text_and_json_diagnostics_have_required_fields(self) -> None:
+        detection = DetectionResult(
+            target_seq=1,
+            class_id=0,
+            class_name="block",
+            confidence=0.90,
+            bbox=BoundingBox(10, 10, 30, 30),
+            center_pixel=(20.0, 20.0),
+            coordinate=Coordinate(x=20.0, y=20.0, frame="image_pixel", unit="pixel", calibrated=False),
+        )
+        result = SingleTargetResult(
+            frame_id=3,
+            status=ResultStatus.OK,
+            backend="fake",
+            detection=detection,
+            elapsed_ms=12.5,
+        )
+
+        self.assertEqual("3:block:0.90:20.0,20.0:12.5ms\n", format_diagnostic_text(result))
+        payload = json.loads(to_single_target_json(result))
+        self.assertEqual(3, payload["frame_id"])
+        self.assertIs(True, payload["diagnostic_only"])
+        self.assertIs(False, payload["wire_codec_frozen"])
+        self.assertIs(False, payload["motion_ready"])
+        self.assertEqual(90.0, payload["confidence_percent"])
+
+        text_config = SingleTargetLoopConfig(model_path="fake.pt", output_format="text")
+        self.assertEqual(
+            "3:block:0.90:20.0,20.0:12.5ms\n", render_diagnostic(text_config, result)
+        )
+        json_config = SingleTargetLoopConfig(model_path="fake.pt", output_format="json")
+        self.assertIn('"diagnostic_only": true', render_diagnostic(json_config, result))
+
+    def test_config_validate_rejects_unknown_output_format(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", output_format="xml")
+        with self.assertRaises(ConfigurationError):
+            config.validate()
+
+
+if __name__ == "__main__":
+    unittest.main()
