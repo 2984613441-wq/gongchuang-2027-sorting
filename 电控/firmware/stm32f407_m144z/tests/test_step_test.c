@@ -2,19 +2,33 @@
 #include "ec_inputs.h"
 #include "test_support.h"
 static unsigned start_count, stop_count, direction_count, enable_count;
+static unsigned counted_start_count;
 static ec_axis_t last_axis;
+static uint32_t last_frequency_hz;
+static uint32_t last_counted_steps;
+static uint32_t last_counted_hz;
+static uint32_t fake_counted_remaining;
 static uint32_t fake_now_ms;
-bool ec_step_port_start(ec_axis_t axis, uint32_t frequency_hz) { TEST_ASSERT(frequency_hz == 10U); start_count++; last_axis = axis; return true; }
+bool ec_step_port_start(ec_axis_t axis, uint32_t frequency_hz) { TEST_ASSERT((frequency_hz == 10U) || (frequency_hz == 100U)); start_count++; last_axis = axis; last_frequency_hz = frequency_hz; return true; }
+bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz, uint32_t steps) { counted_start_count++; last_axis = axis; last_counted_steps = steps; last_counted_hz = frequency_hz; fake_counted_remaining = steps; return true; }
 bool ec_step_port_set_direction(ec_axis_t axis, ec_direction_t direction) { TEST_ASSERT((direction == EC_DIRECTION_0) || (direction == EC_DIRECTION_1)); direction_count++; last_axis = axis; return true; }
 bool ec_step_port_enable_axis(ec_axis_t axis) { enable_count++; last_axis = axis; return true; }
 void ec_step_port_stop_all(void) { stop_count++; }
 void ec_step_port_disable_all(void) { }
 uint32_t ec_step_port_now_ms(void) { return fake_now_ms; }
+uint32_t ec_step_port_counted_remaining(void) { return fake_counted_remaining; }
+uint32_t ec_step_port_counted_target(void) { return last_counted_steps; }
 void test_step_test(void) {
   start_count = stop_count = direction_count = enable_count = 0U;
+  counted_start_count = 0U;
+  last_counted_steps = 0U;
+  last_counted_hz = 0U;
+  fake_counted_remaining = 0U;
+  last_frequency_hz = 0U;
   fake_now_ms = 100U; ec_step_test_init();
   TEST_ASSERT(ec_step_test_start(EC_AXIS_X));
   TEST_ASSERT(start_count == 1U); TEST_ASSERT(last_axis == EC_AXIS_X);
+  TEST_ASSERT(last_frequency_hz == 10U);
   TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_X);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_SIGNAL_ONLY);
   fake_now_ms = 200U; TEST_ASSERT(ec_step_test_start(EC_AXIS_Y));
@@ -35,6 +49,7 @@ void test_step_test(void) {
   TEST_ASSERT(start_count == 2U);
   ec_step_test_poll(6019U, 0U); TEST_ASSERT(start_count == 2U);
   ec_step_test_poll(6020U, 0U); TEST_ASSERT(start_count == 3U);
+  TEST_ASSERT(last_frequency_hz == 100U);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
   ec_step_test_poll(6021U, EC_INPUT_X_HOME);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
@@ -51,6 +66,65 @@ void test_step_test(void) {
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
   ec_step_test_poll(20019U, 0U);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
-  ec_step_test_poll(20020U, 0U);
+  ec_step_test_poll(28020U, 0U);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+
+  fake_now_ms = 25000U;
+  counted_start_count = 0U;
+  last_counted_steps = 0U;
+  last_counted_hz = 0U;
+  fake_counted_remaining = 0U;
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          2000U, 500U, 0U));
+  TEST_ASSERT(ec_motion_test_arm(0U));
+  TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_Y, EC_DIRECTION_1,
+                                         2000U, 500U, 0U));
+  TEST_ASSERT(counted_start_count == 1U);
+  TEST_ASSERT(last_axis == EC_AXIS_Y);
+  TEST_ASSERT(last_counted_steps == 2000U);
+  TEST_ASSERT(last_counted_hz == 500U);
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_COUNTED);
+  TEST_ASSERT(ec_motion_test_step_target() == 2000U);
+  TEST_ASSERT(ec_motion_test_step_remaining() == 2000U);
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          100U, 100U, 0U));
+  ec_step_test_poll(25001U, EC_INPUT_X_HOME);
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+
+  fake_now_ms = 26000U;
+  TEST_ASSERT(ec_motion_test_arm(0U));
+  TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                         500U, 100U, 0U));
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_COUNTED);
+  ec_motion_test_on_counted_done();
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_DONE);
+
+  fake_now_ms = 27000U;
+  TEST_ASSERT(ec_motion_test_arm(0U));
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          0U, 100U, 0U));
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          100U, 5U, 0U));
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          100U, 10001U, 0U));
+  TEST_ASSERT(ec_motion_test_is_armed());
+  TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                         100U, 100U, 0U));
+  TEST_ASSERT(!ec_motion_test_is_armed());
+  ec_motion_test_on_counted_done();
+
+  fake_now_ms = 29000U;
+  TEST_ASSERT(ec_motion_test_arm(0U));
+  TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                         500U, 100U, 0U));
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
+  ec_step_test_poll(34999U, 0U);
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_COUNTED);
+  ec_step_test_poll(35000U, 0U);
+  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_TIMEOUT);
+  ec_step_test_stop();
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
 }

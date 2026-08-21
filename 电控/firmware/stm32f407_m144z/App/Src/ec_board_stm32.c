@@ -1,10 +1,13 @@
 #include "ec_board_stm32.h"
 
 #include "ec_app.h"
+#include "ec_barrier_test.h"
 #include "ec_board.h"
 #include "ec_diag.h"
+#include "ec_group_test.h"
 #include "ec_inputs.h"
 #include "ec_safety_adapter.h"
+#include "ec_servo_test.h"
 #include "ec_step_test.h"
 
 #include <stddef.h>
@@ -23,6 +26,10 @@ static ec_input_filter_t input_filter;
 static ec_input_snapshot_t input_snapshot;
 static uint8_t input_filter_initialized;
 static uint8_t uart_main_rx_byte;
+static ec_axis_t counted_axis;
+static uint32_t counted_steps_remaining;
+static uint32_t counted_steps_total;
+static uint8_t counted_active;
 
 static uint16_t read_raw_inputs(void)
 {
@@ -59,15 +66,27 @@ static TIM_HandleTypeDef *step_timer_for_axis(ec_axis_t axis)
     }
 }
 
+static void stop_counted_timer(void)
+{
+    TIM_HandleTypeDef *timer;
+
+    if (counted_active == 0U) return;
+    timer = step_timer_for_axis(counted_axis);
+    if (timer != NULL) {
+        (void)HAL_TIM_PWM_Stop(timer, TIM_CHANNEL_1);
+        __HAL_TIM_DISABLE_IT(timer, TIM_IT_UPDATE);
+    }
+    counted_active = 0U;
+    counted_steps_remaining = 0U;
+    counted_steps_total = 0U;
+}
+
 void ec_board_enter_safe_state(void)
 {
     ec_step_port_stop_all();
 
-    (void)HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
-    (void)HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_4);
-    (void)HAL_TIM_PWM_Stop(&htim10, TIM_CHANNEL_1);
-    (void)HAL_TIM_PWM_Stop(&htim11, TIM_CHANNEL_1);
-    (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+    ec_barrier_port_stop();
+    ec_servo_port_stop();
     (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_4);
 
     ec_step_port_disable_all();
@@ -97,15 +116,159 @@ ec_input_snapshot_t ec_board_read_inputs(void)
 bool ec_step_port_start(ec_axis_t axis, uint32_t frequency_hz)
 {
     TIM_HandleTypeDef *timer;
+    uint32_t period;
 
-    if (frequency_hz != UINT32_C(10)) return false;
+    if ((frequency_hz != UINT32_C(10)) &&
+        (frequency_hz != UINT32_C(100))) return false;
     timer = step_timer_for_axis(axis);
     if (timer == NULL) return false;
 
+    /* TIM4/TIM8 use a 100 kHz timer clock (PSC=159). */
+    period = (UINT32_C(100000) / frequency_hz) - 1U;
+    __HAL_TIM_SET_AUTORELOAD(timer, period);
     __HAL_TIM_SET_COUNTER(timer, 0U);
-    __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1,
-                          (timer->Init.Period + 1U) / 2U);
+    __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1, (period + 1U) / 2U);
     return HAL_TIM_PWM_Start(timer, TIM_CHANNEL_1) == HAL_OK;
+}
+
+bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz,
+                                uint32_t steps)
+{
+    TIM_HandleTypeDef *timer;
+    uint32_t period;
+
+    if ((axis != EC_AXIS_X) && (axis != EC_AXIS_Y) &&
+        (axis != EC_AXIS_Z)) {
+        return false;
+    }
+    if (steps == 0U) return false;
+    if ((frequency_hz < EC_STEP_MIN_HZ) ||
+        (frequency_hz > EC_STEP_MAX_HZ)) {
+        return false;
+    }
+    timer = step_timer_for_axis(axis);
+    if (timer == NULL) return false;
+
+    period = (UINT32_C(100000) / frequency_hz) - 1U;
+    __HAL_TIM_SET_AUTORELOAD(timer, period);
+    __HAL_TIM_SET_COUNTER(timer, 0U);
+    __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1, (period + 1U) / 2U);
+
+    counted_axis = axis;
+    counted_steps_remaining = steps;
+    counted_steps_total = steps;
+    counted_active = 1U;
+
+    if (HAL_TIM_PWM_Start_IT(timer, TIM_CHANNEL_1) != HAL_OK) {
+        counted_active = 0U;
+        counted_steps_remaining = 0U;
+        counted_steps_total = 0U;
+        ec_step_port_stop_all();
+        return false;
+    }
+    return true;
+}
+
+void ec_step_port_on_timer_period(TIM_HandleTypeDef *htim)
+{
+    TIM_HandleTypeDef *timer;
+
+    if (counted_active == 0U) return;
+    timer = step_timer_for_axis(counted_axis);
+    if ((timer == NULL) || (htim == NULL) ||
+        (htim->Instance != timer->Instance)) {
+        return;
+    }
+
+    if (counted_steps_remaining > 0U) {
+        counted_steps_remaining--;
+    }
+    if (counted_steps_remaining == 0U) {
+        stop_counted_timer();
+        ec_step_port_disable_all();
+        ec_motion_test_on_counted_done();
+    }
+}
+
+bool ec_servo_port_start(uint16_t pulse_us)
+{
+    if ((pulse_us == 0U) || (pulse_us > htim2.Init.Period)) return false;
+
+    __HAL_TIM_SET_COUNTER(&htim2, 0U);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, pulse_us);
+    return HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3) == HAL_OK;
+}
+
+static bool barrier_start_channel(TIM_HandleTypeDef *timer,
+                                  uint32_t channel, uint16_t pulse_us)
+{
+    if ((pulse_us == 0U) || (pulse_us > htim3.Init.Period)) return false;
+
+    __HAL_TIM_SET_COUNTER(timer, 0U);
+    __HAL_TIM_SET_COMPARE(timer, channel, pulse_us);
+    return HAL_TIM_PWM_Start(timer, channel) == HAL_OK;
+}
+
+bool ec_barrier_port_start_mask(uint8_t channel_mask, uint16_t pulse_us)
+{
+    bool ok = true;
+
+    if ((channel_mask == 0U) || (pulse_us == 0U) ||
+        (pulse_us > htim3.Init.Period)) {
+        return false;
+    }
+
+    ec_barrier_port_stop();
+    if (((channel_mask & UINT8_C(0x01)) != 0U) &&
+        !barrier_start_channel(&htim3, TIM_CHANNEL_3, pulse_us)) {
+        ok = false;
+    }
+    if (((channel_mask & UINT8_C(0x02)) != 0U) &&
+        !barrier_start_channel(&htim3, TIM_CHANNEL_4, pulse_us)) {
+        ok = false;
+    }
+    if (((channel_mask & UINT8_C(0x04)) != 0U) &&
+        !barrier_start_channel(&htim10, TIM_CHANNEL_1, pulse_us)) {
+        ok = false;
+    }
+    if (((channel_mask & UINT8_C(0x08)) != 0U) &&
+        !barrier_start_channel(&htim11, TIM_CHANNEL_1, pulse_us)) {
+        ok = false;
+    }
+
+    if (!ok) {
+        ec_barrier_port_stop();
+        return false;
+    }
+    return true;
+}
+
+void ec_barrier_port_stop(void)
+{
+    (void)HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
+    (void)HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_4);
+    (void)HAL_TIM_PWM_Stop(&htim10, TIM_CHANNEL_1);
+    (void)HAL_TIM_PWM_Stop(&htim11, TIM_CHANNEL_1);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0U);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0U);
+    __HAL_TIM_SET_COMPARE(&htim10, TIM_CHANNEL_1, 0U);
+    __HAL_TIM_SET_COMPARE(&htim11, TIM_CHANNEL_1, 0U);
+}
+
+uint32_t ec_barrier_port_now_ms(void)
+{
+    return HAL_GetTick();
+}
+
+void ec_servo_port_stop(void)
+{
+    (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 0U);
+}
+
+uint32_t ec_servo_port_now_ms(void)
+{
+    return HAL_GetTick();
 }
 
 bool ec_step_port_set_direction(ec_axis_t axis, ec_direction_t direction)
@@ -148,6 +311,7 @@ bool ec_step_port_enable_axis(ec_axis_t axis)
 
 void ec_step_port_stop_all(void)
 {
+    stop_counted_timer();
     (void)HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_1);
     (void)HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
     (void)HAL_TIM_PWM_Stop(&htim9, TIM_CHANNEL_1);
@@ -165,9 +329,56 @@ uint32_t ec_step_port_now_ms(void)
     return HAL_GetTick();
 }
 
+uint32_t ec_step_port_counted_remaining(void)
+{
+    return (counted_active != 0U) ? counted_steps_remaining : 0U;
+}
+
+uint32_t ec_step_port_counted_target(void)
+{
+    return (counted_active != 0U) ? counted_steps_total : 0U;
+}
+
+bool ec_group_port_set_direction(ec_axis_t axis, ec_direction_t direction)
+{
+    return ec_step_port_set_direction(axis, direction);
+}
+
+bool ec_group_port_enable_xy(void)
+{
+    ec_step_port_disable_all();
+    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
+    return true;
+}
+
+bool ec_group_port_start_step(ec_axis_t axis, uint32_t frequency_hz)
+{
+    return ec_step_port_start(axis, frequency_hz);
+}
+
+bool ec_group_port_start_servo(uint16_t pulse_us)
+{
+    return ec_servo_port_start(pulse_us);
+}
+
+void ec_group_port_stop_all(void)
+{
+    ec_step_port_stop_all();
+    ec_servo_port_stop();
+    ec_step_port_disable_all();
+}
+
+uint32_t ec_group_port_now_ms(void)
+{
+    return HAL_GetTick();
+}
+
 void ec_safety_port_stop_all(void)
 {
     ec_step_port_stop_all();
+    ec_servo_port_stop();
+    ec_barrier_port_stop();
 }
 
 void ec_safety_port_disable_drivers(void)
@@ -178,6 +389,8 @@ void ec_safety_port_disable_drivers(void)
 void ec_safety_port_inhibit_power(void)
 {
     /* ESTOP_FB is feedback only; dangerous power is cut by external hardware. */
+    ec_servo_port_stop();
+    ec_barrier_port_stop();
     ec_step_port_disable_all();
 }
 

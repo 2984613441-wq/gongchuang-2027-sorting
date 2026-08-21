@@ -703,6 +703,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   ec_board_uart_rx_callback(huart);
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  ec_step_port_on_timer_period(htim);
+}
+
 /* USER CODE END 4 */
 
 /**

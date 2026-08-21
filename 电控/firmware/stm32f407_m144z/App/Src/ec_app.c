@@ -1,8 +1,11 @@
 #include "ec_app.h"
 
+#include "ec_barrier_test.h"
 #include "ec_board.h"
 #include "ec_diag.h"
+#include "ec_group_test.h"
 #include "ec_safety_adapter.h"
+#include "ec_servo_test.h"
 #include "ec_step_test.h"
 
 #ifndef EC_DIAGNOSTIC_BUILD
@@ -24,6 +27,9 @@ void ec_app_init(void)
     ec_safety_apply(machine.actions);
 
     ec_step_test_init();
+    ec_servo_test_init();
+    ec_group_test_init();
+    ec_barrier_test_init();
     ec_diag_init();
     last_input_sample_ms = 0U;
     ec_board_poll_inputs(0U);
@@ -46,6 +52,9 @@ void ec_app_poll(uint32_t now_ms)
 
     inputs = ec_board_read_inputs();
     ec_step_test_poll(now_ms, inputs.active_mask);
+    ec_servo_test_poll(now_ms, inputs.active_mask);
+    ec_group_test_poll(now_ms, inputs.active_mask);
+    ec_barrier_test_poll(now_ms, inputs.active_mask);
     ec_diag_poll();
     ec_diag_tick(now_ms);
 }
