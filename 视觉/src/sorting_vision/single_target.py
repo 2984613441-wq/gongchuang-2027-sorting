@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, dataclass, replace
-from enum import Enum
 from math import isfinite
 from typing import Any, Callable, Protocol
 
@@ -24,6 +23,7 @@ from .errors import (
     UnknownClassError,
     VisionError,
 )
+from .export import normalize_value
 from .postprocess import postprocess
 from .types import (
     BackendOutput,
@@ -120,6 +120,11 @@ def _backend_name(backend: Any) -> str:
     return name if isinstance(name, str) and name else "unknown"
 
 
+# Must exceed the single-target count; otherwise a multi-target frame is
+# clamped to DUPLICATE_DETECTION before AMBIGUOUS_TARGET can be raised.
+MAX_DETECTIONS = 100
+
+
 def _inference_config(config: SingleTargetLoopConfig) -> InferenceConfig:
     return InferenceConfig(
         backend="single-target",
@@ -127,9 +132,13 @@ def _inference_config(config: SingleTargetLoopConfig) -> InferenceConfig:
         class_names={index: name for index, name in enumerate(config.labels)},
         confidence_threshold=config.confidence,
         input_size=(config.input_width, config.input_height),
-        max_detections=100,
+        max_detections=MAX_DETECTIONS,
         reject_duplicates=True,
     )
+
+
+def _elapsed_ms(started: float) -> float:
+    return (time.perf_counter() - started) * 1000.0
 
 
 def _failed_result(
@@ -138,8 +147,11 @@ def _failed_result(
     frame_id: int,
     elapsed_ms: float,
     exc: Exception,
+    *,
+    code: str | None = None,
 ) -> SingleTargetResult:
-    code = exc.code if isinstance(exc, VisionError) else "UNEXPECTED_BACKEND_FAILURE"
+    if code is None:
+        code = exc.code if isinstance(exc, VisionError) else "UNEXPECTED_BACKEND_FAILURE"
     return SingleTargetResult(
         frame_id=frame_id,
         status=ResultStatus.FAILED,
@@ -156,10 +168,20 @@ def process_single_target_frame(
     coordinate_transform: CoordinateTransform | None = None,
     frame_id: int = 0,
 ) -> SingleTargetResult:
+    """Process one frame and return a fail-closed result.
+
+    ``frame_id`` defaults to 0; ``run_vision_loop`` passes 1-based frame ids.
+    """
     started = time.perf_counter()
     try:
         config.validate()
-        output = backend.infer(image)
+        try:
+            output = backend.infer(image)
+        except VisionError as exc:
+            return _failed_result(config, backend, frame_id, _elapsed_ms(started), exc)
+        except Exception as exc:
+            return _failed_result(config, backend, frame_id, _elapsed_ms(started), exc)
+
         if not isinstance(output, BackendOutput):
             raise InvalidInputError("backend.infer must return BackendOutput")
         output.validate_dimensions()
@@ -197,15 +219,18 @@ def process_single_target_frame(
             status=ResultStatus.OK,
             backend=_backend_name(backend),
             detection=detection,
-            elapsed_ms=(time.perf_counter() - started) * 1000.0,
+            elapsed_ms=_elapsed_ms(started),
         )
     except VisionError as exc:
+        return _failed_result(config, backend, frame_id, _elapsed_ms(started), exc)
+    except Exception as exc:  # core failure, not a backend failure
         return _failed_result(
-            config, backend, frame_id, (time.perf_counter() - started) * 1000.0, exc
-        )
-    except Exception as exc:  # fail closed at the untrusted backend boundary
-        return _failed_result(
-            config, backend, frame_id, (time.perf_counter() - started) * 1000.0, exc
+            config,
+            backend,
+            frame_id,
+            _elapsed_ms(started),
+            exc,
+            code="INTERNAL_CORE_ERROR",
         )
 
 
@@ -213,7 +238,12 @@ def run_vision_loop(
     config: SingleTargetLoopConfig,
     backend: LoopBackend,
     on_result: Callable[[SingleTargetResult], None],
+    coordinate_transform: CoordinateTransform | None = None,
 ) -> None:
+    """Run the loop until capture is exhausted or max_frames is reached.
+
+    Frame ids passed to ``process_single_target_frame`` are 1-based.
+    """
     config.validate()
     frame_id = 0
     try:
@@ -226,9 +256,13 @@ def run_vision_loop(
             frame_id += 1
             started = time.perf_counter()
             result = process_single_target_frame(
-                config, backend, frame, frame_id=frame_id
+                config,
+                backend,
+                frame,
+                coordinate_transform=coordinate_transform,
+                frame_id=frame_id,
             )
-            result = replace(result, elapsed_ms=(time.perf_counter() - started) * 1000.0)
+            result = replace(result, elapsed_ms=_elapsed_ms(started))
             on_result(result)
     finally:
         release = getattr(backend, "release", None)
@@ -238,7 +272,8 @@ def run_vision_loop(
 
 def format_diagnostic_text(result: SingleTargetResult) -> str:
     if result.detection is None:
-        return f"{result.frame_id}:none:{result.elapsed_ms:.1f}ms\n"
+        error_code = result.issues[0].code if result.issues else "NO_ERROR_CODE"
+        return f"{result.frame_id}:none:{error_code}:{result.elapsed_ms:.1f}ms\n"
     detection = result.detection
     center_x, center_y = detection.center_pixel
     return (
@@ -257,20 +292,8 @@ def render_diagnostic(
     return format_diagnostic_text(result)
 
 
-def _normalize(value: Any) -> Any:
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, tuple):
-        return [_normalize(item) for item in value]
-    if isinstance(value, list):
-        return [_normalize(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _normalize(item) for key, item in value.items()}
-    return value
-
-
 def to_single_target_dict(result: SingleTargetResult) -> dict[str, Any]:
-    payload = _normalize(asdict(result))
+    payload = normalize_value(asdict(result))
     payload["diagnostic_only"] = True
     payload["wire_codec_frozen"] = False
     payload["motion_ready"] = result.motion_ready

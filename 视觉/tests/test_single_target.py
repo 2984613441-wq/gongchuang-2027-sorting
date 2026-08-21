@@ -4,11 +4,13 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC))
 
 from sorting_vision.backends import FakeBackend
+from sorting_vision.coordinates import AffineCoordinateTransform
 from sorting_vision.errors import ConfigurationError
 from sorting_vision.single_target import (
     SingleTargetLoopConfig,
@@ -25,6 +27,7 @@ from sorting_vision.types import (
     Coordinate,
     DetectionResult,
     FakeImage,
+    InferenceIssue,
     RawDetection,
     ResultStatus,
 )
@@ -160,6 +163,50 @@ class SingleTargetTests(unittest.TestCase):
         result = process_single_target_frame(config, ExplodingBackend(), FakeImage("single", 100, 80))
         self.assert_failed(result, "UNEXPECTED_BACKEND_FAILURE")
 
+    def test_core_unknown_exception_maps_to_internal_core_error(self) -> None:
+        config = SingleTargetLoopConfig(model_path="fake.pt", labels=("block",))
+        backend = FakeBackend({"single": success_output()})
+
+        with patch(
+            "sorting_vision.single_target.postprocess",
+            side_effect=RuntimeError("core boom"),
+        ):
+            result = process_single_target_frame(
+                config, backend, FakeImage("single", 100, 80)
+            )
+
+        self.assert_failed(result, "INTERNAL_CORE_ERROR")
+
+    def test_loop_passes_coordinate_transform_through(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt", labels=("block",), max_frames=1
+        )
+        backend = LoopFakeBackend({"single": success_output()}, frames=1)
+        transform = AffineCoordinateTransform(
+            matrix=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            x_bounds=(0.0, 100.0),
+            y_bounds=(0.0, 100.0),
+            frame="workspace_mm",
+            unit="mm",
+            calibration_id="cal-001",
+        )
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(
+            config,
+            backend,
+            results.append,
+            coordinate_transform=transform,
+        )
+
+        self.assertEqual(1, len(results))
+        result = results[0]
+        self.assertIs(ResultStatus.OK, result.status)
+        self.assertTrue(result.detection.motion_ready)
+        self.assertTrue(result.motion_ready)
+        self.assertEqual("workspace_mm", result.detection.coordinate.frame)
+        self.assertEqual("cal-001", result.detection.coordinate.calibration_id)
+
     def test_loop_honors_max_frames_and_releases_backend(self) -> None:
         config = SingleTargetLoopConfig(
             model_path="fake.pt", labels=("block",), max_frames=3
@@ -206,6 +253,24 @@ class SingleTargetTests(unittest.TestCase):
         )
         json_config = SingleTargetLoopConfig(model_path="fake.pt", output_format="json")
         self.assertIn('"diagnostic_only": true', render_diagnostic(json_config, result))
+
+    def test_failed_text_diagnostic_includes_error_code(self) -> None:
+        result = SingleTargetResult(
+            frame_id=3,
+            status=ResultStatus.FAILED,
+            backend="fake",
+            issues=(
+                InferenceIssue(
+                    "AMBIGUOUS_TARGET",
+                    "expected exactly one target, found 2",
+                ),
+            ),
+            elapsed_ms=12.5,
+        )
+
+        self.assertEqual(
+            "3:none:AMBIGUOUS_TARGET:12.5ms\n", format_diagnostic_text(result)
+        )
 
     def test_config_validate_rejects_unknown_output_format(self) -> None:
         config = SingleTargetLoopConfig(model_path="fake.pt", output_format="xml")

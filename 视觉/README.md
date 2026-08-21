@@ -31,9 +31,13 @@
 
 `single_target.py` 提供 `SingleTargetLoopConfig`、`SingleTargetResult`、
 `process_single_target_frame` 和 `run_vision_loop`，用于固定单相机、单目标场景。
-`labels` 按类别 ID 索引配置；未配置类别表时任何检测都失败关闭。文本行格式与桌面模板
-一致，JSON 继续带 `diagnostic_only=true`、`wire_codec_frozen=false`、
-`motion_ready` 和 `confidence_percent`。该模块不生成 wire 帧，也不输出运动指令。
+`labels` 按 tuple 索引映射 `class_id`（`labels[class_id]`）；未配置类别表时任何检测都
+失败关闭。`hmirror`/`vflip`/`rotation`/`source`/`camera_index` 本轮仅校验、保留，
+待真实相机/图像适配器冻结后再接线。`run_vision_loop` 支持注入 `coordinate_transform`
+标定；未标定时成功检测仍 `motion_ready=false`。成功行文本格式与桌面模板一致，失败行
+带错误码（`frame_id:none:<error_code>:<elapsed_ms>ms`），JSON 继续带
+`diagnostic_only=true`、`wire_codec_frozen=false`、`motion_ready` 和
+`confidence_percent`。该模块不生成 wire 帧，也不输出运动指令。
 
 ## 关闭失败规则
 
@@ -50,6 +54,7 @@
 - 未配置类别表且出现任何检测；
 - 坐标变换结果超出显式配置的标定边界；
 - 单目标复核找到零个或多个期望类别候选。
+- 后端未知异常映射 `UNEXPECTED_BACKEND_FAILURE`，核心处理段未知异常映射 `INTERNAL_CORE_ERROR`。
 
 未注入经验证标定时，成功检测只输出 `image_pixel` 中心点，仍然 `motion_ready=false`。V0.1 没有任何机械中心点、类别、工作区坐标、相机参数或标定矩阵默认值。
 

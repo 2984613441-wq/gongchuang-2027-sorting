@@ -10,20 +10,20 @@ from typing import Any
 from .types import BatchResult, ReacquireResult
 
 
-def _normalize(value: Any) -> Any:
+def normalize_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, tuple):
-        return [_normalize(item) for item in value]
+        return [normalize_value(item) for item in value]
     if isinstance(value, list):
-        return [_normalize(item) for item in value]
+        return [normalize_value(item) for item in value]
     if isinstance(value, dict):
-        return {key: _normalize(item) for key, item in value.items()}
+        return {key: normalize_value(item) for key, item in value.items()}
     return value
 
 
 def to_diagnostic_dict(result: BatchResult | ReacquireResult) -> dict[str, Any]:
-    payload = _normalize(asdict(result))
+    payload = normalize_value(asdict(result))
     payload["motion_ready"] = result.motion_ready
     payload["wire_codec_frozen"] = False
     payload["diagnostic_only"] = True
