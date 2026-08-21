@@ -1,0 +1,25 @@
+{
+  "stability": {
+    "min_confidence": 0.7,
+    "consecutive_frames": 5,
+    "release_after_ms": 1000
+  },
+  "timeouts": {
+    "ack_s": 1.0,
+    "running_s": 1.5,
+    "idle_s": 3.5
+  },
+  "actions": {
+    "class_a": {
+      "enabled": false,
+      "axis": "X",
+      "direction": "DIR0"
+    },
+    "class_b": {
+      "enabled": false,
+      "axis": "Y",
+      "direction": "DIR0"
+    }
+  }
+}
+

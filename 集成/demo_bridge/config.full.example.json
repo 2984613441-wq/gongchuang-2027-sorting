@@ -1,0 +1,46 @@
+{
+  "stability": {
+    "min_confidence": 0.7,
+    "consecutive_frames": 5,
+    "release_after_ms": 1000
+  },
+  "timeouts": {
+    "ack_s": 1.0,
+    "running_s": 1.5,
+    "idle_s": 3.5
+  },
+  "actions": {
+    "class_a": {
+      "enabled": false,
+      "kind": "move_steps",
+      "axis": "X",
+      "direction": "DIR0",
+      "steps": 2000,
+      "hz": 500
+    },
+    "class_b": {
+      "enabled": false,
+      "kind": "move",
+      "axis": "Y",
+      "direction": "DIR1"
+    },
+    "class_c": {
+      "enabled": false,
+      "kind": "servo",
+      "pulse_us": 1000
+    },
+    "class_d": {
+      "enabled": false,
+      "kind": "group",
+      "xdir": "DIR0",
+      "ydir": "DIR0",
+      "servo": "OPEN"
+    },
+    "class_e": {
+      "enabled": false,
+      "kind": "barrier",
+      "mode": "collect",
+      "pulse_us": 1000
+    }
+  }
+}
