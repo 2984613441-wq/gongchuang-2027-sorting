@@ -60,6 +60,7 @@ class SingleTargetLoopConfig:
     camera_index: int = 0
     output_format: str = "text"
     max_frames: int | None = None
+    min_confirm_frames: int = 1
 
     def validate(self) -> None:
         if not isinstance(self.model_path, str) or not self.model_path.strip():
@@ -94,6 +95,8 @@ class SingleTargetLoopConfig:
             not isinstance(self.max_frames, int) or self.max_frames < 0
         ):
             raise ConfigurationError("max_frames must be a non-negative integer or None")
+        if not isinstance(self.min_confirm_frames, int) or self.min_confirm_frames <= 0:
+            raise ConfigurationError("min_confirm_frames must be a positive integer")
 
 
 @dataclass(frozen=True)
@@ -242,10 +245,15 @@ def run_vision_loop(
 ) -> None:
     """Run the loop until capture is exhausted or max_frames is reached.
 
-    Frame ids passed to ``process_single_target_frame`` are 1-based.
+    Frame ids passed to ``process_single_target_frame`` are 1-based. When
+    ``min_confirm_frames`` exceeds 1, OK results are suppressed until N
+    consecutive frames report the same class_id; after that, every subsequent
+    same-class frame is emitted until a failure or class change resets it.
     """
     config.validate()
     frame_id = 0
+    last_class_id: int | None = None
+    confirm_streak = 0
     try:
         while True:
             if config.max_frames is not None and frame_id >= config.max_frames:
@@ -263,7 +271,20 @@ def run_vision_loop(
                 frame_id=frame_id,
             )
             result = replace(result, elapsed_ms=_elapsed_ms(started))
-            on_result(result)
+            if result.status is ResultStatus.OK and result.detection is not None:
+                class_id = result.detection.class_id
+                if class_id == last_class_id:
+                    confirm_streak += 1
+                else:
+                    last_class_id = class_id
+                    confirm_streak = 1
+                emit = confirm_streak >= config.min_confirm_frames
+            else:
+                last_class_id = None
+                confirm_streak = 0
+                emit = True
+            if emit:
+                on_result(result)
     finally:
         release = getattr(backend, "release", None)
         if callable(release):

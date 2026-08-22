@@ -56,6 +56,23 @@ class LoopFakeBackend(FakeBackend):
         self.released = True
 
 
+class SequenceLoopBackend:
+    name = "loop-fake"
+
+    def __init__(self, outputs: list[BackendOutput]) -> None:
+        self._outputs = list(outputs)
+        self.released = False
+
+    def capture(self):
+        return object() if self._outputs else None
+
+    def infer(self, image):
+        return self._outputs.pop(0)
+
+    def release(self) -> None:
+        self.released = True
+
+
 class SingleTargetTests(unittest.TestCase):
     def assert_failed(self, result: SingleTargetResult, code: str) -> None:
         self.assertIs(ResultStatus.FAILED, result.status)
@@ -206,6 +223,77 @@ class SingleTargetTests(unittest.TestCase):
         self.assertTrue(result.motion_ready)
         self.assertEqual("workspace_mm", result.detection.coordinate.frame)
         self.assertEqual("cal-001", result.detection.coordinate.calibration_id)
+
+    def test_loop_emits_after_consecutive_same_class_frames(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt",
+            labels=("block",),
+            max_frames=3,
+            min_confirm_frames=3,
+        )
+        backend = LoopFakeBackend({"single": success_output()}, frames=3)
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual([3], [result.frame_id for result in results])
+
+    def test_loop_confirmation_resets_when_class_changes(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt",
+            labels=("block_a", "block_b"),
+            max_frames=4,
+            min_confirm_frames=2,
+        )
+        backend = SequenceLoopBackend(
+            [
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, (raw(1, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+            ]
+        )
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual([4], [result.frame_id for result in results])
+
+    def test_loop_keeps_emitting_after_confirmation(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt",
+            labels=("block",),
+            max_frames=4,
+            min_confirm_frames=2,
+        )
+        backend = LoopFakeBackend({"single": success_output()}, frames=4)
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual([2, 3, 4], [result.frame_id for result in results])
+
+    def test_loop_failure_frame_resets_confirmation_and_is_emitted(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt",
+            labels=("block",),
+            max_frames=5,
+            min_confirm_frames=3,
+        )
+        backend = SequenceLoopBackend(
+            [
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, ()),
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+                BackendOutput(100, 80, (raw(0, 0.9, (10, 10, 30, 30)),)),
+            ]
+        )
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual([2, 5], [result.frame_id for result in results])
 
     def test_loop_honors_max_frames_and_releases_backend(self) -> None:
         config = SingleTargetLoopConfig(

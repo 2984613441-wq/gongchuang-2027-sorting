@@ -34,8 +34,12 @@
 `labels` 按 tuple 索引映射 `class_id`（`labels[class_id]`）；未配置类别表时任何检测都
 失败关闭。`hmirror`/`vflip`/`rotation`/`source`/`camera_index` 本轮仅校验、保留，
 待真实相机/图像适配器冻结后再接线。`run_vision_loop` 支持注入 `coordinate_transform`
-标定；未标定时成功检测仍 `motion_ready=false`。成功行文本格式与桌面模板一致，失败行
-带错误码（`frame_id:none:<error_code>:<elapsed_ms>ms`），JSON 继续带
+标定；未标定时成功检测仍 `motion_ready=false`。`min_confirm_frames=1` 默认单帧即上报；
+设为 N 时要求连续 N 帧检测到同一 `class_id` 才上报。达到 N 后，后续同类帧继续逐帧
+上报，由下游按需去重；失败帧仍会上报并重置计数。若 `max_frames` 在凑满 N 帧前耗尽，
+未确认目标不会上报。
+成功行文本格式与桌面模板一致，失败行带错误码
+（`frame_id:none:<error_code>:<elapsed_ms>ms`），JSON 继续带
 `diagnostic_only=true`、`wire_codec_frozen=false`、`motion_ready` 和
 `confidence_percent`。该模块不生成 wire 帧，也不输出运动指令。
 
@@ -85,6 +89,19 @@ python 视觉/examples/fake_demo.py
 ```
 
 两者只使用 Python 标准库，不下载模型、不联网、不访问相机或硬件。示例没有物理标定，因此识别状态可为成功，但 `motion_ready` 必须为 `false`。
+
+## 参考环境核验（2026-08-21）
+
+`智能分类垃圾桶全套文件.zip` 与拆分后的 `开源参考/` 位于桌面仓库根目录
+（`C:\Users\29845\Desktop\工创赛\`），未纳入当前 worktree；若在别处运行，需另行
+提供这些产物。原包自带 `venv` 为 Python 3.10.8（约 1.35 GB / 27,220 个文件），含
+torch、torchvision、opencv-python、numpy、pandas、matplotlib、scipy、
+tensorboard 等，但未发现 `pyserial` 与 `PyQt5`，而参考 GUI/串口脚本会 import
+这两个包，因此原 `venv` 不能直接作为完整运行环境。
+
+建议运行参考代码时按桌面仓库根目录的 `开源参考/视觉/requirements.txt` 新建环境，并
+补装 `pyserial` 与 `PyQt5`；不要依赖原包 `venv`。本项目 `sorting_vision` 核心只依赖
+Python 标准库，上述核验仅约束参考代码运行环境。
 
 ## 今晚数据集接入清单
 
