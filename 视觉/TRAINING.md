@@ -1,5 +1,9 @@
 # 绿色/蓝色方块 YOLO11n 训练指南
 
+> 说明：本文档描述本地 PyCharm 的 YOLO11n 训练/评估流程，用于数据集准备与精度
+> 实验。最终部署模型的训练与导出走 MaixHub（云端）；导出物决定
+> `MaixPyYoloBackend` 的模型家族与输入尺寸。
+
 ## 已准备好的文件
 
 - PyCharm 工程：`D:\AAAdesktop1\shijue\ultralytics-8.3.163`

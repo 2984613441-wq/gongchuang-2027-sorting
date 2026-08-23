@@ -1,17 +1,25 @@
 # 视觉子系统 V0.1
 
-本目录现提供一个**平台无关、关闭失败**的 YOLO 类推理核心。当前只完成主机侧纯逻辑骨架和 Fake 后端；没有训练模型、连接相机，也没有证明树莓派或 MaixCAM 能运行真实模型。
+本目录现提供一个**平台无关、关闭失败**的 YOLO 类推理核心。当前已完成主机侧纯逻辑
+骨架、Fake 后端和 MaixCAM 的 MaixPy 4.x 适配脚手架；没有训练模型、连接相机，也
+未在 MaixCAM 真机验证推理。
 
 ## 当前部署裁决
 
 训练与部署分为四层：
 
-1. **PC 训练层**：整理数据集、训练模型并导出候选格式。
+1. **训练层**：本地整理数据集与精度实验（见 `TRAINING.md`），最终训练与导出走
+   MaixHub 云端。
 2. **通用推理契约**：配置、检测对象、过滤/NMS、坐标转换、整批识别、单目标复核和诊断 JSON，位于 `src/sorting_vision/`。
 3. **Raspberry Pi 适配层**：可使用 Ultralytics、ONNX Runtime 或以后验证过的其他运行时；V0.1 提供可选 Ultralytics 适配边界。
-4. **MaixCAM 适配层**：预留 kmodel runner 与张量 decoder 注入边界，不猜测尚未冻结的 MaixPy API 或输出张量布局。
+4. **MaixCAM 适配层**：已落地 `MaixPyYoloBackend`（MaixPy 4.12.5，`maix.nn` 的
+   YOLOv5/v8/11），并保留 `MaixCamKmodelBackend` 作为纯注入边界；模型家族与输入
+   尺寸待 MaixHub 导出后冻结。
 
-现有正式架构仍以“MaixCAM 推理、树莓派调度/显示”为旧基线；用户最新意图是不预先冻结部署端。最终在树莓派与 MaixCAM 之间的选择，必须使用同一验证集对模型格式兼容性、精度、延迟/FPS、峰值内存、模型大小、温度和稳定性进行实测。本轮不改写冻结架构或通信协议。
+视觉推理端已确认为 MaixCAM（MaixPy 4.12.5，摄像头 GC4653，无 IMU），树莓派保持
+调度/显示职责；部署事实见 `docs/design/2026-08-23-maixcam-deployment-facts.md`。
+模型家族与输入尺寸仍未冻结，待 MaixHub 训练导出后确定。本轮不改写冻结架构或通信
+协议。
 
 ## V0.1 模块
 
@@ -19,7 +27,7 @@
 |---|---|
 | `config.py` | 模型路径、类别表、阈值、输入尺寸、设备与最大检测数的显式配置和校验 |
 | `types.py` | 原始框、内部检测结果、整批结果、单目标复核结果和错误对象 |
-| `backends/` | Fake、可选 Ultralytics、ONNX Runtime、MaixCAM/kmodel runner/decoder 适配边界 |
+| `backends/` | Fake、可选 Ultralytics、ONNX Runtime、MaixCAM（`MaixPyYoloBackend` + `MaixCamKmodelBackend` 注入边界） |
 | `postprocess.py` | 置信度过滤、类别感知 NMS 和重复目标关闭失败 |
 | `coordinates.py` | 像素诊断坐标与显式注入的仿射标定接口 |
 | `pipeline.py` | 整批识别和单目标复核 |
@@ -137,7 +145,8 @@ Python 标准库，上述核验仅约束参考代码运行环境。
 
 ## 部署评估表
 
-`benchmark.py` 提供统一记录对象。树莓派和 MaixCAM 必须使用相同的 `validation_set_id`、样本顺序和精度指标定义。
+`benchmark.py` 提供统一记录对象。视觉推理端已定为 MaixCAM；若同时记录树莓派作对照，
+两者必须使用相同的 `validation_set_id`、样本顺序和精度指标定义。
 
 | 指标 | Raspberry Pi | MaixCAM | 判定要求 |
 |---|---:|---:|---|
@@ -152,6 +161,8 @@ V0.1 的主机 Fake 基准只能验证字段与流程，不可作为树莓派或
 
 ## 仍未验证
 
+- `MaixPyYoloBackend` 的 `maix.nn` 调用（`YOLOv5/v8/11`、`detect`）尚未在 MaixCAM
+  真机验证，属文档化脚手架；
 - “Unal”数据集内容与格式；
 - 任何真实模型的精度；
 - Ultralytics、ONNX、kmodel 或其他格式在目标设备上的兼容性；
