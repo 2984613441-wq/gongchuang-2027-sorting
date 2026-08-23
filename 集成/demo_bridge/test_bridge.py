@@ -55,6 +55,37 @@ class DetectionTests(unittest.TestCase):
                 '"ts_ms":100,"bbox":[]}'
             )
 
+    def test_sorting_vision_diagnostic_output_is_rejected(self):
+        # sorting_vision emits diagnostic-only JSON/text (single_target.py
+        # to_single_target_json / format_diagnostic_text, export.py), not the
+        # bridge's 4-field wire format. The bridge must reject it instead of
+        # silently consuming it; this locks the A-plan dedup boundary.
+        diagnostic_json = json.dumps({
+            "task_id": 1,
+            "status": "ok",
+            "backend": "fake",
+            "detection": {
+                "target_seq": 1,
+                "class_id": 0,
+                "class_name": "block",
+                "confidence": 0.91,
+            },
+            "issues": [],
+            "schema_version": "vision-diagnostic-v0.1",
+            "motion_ready": False,
+            "wire_codec_frozen": False,
+            "diagnostic_only": True,
+            "confidence_percent": 91.0,
+        })
+        with self.assertRaises(BridgeError):
+            Detection.from_json_line(diagnostic_json)
+
+        with self.assertRaises(BridgeError):
+            Detection.from_json_line("1:block:0.91:120.0,240.0:15.0ms")
+
+        with self.assertRaises(BridgeError):
+            Detection.from_json_line("1:none:NO_TARGET:15.0ms")
+
     def test_consecutive_frames_latch_and_explicit_absence_releases(self):
         stabilizer = DetectionStabilizer(StabilityConfig(0.7, 3, 1000))
         self.assertIsNone(stabilizer.offer(Detection(1, "a", 0.9, 0)))
