@@ -14,8 +14,10 @@ Source material: MaixHub main.py (MaixPy v0.6.0, K210) - value kept:
 Not carried over: K210 kpu API, classification-only argmax,
 hard-coded UART pins/baud, QVGA-only sizing, frozen wire format.
 
-This file is a TEMPLATE. The final deploy target (MaixCAM vs Raspberry Pi)
-and the official wire codec are NOT frozen. Output here is diagnostic text.
+This file is a TEMPLATE and is superseded by ``sorting_vision`` for the
+single-target loop. The confirmed target is MaixCAM with MaixPy 4.12.5
+(camera GC4653); the K210 kpu API here is obsolete. See
+``sorting_vision.backends.MaixPyYoloBackend`` for the concrete runtime adapter.
 """
 
 from __future__ import annotations
@@ -180,19 +182,18 @@ class OpenCvCameraBackend:
 
 # ---------------------------------------------------------------------------
 # 6. MaixCAM adapter sketch.
-#    The MaixCAM API differs from the K210 kpu API; verify against the real
-#    firmware before use. Do NOT treat this as a frozen implementation.
+#    The MaixCAM API differs from the K210 kpu API. This placeholder is obsolete:
+#    use ``sorting_vision.backends.MaixPyYoloBackend`` (MaixPy v4.12.5).
 # ---------------------------------------------------------------------------
 
 class MaixCamBackend:
-    """Placeholder: adapt to MaixCAM after the real board/firmware is confirmed."""
+    """Placeholder: superseded by sorting_vision.backends.MaixPyYoloBackend."""
 
     name = "maixcam"
 
     def __init__(self, config: VisionLoopConfig):
-        # from maix import camera, display, nn  # unverified - adjust to firmware
         raise NotImplementedError(
-            "MaixCAM API not frozen yet; confirm board + firmware first"
+            "use sorting_vision.backends.MaixPyYoloBackend (MaixPy v4.12.5)"
         )
 
     def capture(self):
