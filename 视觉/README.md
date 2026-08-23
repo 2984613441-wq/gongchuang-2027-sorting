@@ -43,6 +43,18 @@
 `diagnostic_only=true`、`wire_codec_frozen=false`、`motion_ready` 和
 `confidence_percent`。该模块不生成 wire 帧，也不输出运动指令。
 
+## 视觉输出格式与真实链路消费方
+
+| 路径 | 输出 | 真实运动链路 | 定位 |
+|---|---|---|---|
+| `src/sorting_vision/` | 诊断 text/JSON，可含 `min_confirm_frames` 抑制 | 当前不消费 | 离线/诊断单目标核心 |
+| `src/jsonl_emitter.py` | 4 字段 JSONL `frame_id/label/confidence/ts_ms` | `集成/demo_bridge/action_bridge.py` 消费 | 真实视觉→桥接 wire 输入 |
+| `src/vision_loop_template.py` | 旧桌面诊断 text | 不消费 | 历史模板，待统一后归档 |
+
+真实运动链路以桥接层 `DetectionStabilizer` 为唯一去抖责任方（连续
+`consecutive_frames` 帧锁存一次）；`sorting_vision.min_confirm_frames` 当前仅
+用于诊断/离线路径，不接入真实运动链路，避免双重去抖。
+
 ## 关闭失败规则
 
 以下情况返回 `status="failed"`、空检测列表和明确错误码，且 `motion_ready=false`：

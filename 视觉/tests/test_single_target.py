@@ -224,6 +224,17 @@ class SingleTargetTests(unittest.TestCase):
         self.assertEqual("workspace_mm", result.detection.coordinate.frame)
         self.assertEqual("cal-001", result.detection.coordinate.calibration_id)
 
+    def test_loop_default_min_confirm_frames_emits_each_frame(self) -> None:
+        config = SingleTargetLoopConfig(
+            model_path="fake.pt", labels=("block",), max_frames=3
+        )
+        backend = LoopFakeBackend({"single": success_output()}, frames=3)
+        results: list[SingleTargetResult] = []
+
+        run_vision_loop(config, backend, results.append)
+
+        self.assertEqual([1, 2, 3], [result.frame_id for result in results])
+
     def test_loop_emits_after_consecutive_same_class_frames(self) -> None:
         config = SingleTargetLoopConfig(
             model_path="fake.pt",
