@@ -1,4 +1,4 @@
-# 绿色/蓝色方块 YOLO11n 训练指南
+# 7 类形状 YOLO11n 训练指南
 
 > 说明：本文档描述本地 PyCharm 的 YOLO11n 训练/评估流程，用于数据集准备与精度
 > 实验。最终部署模型的训练与导出走 MaixHub（云端）；导出物决定
@@ -13,16 +13,20 @@
 - 训练脚本：`train_blocks.py`
 - 测试集评估脚本：`evaluate_blocks.py`
 
-数据集按源视频隔离，不能重新随机划分：
+数据集按形状分为 7 类，颜色（蓝/灰）不单独成类：
 
-| 集合 | 图片 | green_block 框 | blue_block 框 |
-|---|---:|---:|---:|
-| train | 60 | 177 | 145 |
-| val | 17 | 24 | 25 |
-| test | 13 | 25 | 52 |
-| 合计 | 90 | 226 | 222 |
+| class_id | 英文 label | 中文 |
+|---|---|---|
+| 0 | hexagonal_prism | 六棱柱 |
+| 1 | pentagonal_prism | 五棱柱 |
+| 2 | triangular_prism | 三角柱 |
+| 3 | square_pyramid | 四角锥 |
+| 4 | cylinder | 圆柱 |
+| 5 | cube | 正方体 |
+| 6 | cuboid | 长方体 |
 
-橙色方块是非目标干扰物，不标注、不增加类别。
+同一形状的不同颜色（蓝/灰）都标为同一 shape label；训练集需覆盖两种颜色，
+避免模型按颜色分类。
 
 ## PyCharm 配置
 

@@ -24,7 +24,7 @@
 2. 模型家族：YOLOv5 / YOLOv8 / YOLO11 / 其他，决定用 MaixPy 内置 `nn.YOLO*`
    解码器还是手动张量 decoder。
 3. 模型输入尺寸：当前 `InferenceConfig` 默认 640×640，需与导出模型一致。
-4. 类别表与顺序：当前伪数据集为 `0=green_block`、`1=blue_block`。
+4. 类别表与顺序：按形状 7 类 `0=hexagonal_prism` … `6=cuboid`；颜色（蓝/灰）不单独成类。
 5. 相机标定矩阵：未注入则 `motion_ready=false`，动作链走不通。
 
 ## 待用户裁决

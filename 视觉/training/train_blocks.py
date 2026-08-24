@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Train YOLO11n for green/blue block detection.")
+    parser = argparse.ArgumentParser(description="Train YOLO11n for 7-shape material detection.")
     parser.add_argument("--data", type=Path, default=Path("datasets/block_dataset_v1/data.yaml"))
     parser.add_argument("--model", type=Path, default=Path("yolo11n.pt"))
     parser.add_argument("--epochs", type=int, default=30)

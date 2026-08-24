@@ -33,7 +33,15 @@ from typing import Callable, Optional, Protocol
 @dataclass(frozen=True)
 class VisionLoopConfig:
     model_path: str
-    labels: tuple[str, ...] = ("green_block", "blue_block")
+    labels: tuple[str, ...] = (
+        "hexagonal_prism",
+        "pentagonal_prism",
+        "triangular_prism",
+        "square_pyramid",
+        "cylinder",
+        "cube",
+        "cuboid",
+    )
     input_width: int = 640
     input_height: int = 640
     confidence: float = 0.35

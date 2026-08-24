@@ -125,12 +125,18 @@ Python 标准库，上述核验仅约束参考代码运行环境。
 
 ## 今晚数据集接入清单
 
-当前伪数据集已经完成90张有效图片标注和来源隔离划分，类别固定为 `0=green_block`、`1=blue_block`。train/val/test 分别为60/17/13张，同一视频来源不跨集合。新增照片中的橙色方块由用户明确裁决为非目标干扰物，不新增类别、不画框。1 epoch YOLO11n CUDA/AMP 冒烟训练已经通过；PyCharm 30 epoch 操作见 `TRAINING.md`，完整证据见 `docs/reports/2026-08-18-vision-dataset-training-prep-validation.md`。
+当前物料为 7 种形状，按形状分为 7 类：`0=hexagonal_prism`、
+`1=pentagonal_prism`、`2=triangular_prism`、`3=square_pyramid`、
+`4=cylinder`、`5=cube`、`6=cuboid`。物料有蓝/灰两种颜色，但颜色不单独成类：
+同一形状的不同颜色都标为同一 shape label，训练集需覆盖两种颜色以保持颜色不变性。
+旧的 90 张 green/blue 伪数据集（60/17/13 划分）已不作为最终类别依据。
 
 当前仍需在训练前确认或生成：
 
 - `dataset.yaml`（或实际等价配置文件）及它引用的路径；
-- 类别表在所有标签和 `data.yaml` 中保持 `0=green_block`、`1=blue_block`；
+- 类别表在所有标签和 `data.yaml` 中保持 7 个形状类名与顺序一致
+  （`hexagonal_prism`、`pentagonal_prism`、`triangular_prism`、
+  `square_pyramid`、`cylinder`、`cube`、`cuboid`）；
 - 标注格式和版本（实际工具导出的格式，而不是仅写“YOLO”）；
 - 至少数张原始样例图及对应标注，用于解析与坐标边界检查；
 - 训练/验证/测试集划分方式和数据集版本标识；
