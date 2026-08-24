@@ -23,8 +23,8 @@
 - `集成/demo_bridge/bridge.py:178-226`
   `DetectionStabilizer.offer` 在连续 N 帧同 label 后 `_latched=True` 并只
   返回一次；锁存期间同 label 帧返回 `None`。
-- `集成/demo_bridge/action_bridge.py:25-30` 从 `bridge` 导入
-  `jsonl_events`、`DetectionStabilizer`；`:465-466` 以
+- `集成/demo_bridge/action_bridge.py:22-34` 从 `bridge` 导入
+  `jsonl_events`、`DetectionStabilizer`；`:466` 以
   `jsonl_events(sys.stdin)` 作为事件源。
 - `视觉/src/jsonl_emitter.py` 只输出 4 字段 JSONL
   `frame_id/label/confidence/ts_ms`，自身无去抖。
@@ -63,13 +63,15 @@
   取代的模板/发射器，并保留一套诊断输出。
 
 优点：长期最干净。
-风险：跨 `视觉/`、`集成/` 契约变更，范围较大，应在演示后或时间充足时做。
+风险：跨 `视觉/`、`集成/` 契约变更，范围较大；它是视觉接入真实模型前的门禁，
+需在实机联调前完成，不能无限期延后。
 
 ## 4. 推荐
 
 近期选 **A**：先保住现有真实运动路径，明确桥接层 `DetectionStabilizer` 为
-唯一去抖责任方；同时落实 M-1、M-2 文档与测试。等视觉接入真实模型并跑通一次
-闭环后，再评估是否演进到 C。
+唯一去抖责任方；同时落实 M-1、M-2 文档与测试。视觉接入真实模型之前，必须先
+完成单一权威 wire 契约收敛（C 方案）并归档被取代的模板/发射器，作为实机联调
+前的门禁。
 
 ## 5. 待用户裁决
 
