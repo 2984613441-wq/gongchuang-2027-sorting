@@ -16,7 +16,7 @@ class InferenceConfig:
     class_names: Mapping[int, str] = field(default_factory=dict)
     confidence_threshold: float = 0.50
     nms_iou_threshold: float = 0.45
-    input_size: tuple[int, int] = (640, 640)
+    input_size: tuple[int, int] = (448, 448)
     device: str = "cpu"
     max_detections: int = 100
     reject_duplicates: bool = True

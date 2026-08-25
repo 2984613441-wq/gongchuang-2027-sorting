@@ -17,7 +17,7 @@ class UltralyticsBackend:
         model_path: str | Path,
         *,
         device: str = "cpu",
-        input_size: tuple[int, int] = (640, 640),
+        input_size: tuple[int, int] = (448, 448),
     ) -> None:
         self._model_path = Path(model_path).expanduser().resolve()
         self._device = device

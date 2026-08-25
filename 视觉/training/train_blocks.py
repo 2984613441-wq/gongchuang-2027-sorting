@@ -7,10 +7,10 @@ from pathlib import Path
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train YOLO11n for 7-shape material detection.")
-    parser.add_argument("--data", type=Path, default=Path("datasets/block_dataset_v1/data.yaml"))
+    parser.add_argument("--data", type=Path, default=Path("datasets/block_dataset_v1_7class/data.yaml"))
     parser.add_argument("--model", type=Path, default=Path("yolo11n.pt"))
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--imgsz", type=int, default=448)
     parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--device", default="0")
     parser.add_argument("--workers", type=int, default=0)

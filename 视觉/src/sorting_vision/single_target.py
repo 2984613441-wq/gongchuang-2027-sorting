@@ -51,8 +51,8 @@ class SingleTargetLoopConfig:
     model_path: str
     labels: tuple[str, ...] = ()
     confidence: float = 0.35
-    input_width: int = 640
-    input_height: int = 640
+    input_width: int = 448
+    input_height: int = 448
     hmirror: bool = False
     vflip: bool = False
     rotation: int = 0

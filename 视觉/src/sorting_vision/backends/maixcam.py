@@ -5,9 +5,10 @@ Confirmed target hardware (user provided, 2026-08-23):
 - MaixPy 4.12.5 (v4, not the older K210 / MaixPy v0.6 kpu API)
 - camera GC4653, no IMU
 
-The concrete ``MaixPyYoloBackend`` below targets that runtime. The exact model
-family and input size are not frozen until MaixHub exports a model, so they are
-constructor arguments instead of hidden defaults.
+The concrete ``MaixPyYoloBackend`` below targets that runtime. The current
+MaixCAM conversion result (task 8622) is a YOLO11 detector, so the default
+``family`` is ``yolo11``. The earlier classic YOLOv5 package (task 317458) is
+selected explicitly with ``family="yolov5"``.
 """
 
 from __future__ import annotations
@@ -111,12 +112,16 @@ class MaixPyYoloBackend:
         model_path: str | Path,
         *,
         family: str = "yolo11",
+        conf_th: float = 0.5,
+        iou_th: float = 0.45,
         dual_buff: bool = True,
-        fallback_size: tuple[int, int] = (640, 640),
+        fallback_size: tuple[int, int] = (448, 448),
         detector: Any | None = None,
     ) -> None:
         self._model_path = Path(model_path).expanduser().resolve()
         self._family = family
+        self._conf_th = conf_th
+        self._iou_th = iou_th
         self._dual_buff = dual_buff
         self._fallback_size = fallback_size
         self._detector = detector
@@ -143,9 +148,12 @@ class MaixPyYoloBackend:
                 f"MaixPy has no {self._FAMILY_CLASSES[self._family]} detector"
             )
         try:
-            self._detector = detector_cls(
-                model=str(self._model_path), dual_buff=self._dual_buff
-            )
+            if self._family == "yolov5":
+                self._detector = detector_cls(model=str(self._model_path))
+            else:
+                self._detector = detector_cls(
+                    model=str(self._model_path), dual_buff=self._dual_buff
+                )
         except Exception as exc:
             raise ModelUnavailableError(
                 f"failed to load model {self._model_path}: {exc}"
@@ -155,7 +163,9 @@ class MaixPyYoloBackend:
     def infer(self, image: ImageLike) -> BackendOutput:
         detector = self._load_detector()
         try:
-            objects = detector.detect(image)
+            objects = detector.detect(
+                image, conf_th=self._conf_th, iou_th=self._iou_th
+            )
         except Exception as exc:
             raise BackendError(f"MaixCAM inference failed: {exc}") from exc
         width = getattr(image, "width", self._fallback_size[0])

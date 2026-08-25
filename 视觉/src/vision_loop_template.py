@@ -34,16 +34,16 @@ from typing import Callable, Optional, Protocol
 class VisionLoopConfig:
     model_path: str
     labels: tuple[str, ...] = (
-        "hexagonal_prism",
-        "pentagonal_prism",
-        "triangular_prism",
-        "square_pyramid",
-        "cylinder",
         "cube",
         "cuboid",
+        "cylinder",
+        "hexagonal_prism",
+        "pentagonal_prism",
+        "square_pyramid",
+        "triangular_prism",
     )
-    input_width: int = 640
-    input_height: int = 640
+    input_width: int = 448
+    input_height: int = 448
     confidence: float = 0.35
     hmirror: bool = False
     vflip: bool = False

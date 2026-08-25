@@ -6,10 +6,10 @@ from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate a trained block detector on the held-out test split.")
+    parser = argparse.ArgumentParser(description="Evaluate a trained YOLO11n block detector on the held-out test split.")
     parser.add_argument("--weights", type=Path, required=True)
-    parser.add_argument("--data", type=Path, default=Path("datasets/block_dataset_v1/data.yaml"))
-    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--data", type=Path, default=Path("datasets/block_dataset_v1_7class/data.yaml"))
+    parser.add_argument("--imgsz", type=int, default=448)
     parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--device", default="0")
     parser.add_argument("--workers", type=int, default=0)

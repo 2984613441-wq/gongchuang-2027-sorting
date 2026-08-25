@@ -79,7 +79,7 @@ class ConfigurationAndBackendTests(unittest.TestCase):
             model = Path(directory) / "test.mud"
             model.write_bytes(b"test-only")
             detector = SimpleNamespace(
-                detect=lambda img: [
+                detect=lambda img, **kwargs: [
                     SimpleNamespace(class_id=0, score=0.8, x=1.0, y=2.0, w=3.0, h=4.0)
                 ]
             )
