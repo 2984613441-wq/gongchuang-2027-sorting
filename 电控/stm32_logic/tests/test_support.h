@@ -31,6 +31,18 @@ extern unsigned int test_cases;
 #define EXPECT_EQ_U8(expected, actual)                                          \
     EXPECT_EQ_U32((uint8_t)(expected), (uint8_t)(actual))
 
+#define EXPECT_EQ_I16(expected, actual)                                         \
+    do {                                                                        \
+        const int32_t test_expected_ = (int32_t)(expected);                     \
+        const int32_t test_actual_ = (int32_t)(actual);                         \
+        if (test_expected_ != test_actual_) {                                   \
+            ++test_failures;                                                    \
+            (void)fprintf(stderr, "%s:%d expected %" PRId32                    \
+                          ", actual %" PRId32 "\n",                            \
+                          __FILE__, __LINE__, test_expected_, test_actual_);     \
+        }                                                                       \
+    } while (0)
+
 #define EXPECT_TRUE(actual)                                                     \
     EXPECT_EQ_U32(1U, (actual) ? 1U : 0U)
 

@@ -11,4 +11,5 @@ void test_barrier_test(void);
 void test_diag(void);
 void test_safety_adapter(void);
 void test_app(void);
+void test_protocol(void);
 #endif

@@ -17,19 +17,30 @@ extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim8;
-extern TIM_HandleTypeDef htim9;
 extern TIM_HandleTypeDef htim10;
 extern TIM_HandleTypeDef htim11;
 extern UART_HandleTypeDef huart3;
 
+/* Step-timer counting clock = 100 kHz (HSI 16 MHz / (PSC+1=160), PSC=159).
+ * Coupled to main.c SystemClock_Config + MX_TIMx_Init: if the system clock or
+ * PSC changes, this value must be updated or the step frequency shifts. */
+#define EC_STEP_TIMER_HZ UINT32_C(100000)
+
 static ec_input_filter_t input_filter;
 static ec_input_snapshot_t input_snapshot;
 static uint8_t input_filter_initialized;
+/* UART RX single-byte staging buffer. Written by HAL's UART_Receive_IT and
+ * read back in ec_board_uart_rx_callback (via HAL_UART_RxCpltCallback), both
+ * in the UART ISR context; the main loop never touches it. No ISR<->main-loop
+ * race, so unlike counted_axis below it does not need volatile. */
 static uint8_t uart_main_rx_byte;
-static ec_axis_t counted_axis;
-static uint32_t counted_steps_remaining;
-static uint32_t counted_steps_total;
-static uint8_t counted_active;
+/* Shared between the TIM update ISR (ec_step_port_on_timer_period /
+ * ec_motion_test_on_counted_done) and the main-loop poll: must be volatile
+ * so -O2/-O3 does not cache them in registers and freeze STEP_REMAIN / DONE. */
+static volatile ec_axis_t counted_axis;
+static volatile uint32_t counted_steps_remaining;
+static volatile uint32_t counted_steps_total;
+static volatile uint8_t counted_active;
 
 static uint16_t read_raw_inputs(void)
 {
@@ -61,7 +72,6 @@ static TIM_HandleTypeDef *step_timer_for_axis(ec_axis_t axis)
     switch (axis) {
     case EC_AXIS_X: return &htim8;
     case EC_AXIS_Y: return &htim4;
-    case EC_AXIS_Z: return &htim9;
     default: return NULL;
     }
 }
@@ -74,6 +84,7 @@ static void stop_counted_timer(void)
     timer = step_timer_for_axis(counted_axis);
     if (timer != NULL) {
         (void)HAL_TIM_PWM_Stop(timer, TIM_CHANNEL_1);
+        __HAL_TIM_DISABLE_IT(timer, TIM_IT_CC1);
         __HAL_TIM_DISABLE_IT(timer, TIM_IT_UPDATE);
     }
     counted_active = 0U;
@@ -123,8 +134,8 @@ bool ec_step_port_start(ec_axis_t axis, uint32_t frequency_hz)
     timer = step_timer_for_axis(axis);
     if (timer == NULL) return false;
 
-    /* TIM4/TIM8 use a 100 kHz timer clock (PSC=159). */
-    period = (UINT32_C(100000) / frequency_hz) - 1U;
+    /* TIM4/TIM8/TIM9 use a 100 kHz timer clock (PSC=159). */
+    period = (EC_STEP_TIMER_HZ / frequency_hz) - 1U;
     __HAL_TIM_SET_AUTORELOAD(timer, period);
     __HAL_TIM_SET_COUNTER(timer, 0U);
     __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1, (period + 1U) / 2U);
@@ -137,8 +148,11 @@ bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz,
     TIM_HandleTypeDef *timer;
     uint32_t period;
 
-    if ((axis != EC_AXIS_X) && (axis != EC_AXIS_Y) &&
-        (axis != EC_AXIS_Z)) {
+    /* Re-entry guard: refuse to arm a counted run while one is already
+     * active, so a stray second start can't overwrite the shared
+     * counted_axis/counted_steps_* state (P2-5). */
+    if (counted_active != 0U) return false;
+    if ((axis != EC_AXIS_X) && (axis != EC_AXIS_Y)) {
         return false;
     }
     if (steps == 0U) return false;
@@ -149,23 +163,25 @@ bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz,
     timer = step_timer_for_axis(axis);
     if (timer == NULL) return false;
 
-    period = (UINT32_C(100000) / frequency_hz) - 1U;
+    period = (EC_STEP_TIMER_HZ / frequency_hz) - 1U;
     __HAL_TIM_SET_AUTORELOAD(timer, period);
     __HAL_TIM_SET_COUNTER(timer, 0U);
     __HAL_TIM_SET_COMPARE(timer, TIM_CHANNEL_1, (period + 1U) / 2U);
+    __HAL_TIM_CLEAR_FLAG(timer, TIM_FLAG_UPDATE);
 
     counted_axis = axis;
     counted_steps_remaining = steps;
     counted_steps_total = steps;
     counted_active = 1U;
 
-    if (HAL_TIM_PWM_Start_IT(timer, TIM_CHANNEL_1) != HAL_OK) {
+    if (HAL_TIM_PWM_Start(timer, TIM_CHANNEL_1) != HAL_OK) {
         counted_active = 0U;
         counted_steps_remaining = 0U;
         counted_steps_total = 0U;
         ec_step_port_stop_all();
         return false;
     }
+    __HAL_TIM_ENABLE_IT(timer, TIM_IT_UPDATE);
     return true;
 }
 
@@ -180,10 +196,25 @@ void ec_step_port_on_timer_period(TIM_HandleTypeDef *htim)
         return;
     }
 
+    /* Fast-path safety inhibit (P2-3): read the raw limit/ESTOP GPIO pins
+     * directly (no debounce) so a triggered limit/ESTOP halts within one
+     * step tick instead of waiting for the main-loop poll (~50ms worst).
+     * Same active-low polarity as ec_inputs_active_mask. */
+    if (ec_motion_inhibit_from_raw(read_raw_inputs())) {
+        stop_counted_timer();
+        ec_step_port_disable_all();
+        ec_motion_test_on_aborted();
+        return;
+    }
+
     if (counted_steps_remaining > 0U) {
         counted_steps_remaining--;
     }
     if (counted_steps_remaining == 0U) {
+        /* Runs in the TIM update ISR. HAL_TIM_PWM_Stop inside
+         * stop_counted_timer may return HAL_BUSY if the main loop holds the
+         * lock, but the safety fallback is ec_step_port_disable_all (direct
+         * GPIO write) right after, which does not depend on the HAL lock. */
         stop_counted_timer();
         ec_step_port_disable_all();
         ec_motion_test_on_counted_done();
@@ -266,6 +297,23 @@ void ec_servo_port_stop(void)
     __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 0U);
 }
 
+/* Z-axis lift servo: TIM2_CH4 = PB11, the former WRIST_PWM channel. Shares
+ * TIM2's 50 Hz servo period with the gripper (TIM2_CH3). */
+bool ec_servo_port_start_z(uint16_t pulse_us)
+{
+    if ((pulse_us == 0U) || (pulse_us > htim2.Init.Period)) return false;
+
+    __HAL_TIM_SET_COUNTER(&htim2, 0U);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, pulse_us);
+    return HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4) == HAL_OK;
+}
+
+void ec_servo_port_stop_z(void)
+{
+    (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_4);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 0U);
+}
+
 uint32_t ec_servo_port_now_ms(void)
 {
     return HAL_GetTick();
@@ -283,9 +331,6 @@ bool ec_step_port_set_direction(ec_axis_t axis, ec_direction_t direction)
     case EC_AXIS_Y:
         HAL_GPIO_WritePin(DIR_Y_GPIO_Port, DIR_Y_Pin, state);
         return true;
-    case EC_AXIS_Z:
-        HAL_GPIO_WritePin(DIR_Z_GPIO_Port, DIR_Z_Pin, state);
-        return true;
     default:
         return false;
     }
@@ -301,9 +346,6 @@ bool ec_step_port_enable_axis(ec_axis_t axis)
     case EC_AXIS_Y:
         HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
         return true;
-    case EC_AXIS_Z:
-        HAL_GPIO_WritePin(ENABLE_Z_GPIO_Port, ENABLE_Z_Pin, GPIO_PIN_RESET);
-        return true;
     default:
         return false;
     }
@@ -314,14 +356,12 @@ void ec_step_port_stop_all(void)
     stop_counted_timer();
     (void)HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_1);
     (void)HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
-    (void)HAL_TIM_PWM_Stop(&htim9, TIM_CHANNEL_1);
 }
 
 void ec_step_port_disable_all(void)
 {
     HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(ENABLE_Z_GPIO_Port, ENABLE_Z_Pin, GPIO_PIN_SET);
 }
 
 uint32_t ec_step_port_now_ms(void)
@@ -397,8 +437,14 @@ void ec_safety_port_inhibit_power(void)
 void ec_diag_port_write(const char *text)
 {
     size_t length = strlen(text);
+    uint32_t timeout_ms;
+
     if (length > UINT16_MAX) return;
-    (void)HAL_UART_Transmit(&huart3, (uint8_t *)text, (uint16_t)length, 20U);
+    /* 115200 8N1 -> 11520 bytes/s. Allow 2x the send time + 10 ms floor so
+     * STATUS/HELP (~350 B) are not truncated by a fixed 20 ms timeout. */
+    timeout_ms = (uint32_t)((length * 2000UL) / 11520UL) + 10UL;
+    (void)HAL_UART_Transmit(&huart3, (uint8_t *)text, (uint16_t)length,
+                            timeout_ms);
 }
 
 void ec_board_uart_start_rx(void)

@@ -32,7 +32,7 @@ void test_diag(void) {
   ec_diag_process_line("HELP");
   TEST_ASSERT(strstr(tx_log, "P1000|P1100|P1200|P1300|P1500|P1700|P1900") != NULL);
   TEST_ASSERT(strstr(tx_log, "GROUP START XDIR0|XDIR1 YDIR0|YDIR1 OPEN|CLOSE") != NULL);
-  ec_diag_process_line("STEP X"); TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_X);
+  ec_diag_process_line("MOTION ARM"); ec_diag_process_line("STEP X"); TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_X);
   ec_diag_process_line("STEP STOP"); TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_NONE);
   ec_diag_process_line("STEP X 999"); TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_NONE); TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
   ec_diag_process_line("INPUTS"); TEST_ASSERT(strstr(tx_log, "INPUTS RAW=01FF STABLE=01FF ACTIVE=0000") != NULL);
@@ -65,6 +65,9 @@ void test_diag(void) {
   ec_diag_process_line("MOVE X DIR0 STEPS 2000 HZ 5");
   TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
   ec_diag_process_line("MOVE X DIR0 STEPS 2000");
+  TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
+  tx_log[0] = '\0'; tx_used = 0U;
+  ec_diag_process_line("MOVE X DIR0 STEPS 1000001 HZ 100");
   TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
   ec_step_test_stop();
   TEST_ASSERT(!ec_motion_test_is_armed());
@@ -103,6 +106,7 @@ void test_diag(void) {
   TEST_ASSERT(ec_group_test_mode() == EC_GROUP_TEST_IDLE);
   TEST_ASSERT(strstr(tx_log, "OK GROUP STOP") != NULL);
 
+  ec_diag_process_line("MOTION ARM");
   ec_diag_process_line("STEP X");
   ec_diag_process_line("GROUP ARM");
   TEST_ASSERT(strstr(tx_log, "ERR GROUP_INHIBITED_OR_BUSY") != NULL);
@@ -165,6 +169,7 @@ void test_diag(void) {
   TEST_ASSERT(!ec_group_test_is_active());
 
   tx_log[0] = '\0'; tx_used = 0U; ec_diag_init();
+  ec_diag_process_line("MOTION ARM");
   ec_diag_on_rx_byte('S'); ec_diag_on_rx_byte('T'); ec_diag_on_rx_byte('E'); ec_diag_on_rx_byte('P'); ec_diag_on_rx_byte(' '); ec_diag_on_rx_byte('X'); ec_diag_on_rx_byte('\r');
   ec_diag_on_rx_byte('S'); ec_diag_on_rx_byte('T'); ec_diag_on_rx_byte('E'); ec_diag_on_rx_byte('P'); ec_diag_on_rx_byte(' '); ec_diag_on_rx_byte('S'); ec_diag_on_rx_byte('T'); ec_diag_on_rx_byte('O'); ec_diag_on_rx_byte('P'); ec_diag_on_rx_byte('\r');
   ec_diag_poll();

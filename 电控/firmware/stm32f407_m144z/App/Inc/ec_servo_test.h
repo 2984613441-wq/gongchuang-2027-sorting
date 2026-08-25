@@ -26,4 +26,8 @@ bool ec_servo_port_start(uint16_t pulse_us);
 void ec_servo_port_stop(void);
 uint32_t ec_servo_port_now_ms(void);
 
+/* Z-axis lift servo (TIM2_CH4 = PB11, former WRIST_PWM). */
+bool ec_servo_port_start_z(uint16_t pulse_us);
+void ec_servo_port_stop_z(void);
+
 #endif

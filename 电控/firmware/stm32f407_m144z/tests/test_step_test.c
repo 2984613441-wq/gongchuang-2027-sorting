@@ -61,13 +61,9 @@ void test_step_test(void) {
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
 
   fake_now_ms = 18000U; TEST_ASSERT(ec_motion_test_arm(0U));
-  TEST_ASSERT(ec_motion_test_start(EC_AXIS_Z, EC_DIRECTION_1, 0U));
-  ec_step_test_poll(18020U, 0U);
-  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
-  ec_step_test_poll(20019U, 0U);
-  TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
-  ec_step_test_poll(28020U, 0U);
+  TEST_ASSERT(!ec_motion_test_start(EC_AXIS_Z, EC_DIRECTION_1, 0U));
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+  ec_step_test_stop(); /* clear the unconsumed arm from the rejected Z start */
 
   fake_now_ms = 25000U;
   counted_start_count = 0U;
@@ -91,6 +87,7 @@ void test_step_test(void) {
                                           100U, 100U, 0U));
   ec_step_test_poll(25001U, EC_INPUT_X_HOME);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
+  TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_ABORTED);
 
   fake_now_ms = 26000U;
   TEST_ASSERT(ec_motion_test_arm(0U));
@@ -109,10 +106,19 @@ void test_step_test(void) {
                                           100U, 5U, 0U));
   TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
                                           100U, 10001U, 0U));
+  TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                          1000001U, 100U, 0U));
   TEST_ASSERT(ec_motion_test_is_armed());
   TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
                                          100U, 100U, 0U));
   TEST_ASSERT(!ec_motion_test_is_armed());
+  ec_motion_test_on_counted_done();
+
+  fake_now_ms = 28000U;
+  TEST_ASSERT(ec_motion_test_arm(0U));
+  TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
+                                         1000000U, 100U, 0U));
+  TEST_ASSERT(last_counted_steps == 1000000U);
   ec_motion_test_on_counted_done();
 
   fake_now_ms = 29000U;
@@ -127,4 +133,15 @@ void test_step_test(void) {
   TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_TIMEOUT);
   ec_step_test_stop();
   TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
+
+  /* ec_motion_inhibit_from_raw: active-low safety inputs (P2-3). */
+  {
+    const uint16_t safety = (uint16_t)(EC_INPUT_X_HOME | EC_INPUT_X_END |
+                                       EC_INPUT_Y_HOME | EC_INPUT_Y_END |
+                                       EC_INPUT_Z_UP | EC_INPUT_Z_DOWN |
+                                       EC_INPUT_ESTOP_FB);
+    TEST_ASSERT(!ec_motion_inhibit_from_raw(safety));        /* all HIGH -> no inhibit */
+    TEST_ASSERT(ec_motion_inhibit_from_raw(0U));             /* all LOW -> inhibit */
+    TEST_ASSERT(ec_motion_inhibit_from_raw(safety & (uint16_t)~EC_INPUT_ESTOP_FB)); /* ESTOP LOW -> inhibit */
+  }
 }

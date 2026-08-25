@@ -13,19 +13,23 @@
     (EC_INPUT_X_HOME | EC_INPUT_X_END | EC_INPUT_Y_HOME | EC_INPUT_Y_END | \
      EC_INPUT_Z_UP | EC_INPUT_Z_DOWN | EC_INPUT_ESTOP_FB)
 
-static ec_axis_t active_axis;
-static uint32_t started_at_ms;
+/* active_axis/started_at_ms/counted_steps/mode/counted_result are shared between
+ * the ISR (ec_motion_test_on_counted_done / stop_active_test) and the main-loop
+ * poll: must be volatile. armed_at_ms/motion_armed/counted_timeout_ms are only
+ * touched by the main loop, so they stay non-volatile. */
+static volatile ec_axis_t active_axis;
+static volatile uint32_t started_at_ms;
 static uint32_t armed_at_ms;
-static uint32_t counted_steps;
-static ec_step_test_mode_t mode;
+static volatile uint32_t counted_steps;
+static volatile ec_step_test_mode_t mode;
 static uint8_t motion_armed;
-static ec_step_result_t counted_result;
+static volatile ec_step_result_t counted_result;
 static uint32_t counted_timeout_ms;
 
 static bool is_valid_axis(ec_axis_t axis)
 {
-    return (axis == EC_AXIS_X) || (axis == EC_AXIS_Y) ||
-           (axis == EC_AXIS_Z);
+    /* Z is a servo (not a stepper): only X/Y are stepper axes. */
+    return (axis == EC_AXIS_X) || (axis == EC_AXIS_Y);
 }
 
 static bool has_motion_inhibit(uint16_t active_inputs)
@@ -123,7 +127,7 @@ bool ec_motion_test_start_steps(ec_axis_t axis, ec_direction_t direction,
     if ((direction != EC_DIRECTION_0) && (direction != EC_DIRECTION_1)) {
         return false;
     }
-    if (steps == 0U) return false;
+    if ((steps == 0U) || (steps > EC_STEP_MAX_STEPS)) return false;
     if ((frequency_hz < EC_STEP_MIN_HZ) ||
         (frequency_hz > EC_STEP_MAX_HZ)) {
         return false;
@@ -162,6 +166,24 @@ void ec_motion_test_on_counted_done(void)
     }
 }
 
+bool ec_motion_inhibit_from_raw(uint16_t raw_mask)
+{
+    /* Inputs are active-low (see ec_inputs_active_mask): a safety pin reads
+     * LOW when triggered. Raw GPIO reads HIGH=1, so inhibit = any safety pin
+     * LOW = (~raw_mask) & EC_MOTION_SAFETY_MASK != 0. Polarity MUST be
+     * verified against the physical wiring before relying on this for safety
+     * (see the pre-power-on forced-actions checklist, item 1). */
+    return ((uint16_t)(~raw_mask) & EC_MOTION_SAFETY_MASK) != 0U;
+}
+
+void ec_motion_test_on_aborted(void)
+{
+    if (mode == EC_STEP_TEST_MOTION_COUNTED) {
+        counted_result = EC_STEP_RESULT_ABORTED;
+        stop_active_test();
+    }
+}
+
 void ec_step_test_stop(void)
 {
     stop_active_test();
@@ -182,6 +204,9 @@ void ec_step_test_poll(uint32_t now_ms, uint16_t active_inputs)
         (mode == EC_STEP_TEST_MOTION_RUNNING) ||
         (mode == EC_STEP_TEST_MOTION_COUNTED)) {
         if (has_motion_inhibit(active_inputs)) {
+            if (mode == EC_STEP_TEST_MOTION_COUNTED) {
+                counted_result = EC_STEP_RESULT_ABORTED;
+            }
             stop_active_test();
             return;
         }
@@ -202,7 +227,11 @@ void ec_step_test_poll(uint32_t now_ms, uint16_t active_inputs)
     } else if ((mode == EC_STEP_TEST_MOTION_COUNTED) &&
                ((uint32_t)(now_ms - started_at_ms) >=
                 counted_timeout_ms)) {
-        counted_result = EC_STEP_RESULT_TIMEOUT;
+        /* The ISR may complete the final tick and write DONE just before
+         * this timeout check: DONE wins, so do not overwrite it. */
+        if (counted_result == EC_STEP_RESULT_NONE) {
+            counted_result = EC_STEP_RESULT_TIMEOUT;
+        }
         stop_active_test();
     } else if ((mode == EC_STEP_TEST_SIGNAL_ONLY) &&
                ((uint32_t)(now_ms - started_at_ms) >=

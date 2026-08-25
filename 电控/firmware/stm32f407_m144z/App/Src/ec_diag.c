@@ -184,13 +184,14 @@ static bool parse_move_steps_command(const char *line, ec_axis_t *axis,
         *axis = EC_AXIS_X;
     } else if (axis_char == 'Y') {
         *axis = EC_AXIS_Y;
-    } else if (axis_char == 'Z') {
-        *axis = EC_AXIS_Z;
     } else {
         return false;
     }
     if ((dir_value != 0UL) && (dir_value != 1UL)) return false;
-    if ((steps_value == 0UL) || (steps_value > 1000000UL)) return false;
+    if ((steps_value == 0UL) ||
+        (steps_value > (unsigned long)EC_STEP_MAX_STEPS)) {
+        return false;
+    }
     if ((hz_value < (unsigned long)EC_STEP_MIN_HZ) ||
         (hz_value > (unsigned long)EC_STEP_MAX_HZ)) {
         return false;
@@ -318,8 +319,8 @@ void ec_diag_process_line(const char *line)
 
     if (strcmp(line, "HELP") == 0) {
         ec_diag_port_write(
-            "HELP PING STATUS INPUTS STEP X|Y|Z STEP STOP MOTION ARM "
-            "MOVE X|Y|Z DIR0|DIR1 MOVE X|Y|Z DIR0|DIR1 STEPS n HZ f "
+            "HELP PING STATUS INPUTS STEP X|Y STEP STOP MOTION ARM "
+            "MOVE X|Y DIR0|DIR1 MOVE X|Y DIR0|DIR1 STEPS n HZ f "
             "SERVO ARM SERVO PB10 "
             "P1000|P1100|P1200|P1300|P1500|P1700|P1900 "
             "SERVO STOP GROUP ARM GROUP START XDIR0|XDIR1 "
@@ -374,13 +375,12 @@ void ec_diag_process_line(const char *line)
         write_inputs();
     } else if (strcmp(line, "STEP X") == 0) {
         ec_diag_port_write((ec_servo_test_blocks_step() || barrier_test_busy() || group_test_busy()) ? "ERR TEST_BUSY\r\n" :
-                           (ec_step_test_start(EC_AXIS_X) ? "OK STEP X\r\n" : "ERR STEP_START\r\n"));
+                           (!ec_motion_test_is_armed() ? "ERR NOT_ARMED\r\n" :
+                            (ec_step_test_start(EC_AXIS_X) ? "OK STEP X\r\n" : "ERR STEP_START\r\n")));
     } else if (strcmp(line, "STEP Y") == 0) {
         ec_diag_port_write((ec_servo_test_blocks_step() || barrier_test_busy() || group_test_busy()) ? "ERR TEST_BUSY\r\n" :
-                           (ec_step_test_start(EC_AXIS_Y) ? "OK STEP Y\r\n" : "ERR STEP_START\r\n"));
-    } else if (strcmp(line, "STEP Z") == 0) {
-        ec_diag_port_write((ec_servo_test_blocks_step() || barrier_test_busy() || group_test_busy()) ? "ERR TEST_BUSY\r\n" :
-                           (ec_step_test_start(EC_AXIS_Z) ? "OK STEP Z\r\n" : "ERR STEP_START\r\n"));
+                           (!ec_motion_test_is_armed() ? "ERR NOT_ARMED\r\n" :
+                            (ec_step_test_start(EC_AXIS_Y) ? "OK STEP Y\r\n" : "ERR STEP_START\r\n")));
     } else if (strcmp(line, "STEP STOP") == 0) {
         stop_all_tests();
         ec_diag_port_write("OK STEP STOP\r\n");
@@ -410,12 +410,9 @@ void ec_diag_process_line(const char *line)
     } else if ((strcmp(line, "MOVE X DIR0") == 0) ||
                (strcmp(line, "MOVE X DIR1") == 0) ||
                (strcmp(line, "MOVE Y DIR0") == 0) ||
-               (strcmp(line, "MOVE Y DIR1") == 0) ||
-               (strcmp(line, "MOVE Z DIR0") == 0) ||
-               (strcmp(line, "MOVE Z DIR1") == 0)) {
+               (strcmp(line, "MOVE Y DIR1") == 0)) {
         ec_input_snapshot_t inputs = ec_board_read_inputs();
-        ec_axis_t axis = (line[5] == 'X') ? EC_AXIS_X :
-                         ((line[5] == 'Y') ? EC_AXIS_Y : EC_AXIS_Z);
+        ec_axis_t axis = (line[5] == 'X') ? EC_AXIS_X : EC_AXIS_Y;
         ec_direction_t direction = (line[10] == '1') ?
                                    EC_DIRECTION_1 : EC_DIRECTION_0;
         ec_diag_port_write((barrier_test_busy() || group_test_busy()) ?

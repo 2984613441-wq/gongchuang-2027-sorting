@@ -12,19 +12,21 @@ import electrical_control.protocol as protocol
 
 
 class ItemTaskV04PayloadTests(unittest.TestCase):
-    def test_item_task_context_carries_image_id_without_guessing_wire_encoding(self) -> None:
+    def test_item_task_payload_encodes_frozen_8_byte_wire_format(self) -> None:
         item = protocol.ItemTaskPayload(
             target_seq=1,
             class_id=2,
             image_id=3,
-            x_position=0x1234,
-            y_position=0x5678,
-            grip_angle=90,
+            x_position=-1000,
+            y_position=1000,
+            grip_angle=0xFF,
         )
 
         self.assertEqual(3, item.image_id)
-        with self.assertRaises(protocol.ContractNotFrozen):
-            protocol.encode_item_task_payload(item)
+        self.assertEqual(
+            bytes.fromhex("01 02 03 FC 18 03 E8 FF"),
+            protocol.encode_item_task_payload(item),
+        )
 
 
 class RoundSuccessCounterTests(unittest.TestCase):

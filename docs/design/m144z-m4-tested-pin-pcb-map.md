@@ -31,15 +31,15 @@
 | STEP_Y | TIM4_CH1 | PB6 | JP_R-19 | Y 驱动 STEP + TP_STEP_Y | PWM/联动通过 |
 | DIR_Y | GPIO 输出 | PC7 | JP_R-2 | Y 驱动 DIR + TP_DIR_Y | 输出翻转通过 |
 | ENABLE_Y | GPIO 输出，低有效 | PD7 | JP_R-4 | Y 驱动 ENABLE + TP_ENABLE_Y | 联动通过 |
-| STEP_Z | TIM9_CH1 | PE5 | JP_R-38 | J_DRV_Z_CTRL.STEP + TP_STEP_Z | PWM/联动通过 |
-| DIR_Z | GPIO 输出 | PE6 | JP_R-37 | J_DRV_Z_CTRL.DIR + TP_DIR_Z | 输出翻转通过 |
-| ENABLE_Z | GPIO 输出，低有效 | PG15 | JP_R-5 | J_DRV_Z_CTRL.ENABLE + TP_ENABLE_Z | 联动通过 |
+| STEP_Z | TIM9_CH1 | PE5 | JP_R-38 | J_DRV_Z_CTRL.STEP + TP_STEP_Z | 弃用（Z 轴改舵机，TIM9 保留未用） |
+| DIR_Z | GPIO 输出 | PE6 | JP_R-37 | J_DRV_Z_CTRL.DIR + TP_DIR_Z | 弃用（Z 轴改舵机） |
+| ENABLE_Z | GPIO 输出，低有效 | PG15 | JP_R-5 | J_DRV_Z_CTRL.ENABLE + TP_ENABLE_Z | 弃用（Z 轴改舵机） |
 | BARRIER_PWM_1 | TIM3_CH3 | PB0 | JP_L-35 | J_BARRIER_CTRL_1 + TP | PWM 通过 |
 | BARRIER_PWM_2 | TIM3_CH4 | PB1 | JP_L-34 | J_BARRIER_CTRL_2 + TP | PWM 通过 |
 | BARRIER_PWM_3 | TIM10_CH1 | PF6 | JP_L-29 | J_BARRIER_CTRL_3 + TP | PWM 通过 |
 | BARRIER_PWM_4 | TIM11_CH1 | PF7 | JP_L-30 | J_BARRIER_CTRL_4 + TP | PWM 通过 |
 | GRIP_PWM | TIM2_CH3 | PB10 | JP_R-23 | J_GRIPPER_CTRL + TP | PWM 通过 |
-| WRIST_PWM | TIM2_CH4 | PB11 | JP_R-22 | J_WRIST_CTRL + TP | PWM 通过；接口默认 DNP |
+| WRIST_PWM | TIM2_CH4 | PB11 | JP_R-22 | J_WRIST_CTRL + TP | 改作 Z 轴舵机信号（复用 TIM2_CH4/PB11） |
 | LIGHT_EN | GPIO 输出 | PC0 | JP_R-36 | J_LIGHT + TP_LIGHT_EN | 输出翻转通过 |
 | X_HOME | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG7 | JP_R-14 | J_X_HOME | 低有效；历史输入/停步联动通过 |
 | X_END | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG6 | JP_R-13 | J_X_END | 低有效；历史输入读取通过 |

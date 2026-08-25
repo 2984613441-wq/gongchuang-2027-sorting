@@ -14,6 +14,14 @@ from electrical_control.protocol import (
     SuccessCountOverflow,
     build_display_content,
 )
+from .vision_ingest import (
+    BatchTargets,
+    FakeVisionSource,
+    ImageIdMap,
+    TargetReacquireResponse,
+    VisionTarget,
+    build_item_task_queue,
+)
 
 
 class SchedulerState(Enum):
@@ -277,8 +285,11 @@ class Scheduler:
 
 __all__ = [
     "DisplayAckIntent",
+    "BatchTargets",
     "FakeRenderer",
     "FakeTaskSource",
+    "FakeVisionSource",
+    "ImageIdMap",
     "ItemResult",
     "ItemTaskContext",
     "PendingRender",
@@ -286,5 +297,8 @@ __all__ = [
     "Scheduler",
     "SchedulerFault",
     "SchedulerState",
+    "TargetReacquireResponse",
     "VerifiedNewRound",
+    "VisionTarget",
+    "build_item_task_queue",
 ]

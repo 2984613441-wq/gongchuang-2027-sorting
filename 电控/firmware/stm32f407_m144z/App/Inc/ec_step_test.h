@@ -6,6 +6,7 @@
 
 #define EC_STEP_MIN_HZ UINT32_C(10)
 #define EC_STEP_MAX_HZ UINT32_C(10000)
+#define EC_STEP_MAX_STEPS UINT32_C(1000000)
 
 typedef enum {
     EC_AXIS_NONE = 0,
@@ -30,7 +31,8 @@ typedef enum {
 typedef enum {
     EC_STEP_RESULT_NONE = 0,
     EC_STEP_RESULT_DONE,
-    EC_STEP_RESULT_TIMEOUT
+    EC_STEP_RESULT_TIMEOUT,
+    EC_STEP_RESULT_ABORTED
 } ec_step_result_t;
 
 void ec_step_test_init(void);
@@ -42,6 +44,8 @@ bool ec_motion_test_start_steps(ec_axis_t axis, ec_direction_t direction,
                                 uint32_t steps, uint32_t frequency_hz,
                                 uint16_t active_inputs);
 void ec_motion_test_on_counted_done(void);
+bool ec_motion_inhibit_from_raw(uint16_t raw_mask);
+void ec_motion_test_on_aborted(void);
 void ec_step_test_stop(void);
 void ec_step_test_poll(uint32_t now_ms, uint16_t active_inputs);
 ec_axis_t ec_step_test_active_axis(void);

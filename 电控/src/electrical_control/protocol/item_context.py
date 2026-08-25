@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .display_ack import DisplayContent, _u8
 from .errors import (
-    ContractNotFrozen,
+    PayloadError,
     ProtocolError,
     ResultIdentityConflict,
     SuccessCountOverflow,
@@ -29,13 +29,113 @@ class ItemTaskPayload:
         _u8("class_id", self.class_id)
         _u8("image_id", self.image_id)
 
+    @property
+    def identity_prefix(self) -> bytes:
+        return encode_item_task_identity_prefix(
+            self.target_seq, self.class_id, self.image_id
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ItemTaskIdentity:
+    """Frozen ITEM_TASK identity prefix; X/Y/angle are not included here."""
+
+    target_seq: int
+    class_id: int
+    image_id: int
+
+    def __post_init__(self) -> None:
+        _u8("target_seq", self.target_seq)
+        _u8("class_id", self.class_id)
+        _u8("image_id", self.image_id)
+
+    @property
+    def prefix(self) -> bytes:
+        return bytes((self.target_seq, self.class_id, self.image_id))
+
+
+def encode_item_task_identity_prefix(
+    target_seq: int, class_id: int, image_id: int
+) -> bytes:
+    """Encode only the three frozen identity bytes of an ITEM_TASK payload."""
+
+    return ItemTaskIdentity(target_seq, class_id, image_id).prefix
+
+
+def decode_item_task_identity_prefix(payload: bytes) -> tuple[ItemTaskIdentity, bytes]:
+    """Decode the frozen identity prefix and return the opaque remainder."""
+
+    if not isinstance(payload, (bytes, bytearray, memoryview)):
+        raise PayloadError("ITEM_TASK payload must be bytes-like")
+    payload = bytes(payload)
+    if len(payload) < 3:
+        raise PayloadError("ITEM_TASK payload is shorter than its identity prefix")
+    identity = ItemTaskIdentity(payload[0], payload[1], payload[2])
+    return identity, payload[3:]
+
+
+# Frozen ITEM_TASK wire constraints (interface-contract sec. 5.2): X/Y origin
+# = device center, units 0.1 mm, |value| > 1350 (+-135.0 mm) is out of range;
+# grip_angle is always 0xFF (claw does not rotate; 0..180 unused this round).
+_ITEM_TASK_X_LIMIT = 1350
+_ITEM_TASK_ANGLE_NONE = 0xFF
+
+
+def _coord(name: str, value: int) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise PayloadError(f"{name} must be a signed integer")
+    if not -_ITEM_TASK_X_LIMIT <= value <= _ITEM_TASK_X_LIMIT:
+        raise PayloadError(f"{name} out of range (+-{_ITEM_TASK_X_LIMIT})")
+    return value
+
 
 def encode_item_task_payload(item: ItemTaskPayload) -> bytes:
-    """Refuse to guess coordinate/angle encoding that V0.4 has not frozen."""
+    """Encode the frozen 8-byte ITEM_TASK payload (interface-contract sec. 5.2).
+
+    Coordinate/angle validity is enforced here at the wire boundary, not in
+    ``ItemTaskPayload.__post_init__``: the payload class stays a loose logical
+    carrier (placeholder 0/0/0 is a valid intermediate state until the drop
+    table lands)."""
 
     if not isinstance(item, ItemTaskPayload):
         raise TypeError("item must be ItemTaskPayload")
-    raise ContractNotFrozen("ITEM_TASK coordinate and angle wire encoding is not frozen")
+    x = _coord("x_position", item.x_position)
+    y = _coord("y_position", item.y_position)
+    _u8("grip_angle", item.grip_angle)
+    if item.grip_angle != _ITEM_TASK_ANGLE_NONE:
+        raise PayloadError("grip_angle must be 0xFF (claw does not rotate)")
+    return (
+        bytes((item.target_seq, item.class_id, item.image_id))
+        + x.to_bytes(2, "big", signed=True)
+        + y.to_bytes(2, "big", signed=True)
+        + bytes((item.grip_angle,))
+    )
+
+
+def decode_item_task_payload(payload: bytes) -> ItemTaskPayload:
+    """Decode the frozen 8-byte ITEM_TASK payload, rejecting any violation."""
+
+    if not isinstance(payload, (bytes, bytearray, memoryview)):
+        raise PayloadError("ITEM_TASK payload must be bytes-like")
+    payload = bytes(payload)
+    if len(payload) != 8:
+        raise PayloadError("ITEM_TASK payload must be exactly 8 bytes")
+    if payload[7] != _ITEM_TASK_ANGLE_NONE:
+        raise PayloadError("grip_angle must be 0xFF (claw does not rotate)")
+    x = int.from_bytes(payload[3:5], "big", signed=True)
+    y = int.from_bytes(payload[5:7], "big", signed=True)
+    if not -_ITEM_TASK_X_LIMIT <= x <= _ITEM_TASK_X_LIMIT:
+        raise PayloadError(f"x_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+    if not -_ITEM_TASK_X_LIMIT <= y <= _ITEM_TASK_X_LIMIT:
+        raise PayloadError(f"y_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+    return ItemTaskPayload(
+        target_seq=payload[0],
+        class_id=payload[1],
+        image_id=payload[2],
+        x_position=x,
+        y_position=y,
+        grip_angle=payload[7],
+    )
 
 
 class RoundSuccessCounter:

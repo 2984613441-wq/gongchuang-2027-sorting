@@ -13,18 +13,32 @@ class Device(IntEnum):
 
 
 class Command(IntEnum):
+    HEARTBEAT = 0x01
+    HEARTBEAT_ACK = 0x02
+    DEVICE_READY = 0x03
+    ERROR = 0x04
+    ACK = 0x05
+    NACK = 0x06
+    BATCH_TARGETS = 0x10
+    TARGET_REACQUIRE_REQ = 0x11
+    TARGET_REACQUIRE_RSP = 0x12
+    DIAG_SCAN = 0x13
     BARRIER_READY = 0x20
+    ITEM_TASK = 0x21
     MOTION_DONE = 0x22
     ITEM_RESULT = 0x23
+    DISPLAY_DATA = 0x24
     DISPLAY_ACK = 0x25
+    ESTOP = 0x26
 
 
 @dataclass(frozen=True, slots=True)
 class Frame:
     """Already-delimited abstract frame.
 
-    Binary outer-frame encoding is deliberately absent: its header and CRC-16
-    rules are not frozen in protocol V0.4.
+    Binary outer-frame encoding is deliberately absent here (callers supply
+    already-delimited frames). The outer frame is frozen in protocol V0.5:
+    header 0xA5 0x5A, version 0x01, CRC-16/MODBUS, big-endian multi-byte fields.
     """
 
     sender: Device
