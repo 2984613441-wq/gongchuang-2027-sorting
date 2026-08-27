@@ -3,6 +3,7 @@
 from .color_quant import color_name, dominant_color, mmcq, rgb_to_hsl
 from .config import InferenceConfig
 from .coordinates import AffineCoordinateTransform, PixelCenterTransform
+from .drop_table import DropPoint, DropTable, DropTableError, ITEM_TASK_COORD_LIMIT
 from .errors import AmbiguousTargetError
 from .info_decode import (
     FakeInfoDecoder,
@@ -22,10 +23,12 @@ from .single_target import (
 )
 from .sort_plan import (
     DEFAULT_COLOR_VOCABULARY,
+    BoxAssignment,
     PlacedItem,
     SortPlan,
     TooManyGroupsError,
     UnknownColorError,
+    UnknownGroupError,
     build_sort_plan,
     classify_and_plan,
     color_name_to_id,
@@ -45,18 +48,24 @@ __all__ = [
     "AmbiguousTargetError",
     "BatchResult",
     "BoundingBox",
+    "BoxAssignment",
     "DetectionResult",
+    "DropPoint",
+    "DropTable",
+    "DropTableError",
     "DEFAULT_COLOR_VOCABULARY",
     "FakeImage",
     "FakeInfoDecoder",
     "InfoDecodeConfig",
     "InfoDecoder",
     "InfoResult",
+    "ITEM_TASK_COORD_LIMIT",
     "SingleTargetLoopConfig",
     "SingleTargetResult",
     "SortPlan",
     "TooManyGroupsError",
     "UnknownColorError",
+    "UnknownGroupError",
     "PlacedItem",
     "build_sort_plan",
     "classify_and_plan",

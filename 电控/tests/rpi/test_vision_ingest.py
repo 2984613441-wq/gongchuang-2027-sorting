@@ -55,6 +55,43 @@ class BuildItemTaskQueueTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             build_item_task_queue(batch, image_id_for_class=None)
 
+    def test_drop_point_resolution_fills_coordinates_and_angle(self) -> None:
+        batch = BatchTargets(
+            7,
+            (
+                VisionTarget(1, 2, box_id=3),
+                VisionTarget(2, 5, box_id=1),
+            ),
+        )
+        drop = {3: (1200, -800), 1: (-500, 400)}
+
+        queue = build_item_task_queue(
+            batch,
+            image_id_for_class=lambda class_id: class_id + 100,
+            drop_point_for_box=lambda box_id: drop[box_id],
+        )
+
+        self.assertEqual(
+            (1200, -800, 0xFF),
+            (queue[0].x_position, queue[0].y_position, queue[0].grip_angle),
+        )
+        self.assertEqual(
+            (-500, 400, 0xFF),
+            (queue[1].x_position, queue[1].y_position, queue[1].grip_angle),
+        )
+        # Resolved payloads become serializable at the wire boundary.
+        self.assertEqual(8, len(encode_item_task_payload(queue[0])))
+
+    def test_drop_point_resolution_requires_box_id(self) -> None:
+        batch = BatchTargets(7, (VisionTarget(1, 2),))
+
+        with self.assertRaises(TypeError):
+            build_item_task_queue(
+                batch,
+                image_id_for_class=lambda class_id: 3,
+                drop_point_for_box=lambda box_id: (0, 0),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

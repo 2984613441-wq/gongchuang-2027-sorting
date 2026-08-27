@@ -18,6 +18,7 @@ from electrical_control.protocol import ItemTaskPayload
 class VisionTarget:
     target_seq: int
     class_id: int
+    box_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,7 @@ class TargetReacquireResponse:
 
 
 ImageIdMap = Callable[[int], int]
+DropPointForBox = Callable[[int], tuple[int, int]]
 
 
 class FakeVisionSource:
@@ -57,32 +59,47 @@ def build_item_task_queue(
     batch: BatchTargets,
     *,
     image_id_for_class: ImageIdMap,
+    drop_point_for_box: DropPointForBox | None = None,
 ) -> tuple[ItemTaskPayload, ...]:
     """Map a vision batch to the Pi-side scheduling queue.
 
-    The image id is supplied by the caller rather than guessed here. Coordinate
-    fields are logical placeholders (0) because the drop-table physical
-    quantities have not been supplied yet; ``encode_item_task_payload`` still
-    refuses to serialize the placeholder (grip_angle is not 0xFF).
+    The image id is supplied by the caller rather than guessed here. When
+    ``drop_point_for_box`` is provided (the drop table has been measured and
+    injected), each target's ``box_id`` resolves to a real drop point and the
+    payload carries ``grip_angle=0xFF`` so it becomes serializable. Without it,
+    the coordinate fields stay logical placeholders (0) and the payload is
+    deliberately not serializable (``grip_angle != 0xFF``) — the wire-boundary
+    check in ``encode_item_task_payload`` enforces that fail-closed behavior.
     """
 
     if not isinstance(batch, BatchTargets):
         raise TypeError("batch must be a BatchTargets")
     if not callable(image_id_for_class):
         raise TypeError("image_id_for_class must be callable")
+    if drop_point_for_box is not None and not callable(drop_point_for_box):
+        raise TypeError("drop_point_for_box must be callable or None")
 
     items: list[ItemTaskPayload] = []
     for target in batch.targets:
         if not isinstance(target, VisionTarget):
             raise TypeError("batch targets must be VisionTarget instances")
+        x_position = y_position = 0
+        grip_angle = 0  # placeholder: not serializable until drop table lands
+        if drop_point_for_box is not None:
+            if target.box_id is None:
+                raise TypeError(
+                    "drop_point_for_box requires every VisionTarget to carry a box_id"
+                )
+            x_position, y_position = drop_point_for_box(target.box_id)
+            grip_angle = 0xFF  # frozen "no rotation" sentinel (interface-contract 5.2)
         items.append(
             ItemTaskPayload(
                 target_seq=target.target_seq,
                 class_id=target.class_id,
                 image_id=image_id_for_class(target.class_id),
-                x_position=0,
-                y_position=0,
-                grip_angle=0,
+                x_position=x_position,
+                y_position=y_position,
+                grip_angle=grip_angle,
             )
         )
     return tuple(items)
@@ -90,6 +107,7 @@ def build_item_task_queue(
 
 __all__ = [
     "BatchTargets",
+    "DropPointForBox",
     "FakeVisionSource",
     "ImageIdMap",
     "TargetReacquireResponse",

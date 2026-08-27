@@ -9,8 +9,10 @@ sys.path.insert(0, str(SRC))
 
 from sorting_vision.errors import EmptyDetectionError, InvalidDetectionError
 from sorting_vision.sort_plan import (
+    BoxAssignment,
     TooManyGroupsError,
     UnknownColorError,
+    UnknownGroupError,
     build_sort_plan,
     classify_and_plan,
     crop_rgba,
@@ -54,6 +56,26 @@ class SortPlanTests(unittest.TestCase):
         labels = ("red", "orange", "yellow", "green", "cyan", "blue", "purple")
         with self.assertRaises(TooManyGroupsError):
             build_sort_plan(detections, labels, box_count=6)
+
+    def test_frozen_box_assignment_overrides_lexicographic(self) -> None:
+        assignment = BoxAssignment({(0, 0): 3, (0, 1): 5})  # (color_id, shape_id) -> box_id
+        plan = build_sort_plan(
+            (det(0, (10, 10, 20, 20)), det(1, (30, 10, 40, 20))),
+            ("red", "red"),
+            box_count=6,
+            box_assignment=assignment,
+        )
+        self.assertEqual([3, 5], [item.box_id for item in plan.items])
+
+    def test_frozen_box_assignment_fails_closed_on_unknown_group(self) -> None:
+        assignment = BoxAssignment({(0, 0): 1})
+        with self.assertRaises(UnknownGroupError):
+            build_sort_plan(
+                (det(0, (0, 0, 5, 5)), det(1, (5, 0, 10, 5))),
+                ("red", "red"),
+                box_count=6,
+                box_assignment=assignment,
+            )
 
     def test_unknown_color_fails_closed(self) -> None:
         with self.assertRaises(UnknownColorError):

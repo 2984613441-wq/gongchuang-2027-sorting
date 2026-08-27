@@ -13,7 +13,7 @@ white-balance and lighting calibration.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .color_quant import color_name, dominant_color
 from .errors import EmptyDetectionError, InvalidDetectionError, InvalidInputError
@@ -41,6 +41,58 @@ class TooManyGroupsError(Exception):
 
 class UnknownColorError(Exception):
     code = "UNKNOWN_COLOR"
+
+
+class UnknownGroupError(Exception):
+    code = "UNKNOWN_GROUP"
+
+
+@dataclass(frozen=True)
+class BoxAssignment:
+    """Frozen ``(color_id, shape_id) -> box_id`` mapping.
+
+    The box id is a stable physical-box number (1..box_count), so a fixed
+    drop-point table stays meaningful across batches. This mapping is a
+    physical fact that must be frozen on site; the lexicographic default in
+    ``build_sort_plan`` is diagnostic only and must not ship to production.
+    """
+
+    mapping: Mapping[tuple[int, int], int]
+    box_count: int = 6
+
+    def __post_init__(self) -> None:
+        if not self.mapping:
+            raise InvalidInputError("box assignment must not be empty")
+        if not isinstance(self.box_count, int) or isinstance(self.box_count, bool):
+            raise InvalidInputError("box_count must be an integer")
+        if self.box_count < 1:
+            raise InvalidInputError("box_count must be a positive integer")
+        for key, box_id in self.mapping.items():
+            if not (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in key
+                )
+            ):
+                raise InvalidInputError(
+                    "box assignment keys must be (color_id, shape_id) integer pairs"
+                )
+            if not isinstance(box_id, int) or isinstance(box_id, bool):
+                raise InvalidInputError("box assignment box_id must be an integer")
+            if not 1 <= box_id <= self.box_count:
+                raise InvalidInputError(
+                    f"box assignment box_id must be within [1, {self.box_count}]"
+                )
+
+    def box_for(self, color_id: int, shape_id: int) -> int:
+        try:
+            return self.mapping[(color_id, shape_id)]
+        except KeyError:
+            raise UnknownGroupError(
+                f"no box assigned for (color_id={color_id}, shape_id={shape_id})"
+            ) from None
 
 
 @dataclass(frozen=True)
@@ -105,12 +157,15 @@ def build_sort_plan(
     color_labels: Sequence[str],
     box_count: int = 6,
     vocabulary: Sequence[str] = DEFAULT_COLOR_VOCABULARY,
+    box_assignment: BoxAssignment | None = None,
 ) -> SortPlan:
     """Group detections by ``(color_id, shape_id)`` and assign box ids.
 
-    Box ids are assigned in ``(color_id, shape_id)`` lexicographic order, so a
-    given key always maps to the same box and distinct keys map to distinct
-    boxes. More distinct keys than ``box_count`` fails closed.
+    Without ``box_assignment``, box ids are assigned in ``(color_id, shape_id)``
+    lexicographic order — a diagnostic default that is deterministic for a
+    fixed batch but NOT a frozen physical assignment. With ``box_assignment``,
+    each ``(color_id, shape_id)`` is looked up in the frozen table and unknown
+    groups fail closed. More distinct keys than ``box_count`` fails closed.
     """
 
     if not detections:
@@ -130,7 +185,13 @@ def build_sort_plan(
             f"{len(unique)} distinct (color, shape) groups exceed {box_count} boxes"
         )
 
-    box_of = {key: index + 1 for index, key in enumerate(unique)}
+    if box_assignment is None:
+        # Diagnostic default: lexicographic (color_id, shape_id) order. This is
+        # NOT a frozen physical assignment — freeze a BoxAssignment on site or
+        # the fixed drop-point table drifts with batch content.
+        box_of = {key: index + 1 for index, key in enumerate(unique)}
+    else:
+        box_of = {key: box_assignment.box_for(*key) for key in unique}
     items = tuple(
         PlacedItem(
             shape_id=detection.class_id,
@@ -152,6 +213,7 @@ def classify_and_plan(
     detections: Sequence[RawDetection],
     box_count: int = 6,
     vocabulary: Sequence[str] = DEFAULT_COLOR_VOCABULARY,
+    box_assignment: BoxAssignment | None = None,
 ) -> SortPlan:
     """Full chain: crop each ROI, name its dominant color, then plan boxes."""
 
@@ -159,4 +221,4 @@ def classify_and_plan(
         classify_roi_color(crop_rgba(pixels, image_width, image_height, detection.bbox))
         for detection in detections
     ]
-    return build_sort_plan(detections, labels, box_count, vocabulary)
+    return build_sort_plan(detections, labels, box_count, vocabulary, box_assignment)
