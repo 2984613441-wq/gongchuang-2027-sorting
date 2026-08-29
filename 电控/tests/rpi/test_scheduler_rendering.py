@@ -31,6 +31,13 @@ def unlocked_scheduler(*tasks: ItemTaskContext) -> Scheduler:
     return scheduler
 
 
+def accept_motion_done_for(scheduler: Scheduler, task: ItemTaskContext) -> None:
+    """Pass the safety gate MOTION_DONE -> WAIT_ITEM_RESULT for the active task."""
+    scheduler.accept_motion_done(
+        round_id=task.round_id, task_id=task.task_id, frame_seq=task.frame_seq
+    )
+
+
 class SchedulerGateTests(unittest.TestCase):
     def test_RPI_GATE_001_next_item_waits_for_render_receipt(self) -> None:
         scheduler = unlocked_scheduler(context(1), context(2))
@@ -38,6 +45,7 @@ class SchedulerGateTests(unittest.TestCase):
 
         self.assertEqual(1, first.payload.target_seq)
         self.assertIsNone(scheduler.next_task())
+        accept_motion_done_for(scheduler, first)
         scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         self.assertIsNone(scheduler.next_task())
 
@@ -52,7 +60,8 @@ class SchedulerGateTests(unittest.TestCase):
 
     def test_RPI_RESULT_001_success_builds_exact_five_field_model_and_counts_once(self) -> None:
         scheduler = unlocked_scheduler(context(1))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
 
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         duplicate = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
@@ -63,7 +72,8 @@ class SchedulerGateTests(unittest.TestCase):
 
     def test_RPI_COUNT_FAIL_001_failure_is_displayed_without_increment(self) -> None:
         scheduler = unlocked_scheduler(context(1))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
 
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 5))
 
@@ -73,6 +83,7 @@ class SchedulerGateTests(unittest.TestCase):
     def test_RPI_RESULT_002_stale_or_wrong_item_result_preserves_active_item(self) -> None:
         scheduler = unlocked_scheduler(context(1), context(2))
         active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
 
         with self.assertRaises(SchedulerFault):
             scheduler.accept_item_result(ItemResult("old-round", 7, 1, 1, 0))
@@ -84,7 +95,8 @@ class SchedulerGateTests(unittest.TestCase):
 
     def test_RPI_CONFLICT_001_conflicting_duplicate_result_locks_scheduler(self) -> None:
         scheduler = unlocked_scheduler(context(1))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 5))
 
         with self.assertRaises(SchedulerFault):
@@ -96,7 +108,8 @@ class SchedulerGateTests(unittest.TestCase):
 class RenderingReceiptTests(unittest.TestCase):
     def test_RPI_RENDER_FORGE_001_matching_fields_without_pending_completion_are_rejected(self) -> None:
         scheduler = unlocked_scheduler(context(1), context(2))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         FakeRenderer(scheduler.current_task).present(model)
         forged = RenderReceipt("round-new", 7, 1, model.crc32)
@@ -109,7 +122,8 @@ class RenderingReceiptTests(unittest.TestCase):
 
     def test_RPI_RENDER_RED_001_starting_render_cannot_create_ack(self) -> None:
         scheduler = unlocked_scheduler(context(1))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         pending = FakeRenderer(scheduler.current_task).present(model)
 
@@ -119,7 +133,8 @@ class RenderingReceiptTests(unittest.TestCase):
 
     def test_RPI_RENDER_001_only_explicit_completed_receipt_creates_ack_and_releases_gate(self) -> None:
         scheduler = unlocked_scheduler(context(1), context(2))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         pending = FakeRenderer(scheduler.current_task).present(model)
 
@@ -134,7 +149,8 @@ class RenderingReceiptTests(unittest.TestCase):
         scheduler = unlocked_scheduler(
             ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 2, 3, 0, 0, 0))
         )
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 5))
         receipt = FakeRenderer(scheduler.current_task).present(model).complete()
 
@@ -147,7 +163,8 @@ class RenderingReceiptTests(unittest.TestCase):
 
     def test_RPI_RENDER_STALE_001_wrong_receipt_is_rejected_without_release(self) -> None:
         scheduler = unlocked_scheduler(context(1), context(2))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
 
         with self.assertRaises(SchedulerFault):
@@ -159,7 +176,8 @@ class RenderingReceiptTests(unittest.TestCase):
         for outcome in ("failed", "cancelled"):
             with self.subTest(outcome=outcome):
                 scheduler = unlocked_scheduler(context(1), context(2))
-                scheduler.next_task()
+                active = scheduler.next_task()
+                accept_motion_done_for(scheduler, active)
                 model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
                 pending = FakeRenderer(scheduler.current_task).present(model)
 
@@ -171,7 +189,8 @@ class RenderingReceiptTests(unittest.TestCase):
 
     def test_RPI_ACK_DUP_001_duplicate_receipt_reuses_one_cached_intent(self) -> None:
         scheduler = unlocked_scheduler(context(1))
-        scheduler.next_task()
+        active = scheduler.next_task()
+        accept_motion_done_for(scheduler, active)
         model = scheduler.accept_item_result(ItemResult("round-new", 7, 1, 1, 0))
         receipt = FakeRenderer(scheduler.current_task).present(model).complete()
 

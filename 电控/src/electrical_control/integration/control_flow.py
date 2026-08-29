@@ -12,6 +12,7 @@ from electrical_control.protocol import (
     PayloadError,
     ProtocolCodec,
     RoundSuccessCounter,
+    SuccessCountOverflow,
     build_display_content,
 )
 from electrical_control.state_machine import (
@@ -198,11 +199,17 @@ class ControlFlowGuard:
             return
         if relevant:
             result_code = 0 if event.success else 1
-            self._success_counter.record_item_result(
-                task_id=event.task_id,
-                frame_seq=event.frame_seq,
-                result_code=result_code,
-            )
+            try:
+                self._success_counter.record_item_result(
+                    task_id=event.task_id,
+                    frame_seq=event.frame_seq,
+                    result_code=result_code,
+                )
+            except SuccessCountOverflow:
+                # The one-byte round counter cannot represent 256 successes;
+                # fail closed instead of letting the overflow escape the loop.
+                self._lock("SUCCESS_COUNT_OVERFLOW", now)
+                return
             self._expected_display_content = build_display_content(
                 item_task=self._active_item_context,
                 success_count=self._success_counter.value,

@@ -24,6 +24,7 @@ class CountBoundaryTests(unittest.TestCase):
         scheduler.load_source(rpi.FakeTaskSource(tasks))
         for frame_seq in range(1, 255):
             active = scheduler.next_task()
+            scheduler.accept_motion_done(round_id="round-new", task_id=7, frame_seq=frame_seq)
             model = scheduler.accept_item_result(
                 rpi.ItemResult("round-new", 7, frame_seq, active.payload.target_seq, 0)
             )
@@ -32,6 +33,7 @@ class CountBoundaryTests(unittest.TestCase):
             )
 
         active = scheduler.next_task()
+        scheduler.accept_motion_done(round_id="round-new", task_id=7, frame_seq=255)
         model = scheduler.accept_item_result(
             rpi.ItemResult("round-new", 7, 255, active.payload.target_seq, 0)
         )
@@ -46,6 +48,7 @@ class CountBoundaryTests(unittest.TestCase):
         scheduler.load_source(rpi.FakeTaskSource(tasks))
         for frame_seq in range(1, 256):
             active = scheduler.next_task()
+            scheduler.accept_motion_done(round_id="round-new", task_id=7, frame_seq=frame_seq)
             model = scheduler.accept_item_result(
                 rpi.ItemResult("round-new", 7, frame_seq, active.payload.target_seq, 0)
             )
@@ -68,6 +71,7 @@ class IdentityAndRecoveryBoundaryTests(unittest.TestCase):
         unlock(scheduler)
         scheduler.load_source(rpi.FakeTaskSource([first, conflicting]))
         scheduler.next_task()
+        scheduler.accept_motion_done(round_id="round-new", task_id=7, frame_seq=1)
         model = scheduler.accept_item_result(rpi.ItemResult("round-new", 7, 1, 1, 5))
         receipt = rpi.FakeRenderer(scheduler.current_task).present(model).complete()
         scheduler.accept_render_receipt(receipt)

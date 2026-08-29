@@ -135,16 +135,21 @@ def crop_rgba(
         raise InvalidInputError("image_width must be a positive integer")
     if not isinstance(image_height, int) or image_height <= 0:
         raise InvalidInputError("image_height must be a positive integer")
+    expected_length = image_width * image_height * 4
+    if len(pixels) != expected_length:
+        raise InvalidInputError(
+            f"RGBA buffer length {len(pixels)} does not match image dimensions "
+            f"({expected_length} values required)"
+        )
     bbox.validate(image_width, image_height)
 
     x1, y1 = int(bbox.x1), int(bbox.y1)
     x2, y2 = int(bbox.x2), int(bbox.y2)
     out: list[int] = []
     for y in range(y1, y2):
-        row_start = y * image_width * 4
-        for x in range(x1, x2):
-            offset = row_start + x * 4
-            out.extend(pixels[offset : offset + 4])
+        row_start = (y * image_width + x1) * 4
+        row_end = (y * image_width + x2) * 4
+        out.extend(pixels[row_start:row_end])
     return out
 
 

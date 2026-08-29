@@ -34,14 +34,34 @@ class AffineCoordinateTransform:
     calibration_id: str
 
     def __post_init__(self) -> None:
-        flattened = tuple(value for row in self.matrix for value in row)
-        if len(self.matrix) != 2 or any(len(row) != 3 for row in self.matrix):
+        if not (
+            isinstance(self.matrix, (tuple, list))
+            and len(self.matrix) == 2
+            and all(
+                isinstance(row, (tuple, list)) and len(row) == 3
+                for row in self.matrix
+            )
+        ):
             raise ConfigurationError("affine matrix must have shape 2x3")
+        flattened = tuple(value for row in self.matrix for value in row)
         if not all(isinstance(value, (int, float)) and isfinite(value) for value in flattened):
             raise ConfigurationError("affine matrix values must be finite")
+        for name, bounds in (("x_bounds", self.x_bounds), ("y_bounds", self.y_bounds)):
+            if not (
+                isinstance(bounds, (tuple, list))
+                and len(bounds) == 2
+                and all(
+                    isinstance(value, (int, float)) and isfinite(value)
+                    for value in bounds
+                )
+            ):
+                raise ConfigurationError(f"{name} must contain two finite numbers")
         if not self.x_bounds[0] < self.x_bounds[1] or not self.y_bounds[0] < self.y_bounds[1]:
             raise ConfigurationError("coordinate output bounds must be strictly increasing")
-        if not self.frame.strip() or not self.unit.strip() or not self.calibration_id.strip():
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (self.frame, self.unit, self.calibration_id)
+        ):
             raise ConfigurationError("frame, unit, and calibration_id must be explicit")
 
     def transform(self, bbox: BoundingBox) -> Coordinate:

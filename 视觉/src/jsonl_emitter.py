@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from typing import Iterable, Mapping, Optional, TextIO
@@ -20,6 +21,19 @@ from typing import Iterable, Mapping, Optional, TextIO
 
 def detection_line(frame_id: int, label: Optional[str], confidence: float,
                    ts_ms: int) -> str:
+    if not isinstance(frame_id, int) or isinstance(frame_id, bool) or frame_id < 0:
+        raise ValueError("frame_id must be a non-negative integer")
+    if label is not None and (not isinstance(label, str) or not label):
+        raise ValueError("label must be a non-empty string or None")
+    if (
+        not isinstance(confidence, (int, float))
+        or isinstance(confidence, bool)
+        or not math.isfinite(confidence)
+        or not 0.0 <= confidence <= 1.0
+    ):
+        raise ValueError("confidence must be a finite number within [0, 1]")
+    if not isinstance(ts_ms, int) or isinstance(ts_ms, bool) or ts_ms < 0:
+        raise ValueError("ts_ms must be a non-negative integer")
     payload = {
         "frame_id": frame_id,
         "label": label,
@@ -32,6 +46,8 @@ def detection_line(frame_id: int, label: Optional[str], confidence: float,
 def fake_detection_lines(label: str, confidence: float,
                          frames: int) -> Iterable[str]:
     """Emit a stable detection then an explicit no-target release window."""
+    if not isinstance(frames, int) or isinstance(frames, bool) or frames < 1:
+        raise ValueError("frames must be a positive integer")
     base_ms = int(time.monotonic() * 1000)
     for index in range(frames):
         yield detection_line(index, label, confidence, base_ms + index * 100)

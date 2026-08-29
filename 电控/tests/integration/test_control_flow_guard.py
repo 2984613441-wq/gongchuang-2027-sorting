@@ -322,6 +322,52 @@ class ControlFlowGuardTests(unittest.TestCase):
         self.assertEqual(1, self.hal.count(ActionKind.EMIT_ITEM_RESULT))
         self.assertEqual({(7, 11)}, set(guard.result_identities))
 
+    def test_xl_count_overflow_locks_on_256th_success(self) -> None:
+        def target_of(seq: int) -> int:
+            return ((seq - 1) % 255) + 1
+
+        guard = ControlFlowGuard(
+            PureStateMachine.ready_for_task(self.hal, round_id=7, now=10.0),
+            task_dedup_capacity=256,
+            display_ack_dedup_capacity=256,
+            result_dedup_capacity=256,
+            validated_item_contexts={
+                (7, seq): ItemTaskPayload(
+                    target_of(seq), target_of(seq), target_of(seq), 0, 0, 0
+                )
+                for seq in range(1, 257)
+            },
+        )
+        for seq in range(1, 256):
+            now = 10.0 + seq * 0.001
+            target = target_of(seq)
+            guard.consume(
+                ItemTaskReceived(7, seq, target=f"BIN_{target}"), now=now
+            )
+            guard.consume(TaskSafetyValidated(7, seq, valid=True), now=now + 0.001)
+            guard.consume(MotionDone(7, seq), now=now + 0.002)
+            guard.consume(ItemResultReceived(7, seq, success=True), now=now + 0.003)
+            content = DisplayContent(target, target, target, seq, 0)
+            guard.consume_display_ack(
+                self.ack_frame(frame_seq=seq + 100, content=content),
+                now=now + 0.004,
+            )
+            guard.consume(BarrierAvoidanceVerified(), now=now + 0.005)
+
+        self.assertEqual(State.WAIT_TASK, guard.machine.context.state)
+        self.assertIsNone(guard.fault_code)
+
+        # The 256th potentially-successful item is already in flight when the
+        # one-byte counter is at 255; its result must fail closed, not raise.
+        now = 10.0 + 256 * 0.001
+        guard.consume(ItemTaskReceived(7, 256, target="BIN_1"), now=now)
+        guard.consume(TaskSafetyValidated(7, 256, valid=True), now=now + 0.001)
+        guard.consume(MotionDone(7, 256), now=now + 0.002)
+        guard.consume(ItemResultReceived(7, 256, success=True), now=now + 0.003)
+
+        self.assertEqual(State.FAULT_LOCK, guard.machine.context.state)
+        self.assertEqual("SUCCESS_COUNT_OVERFLOW", guard.fault_code)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,7 +38,17 @@ class VisionPipeline:
     def infer_batch(self, task_id: int, image: ImageLike) -> BatchResult:
         try:
             _validate_task_id(task_id)
-            backend_output = self.backend.infer(image)
+            try:
+                backend_output = self.backend.infer(image)
+            except VisionError:
+                raise
+            except Exception as exc:  # untrusted backend boundary
+                return BatchResult(
+                    task_id=task_id,
+                    status=ResultStatus.FAILED,
+                    backend=self.backend.name,
+                    issues=(InferenceIssue("UNEXPECTED_BACKEND_FAILURE", str(exc)),),
+                )
             raw_detections = postprocess(backend_output, self.config)
             detections: list[DetectionResult] = []
             for target_seq, raw in enumerate(raw_detections, start=1):
@@ -69,12 +79,12 @@ class VisionPipeline:
                 backend=self.backend.name,
                 issues=(InferenceIssue(exc.code, str(exc)),),
             )
-        except Exception as exc:  # fail closed at untrusted backend boundary
+        except Exception as exc:  # fail closed on an unexpected core failure
             return BatchResult(
                 task_id=task_id if isinstance(task_id, int) else -1,
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
-                issues=(InferenceIssue("UNEXPECTED_BACKEND_FAILURE", str(exc)),),
+                issues=(InferenceIssue("INTERNAL_CORE_ERROR", str(exc)),),
             )
 
     def reacquire(
@@ -133,4 +143,12 @@ class VisionPipeline:
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
                 issues=(InferenceIssue(exc.code, str(exc)),),
+            )
+        except Exception as exc:
+            return ReacquireResult(
+                task_id=task_id if isinstance(task_id, int) else -1,
+                target_seq=target_seq if isinstance(target_seq, int) else -1,
+                status=ResultStatus.FAILED,
+                backend=self.backend.name,
+                issues=(InferenceIssue("INTERNAL_CORE_ERROR", str(exc)),),
             )

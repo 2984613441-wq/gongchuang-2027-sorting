@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Iterable, Mapping
@@ -28,6 +29,8 @@ class SchedulerState(Enum):
     RECOVERY_LOCK = auto()
     READY = auto()
     ACTIVE = auto()
+    WAIT_MOTION_DONE = auto()
+    WAIT_ITEM_RESULT = auto()
     WAIT_RENDER = auto()
     FAULT = auto()
 
@@ -69,7 +72,11 @@ class RenderReceipt:
     content_crc32: int
 
 
-_completed_receipts: list[RenderReceipt] = []
+# Bounded provenance history: one entry per completed render receipt. The
+# one-byte round success counter bounds items per round, but across many
+# rounds an unbounded module-level list would grow forever; cap it globally.
+_COMPLETED_RECEIPT_CAPACITY = 512
+_completed_receipts: deque[RenderReceipt] = deque(maxlen=_COMPLETED_RECEIPT_CAPACITY)
 
 
 def _record_completed_receipt(receipt: RenderReceipt) -> RenderReceipt:
@@ -194,10 +201,49 @@ class Scheduler:
             self._seen_tasks[identity] = candidate.payload
             self.current_task = candidate
             self.display_ack_intent = None
-            self.state = SchedulerState.ACTIVE
+            # Transition to WAIT_MOTION_DONE after accepting task
+            self.state = SchedulerState.WAIT_MOTION_DONE
         return candidate
 
     def accept_motion_done(self, **event_identity: object) -> None:
+        """Enforce that motion has completed for the current task.
+
+        This is the first gate in the MOTION_DONE → ITEM_RESULT → DISPLAY_ACK
+        sequence. Must be called before accept_item_result.
+
+        Validates:
+        - Current task exists
+        - State is WAIT_MOTION_DONE
+        - event_identity matches current task (round_id, task_id, frame_seq)
+
+        Transitions to WAIT_ITEM_RESULT state.
+        """
+        task = self.current_task
+        if task is None:
+            self._fault("motion_done arrived without an active item")
+        if self.state is not SchedulerState.WAIT_MOTION_DONE:
+            self._fault(f"motion_done arrived in wrong state: {self.state}")
+
+        # Validate event_identity matches task (round_id, task_id, frame_seq)
+        expected_round_id = task.round_id
+        expected_task_id = task.task_id
+        expected_frame_seq = task.frame_seq
+
+        actual_round_id = event_identity.get("round_id")
+        actual_task_id = event_identity.get("task_id")
+        actual_frame_seq = event_identity.get("frame_seq")
+
+        if (actual_round_id != expected_round_id or
+            actual_task_id != expected_task_id or
+            actual_frame_seq != expected_frame_seq):
+            self._fault(
+                f"motion_done identity mismatch: "
+                f"expected ({expected_round_id}, {expected_task_id}, {expected_frame_seq}), "
+                f"got ({actual_round_id}, {actual_task_id}, {actual_frame_seq})"
+            )
+
+        # Transition to WAIT_ITEM_RESULT
+        self.state = SchedulerState.WAIT_ITEM_RESULT
         return None
 
     def note_reconnect(self) -> None:
@@ -211,8 +257,10 @@ class Scheduler:
 
     def accept_item_result(self, result: ItemResult) -> DisplayContent:
         task = self.current_task
-        if task is None or self.state not in (SchedulerState.ACTIVE, SchedulerState.WAIT_RENDER):
-            self._fault("result arrived without an active item")
+        # Enforce MOTION_DONE → ITEM_RESULT sequence: only accept in WAIT_ITEM_RESULT.
+        # WAIT_RENDER is allowed for idempotent re-sends of the same result.
+        if task is None or self.state not in (SchedulerState.WAIT_ITEM_RESULT, SchedulerState.WAIT_RENDER):
+            self._fault(f"result arrived in wrong state: {self.state}")
         assert task is not None
         expected = (task.round_id, task.task_id, task.frame_seq, task.payload.target_seq)
         actual = (result.round_id, result.task_id, result.frame_seq, result.target_seq)

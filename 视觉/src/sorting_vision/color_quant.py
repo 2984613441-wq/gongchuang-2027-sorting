@@ -40,6 +40,7 @@ def _build_histogram(pixels: Sequence[int]):
     rmin = gmin = bmin = 1 << 30
     rmax = gmax = bmax = 0
     count = len(pixels) // 4
+    visible_pixels = 0
 
     for i in range(count):
         o = i * 4
@@ -49,6 +50,7 @@ def _build_histogram(pixels: Sequence[int]):
         a = pixels[o + 3]
         if a == 0:
             continue
+        visible_pixels += 1
         idx = _color_index(r, g, b)
         hist[idx] += 1
         if r > rmax:
@@ -72,7 +74,7 @@ def _build_histogram(pixels: Sequence[int]):
         "gmax": gmax,
         "bmin": bmin,
         "bmax": bmax,
-        "color_count": sum(1 for c in hist if c > 0),
+        "visible_pixels": visible_pixels,
     }
 
 
@@ -281,10 +283,19 @@ def _split_boxes(pq: _PQueue, target: int) -> None:
 def mmcq(pixels: Sequence[int], color_count: int = 6) -> List[Swatch]:
     """Return ``[(rgb, population), ...]`` using modified median cut."""
 
-    if not pixels or color_count < 2 or color_count > 256:
+    if (
+        not isinstance(color_count, int)
+        or isinstance(color_count, bool)
+        or color_count < 2
+        or color_count > 256
+    ):
         raise ValueError("MMCQ requires pixels and 2 <= color_count <= 256")
+    if not pixels or len(pixels) % 4:
+        raise ValueError("MMCQ requires a complete RGBA pixel buffer")
 
     histogram = _build_histogram(pixels)
+    if histogram["visible_pixels"] == 0:
+        raise ValueError("MMCQ requires at least one visible pixel")
     dim = [
         histogram["rmin"],
         histogram["rmax"],
@@ -301,7 +312,7 @@ def mmcq(pixels: Sequence[int], color_count: int = 6) -> List[Swatch]:
 
     pq2 = _PQueue(key=lambda v: v.count() * v.volume())
     pq2.contents = list(pq.contents)
-    _split_boxes(pq2, color_count - pq2.size())
+    _split_boxes(pq2, color_count)
 
     swatches: List[Swatch] = []
     while pq2.size():

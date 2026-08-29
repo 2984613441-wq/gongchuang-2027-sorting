@@ -7,6 +7,7 @@ an actuator. Display rendering remains an explicit, separately-owned step.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from electrical_control.protocol import (
@@ -25,6 +26,12 @@ from electrical_control.protocol import (
 from . import DisplayAckIntent, ItemResult, SchedulerFault
 
 
+# Bounded inbound dedup history: a replayed frame within the window is
+# answered with the cached outbound; older identities age out so the cache
+# cannot grow without bound across a long demo run.
+_INBOUND_CACHE_CAPACITY = 256
+
+
 @dataclass(frozen=True, slots=True)
 class PiGatewayOutcome:
     event: str
@@ -40,7 +47,7 @@ class PiProtocolGateway:
         self._rx = bytearray()
         self.tx_seq = 0
         self.estop_active = False
-        self._inbound_cache: dict[tuple[int, int], bytes | None] = {}
+        self._inbound_cache: OrderedDict[tuple[int, int], bytes | None] = OrderedDict()
         self._last_outbound: bytes | None = None
 
     @property
@@ -110,6 +117,8 @@ class PiProtocolGateway:
 
         outcome = self._handle(frame)
         self._inbound_cache[identity] = outcome.outbound
+        if len(self._inbound_cache) > _INBOUND_CACHE_CAPACITY:
+            self._inbound_cache.popitem(last=False)
         return outcome
 
     def _handle(self, frame) -> PiGatewayOutcome:
@@ -122,9 +131,24 @@ class PiProtocolGateway:
         if command == int(Command.MOTION_DONE):
             if frame.payload:
                 return PiGatewayOutcome("FRAME_REJECTED", fault="MOTION_DONE payload must be empty")
-            self.scheduler.accept_motion_done(
-                round_id=frame.task_id, task_id=frame.task_id, frame_seq=frame.frame_seq
-            )
+            task = self.scheduler.current_task
+            if task is None:
+                return PiGatewayOutcome("MOTION_DONE_IGNORED")
+            # The wire frame_seq belongs to the STM32's own tx counter, not the
+            # Pi-side task identity; the scheduler gate is entered with the
+            # active task's identity and the wire task_id is checked against it.
+            if frame.task_id != task.task_id:
+                return PiGatewayOutcome(
+                    "FAULT", fault="MOTION_DONE task_id does not match active item"
+                )
+            try:
+                self.scheduler.accept_motion_done(
+                    round_id=task.round_id,
+                    task_id=task.task_id,
+                    frame_seq=task.frame_seq,
+                )
+            except SchedulerFault as exc:
+                return PiGatewayOutcome("FAULT", fault=str(exc))
             return PiGatewayOutcome("MOTION_DONE")
 
         if command == int(Command.ITEM_RESULT):

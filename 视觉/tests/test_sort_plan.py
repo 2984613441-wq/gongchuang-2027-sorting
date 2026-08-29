@@ -7,7 +7,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC))
 
-from sorting_vision.errors import EmptyDetectionError, InvalidDetectionError
+from sorting_vision.errors import EmptyDetectionError, InvalidDetectionError, InvalidInputError
 from sorting_vision.sort_plan import (
     BoxAssignment,
     TooManyGroupsError,
@@ -117,6 +117,10 @@ class SortPlanTests(unittest.TestCase):
     def test_crop_rgba_rejects_out_of_image_bbox(self) -> None:
         with self.assertRaises(InvalidDetectionError):
             crop_rgba([0] * 24, 3, 2, BoundingBox(0, 0, 5, 2))
+
+    def test_crop_rgba_rejects_truncated_image_buffer(self) -> None:
+        with self.assertRaises(InvalidInputError):
+            crop_rgba([0] * 23, 3, 2, BoundingBox(0, 0, 3, 2))
 
 
 if __name__ == "__main__":

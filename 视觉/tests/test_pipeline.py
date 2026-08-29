@@ -4,6 +4,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC))
@@ -12,6 +13,7 @@ from sorting_vision.backends import FakeBackend
 from sorting_vision.benchmark import benchmark_pipeline
 from sorting_vision.config import InferenceConfig
 from sorting_vision.coordinates import AffineCoordinateTransform
+from sorting_vision.errors import ConfigurationError
 from sorting_vision.export import to_diagnostic_json
 from sorting_vision.pipeline import VisionPipeline
 from sorting_vision.types import (
@@ -158,6 +160,30 @@ class VisionPipelineTests(unittest.TestCase):
         result = pipeline.infer_batch(1, FakeImage("corrupt", 100, 80, corrupted=True))
         self.assertEqual("INVALID_INPUT", result.issues[0].code)
 
+    def test_unexpected_backend_exception_is_labeled_as_backend_failure(self) -> None:
+        class ExplodingBackend:
+            name = "exploding"
+
+            def infer(self, image):
+                raise RuntimeError("backend boom")
+
+        pipeline = VisionPipeline(self.config, ExplodingBackend())
+        result = pipeline.infer_batch(1, object())
+        self.assertEqual(ResultStatus.FAILED, result.status)
+        self.assertEqual("UNEXPECTED_BACKEND_FAILURE", result.issues[0].code)
+
+    def test_core_exception_is_not_mislabeled_as_backend_failure(self) -> None:
+        class ExplodingTransform:
+            def transform(self, bbox):
+                raise RuntimeError("core boom")
+
+        pipeline = self.pipeline_for(
+            "core", (raw(0, 0.9, (10, 10, 20, 20)),), transform=ExplodingTransform()
+        )
+        result = pipeline.infer_batch(1, FakeImage("core", 100, 80))
+        self.assertEqual(ResultStatus.FAILED, result.status)
+        self.assertEqual("INTERNAL_CORE_ERROR", result.issues[0].code)
+
     def test_invalid_task_id_fails_closed(self) -> None:
         pipeline = self.pipeline_for("normal", (raw(0, 0.9, (10, 10, 20, 20)),))
         result = pipeline.infer_batch(70000, FakeImage("normal", 100, 80))
@@ -185,6 +211,34 @@ class VisionPipelineTests(unittest.TestCase):
         unknown = ambiguous_pipeline.reacquire(1, 3, 99, FakeImage("many", 100, 80))
         self.assertEqual(ResultStatus.FAILED, unknown.status)
         self.assertEqual("UNKNOWN_CLASS", unknown.issues[0].code)
+
+    def test_reacquire_unexpected_core_exception_fails_closed(self) -> None:
+        pipeline = self.pipeline_for("one", (raw(0, 0.9, (10, 10, 20, 20)),))
+        with patch.object(pipeline, "infer_batch", side_effect=RuntimeError("core boom")):
+            result = pipeline.reacquire(1, 3, 0, FakeImage("one", 100, 80))
+        self.assertEqual(ResultStatus.FAILED, result.status)
+        self.assertEqual("INTERNAL_CORE_ERROR", result.issues[0].code)
+
+    def test_affine_configuration_rejects_ragged_shapes_and_bounds(self) -> None:
+        common = {
+            "frame": "test",
+            "unit": "mm",
+            "calibration_id": "test",
+        }
+        with self.assertRaises(ConfigurationError):
+            AffineCoordinateTransform(
+                matrix=((1.0, 0.0, 0.0), None),
+                x_bounds=(0.0, 1.0),
+                y_bounds=(0.0, 1.0),
+                **common,
+            )
+        with self.assertRaises(ConfigurationError):
+            AffineCoordinateTransform(
+                matrix=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+                x_bounds=(0.0,),
+                y_bounds=(0.0, 1.0),
+                **common,
+            )
 
     def test_benchmark_record_has_comparison_fields_without_fabricated_accuracy(self) -> None:
         pipeline = self.pipeline_for("bench", (raw(0, 0.9, (10, 10, 20, 20)),))

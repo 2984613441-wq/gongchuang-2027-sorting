@@ -74,6 +74,13 @@ class PiProtocolGatewayTests(unittest.TestCase):
         gateway = PiProtocolGateway(scheduler)
         frame = stm32_frame(Command.ITEM_RESULT, payload=bytes.fromhex("01 00 00"))
 
+        # Pass the MOTION_DONE safety gate before the ITEM_RESULT frame. Use a
+        # distinct wire frame_seq so it does not collide with the ITEM_RESULT
+        # frame in the gateway inbound dedup cache.
+        self.assertEqual(
+            "MOTION_DONE",
+            gateway.feed_frame(stm32_frame(Command.MOTION_DONE, frame_seq=10)).event,
+        )
         outcome = gateway.feed_frame(frame)
         duplicate = gateway.feed_frame(frame)
 
@@ -96,6 +103,7 @@ class PiProtocolGatewayTests(unittest.TestCase):
     def test_render_receipt_emits_valid_display_ack_frame(self) -> None:
         scheduler = unlocked_scheduler()
         gateway = PiProtocolGateway(scheduler)
+        gateway.feed_frame(stm32_frame(Command.MOTION_DONE, frame_seq=10))
         gateway.feed_frame(stm32_frame(Command.ITEM_RESULT, payload=bytes.fromhex("01 00 00")))
 
         receipt = FakeRenderer(scheduler.current_task).present(scheduler.display_model).complete()
@@ -132,6 +140,7 @@ class PiProtocolGatewayTests(unittest.TestCase):
         scheduler = unlocked_scheduler()
         gateway = PiProtocolGateway(scheduler)
         frame = stm32_frame(Command.ITEM_RESULT, payload=bytes.fromhex("01 00 00"))
+        gateway.feed_frame(stm32_frame(Command.MOTION_DONE, frame_seq=10))
 
         outcome = None
         for byte in (0x00, *frame):
