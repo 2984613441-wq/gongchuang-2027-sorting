@@ -10,8 +10,8 @@
 
 | 子系统 | 测试状态（修复后） | 已修复 | 剩余待办 |
 |---|---|---|---|
-| 电控 Python | **134 passed + 41 subtests，0 failed** | gateway MOTION_DONE 分发 bug、SUCCESS_COUNT_OVERFLOW 未捕获、入站缓存无上限、`_completed_receipts` 全局列表无界、20 个陈旧测试 | 见 §3 剩余项 |
-| 电控 C（stm32_logic） | **69/69 通过（MSVC /W4 /WX 零警告）** | —（本轮只读） | P1-1 RESEND 语义、P2-1 溢出上限、P2-3 去重键、P2-4 round_id 截断 |
+| 电控 Python | **135 passed + 41 subtests，0 failed** | gateway MOTION_DONE 分发 bug、SUCCESS_COUNT_OVERFLOW 未捕获、入站缓存无上限、`_completed_receipts` 全局列表无界、`_dispatch` 异常兜底、20 个陈旧测试 | 见 §3 剩余项 |
+| 电控 C（stm32_logic） | **73/73 通过（MSVC /W4 /WX 零警告）** | DISPLAY_ACK 严格 6 字节、步进曲线溢出防护、新轮清零时机、round_id 上限 | P1-1 RESEND 语义（待确认） |
 | 视觉 | **75 passed + 8 subtests**（full-access 下） | MMCQ 分两阶段目标数 bug、颜色链透明/空 ROI 裸异常、reacquire 无兜底、drop_table `True==1`、jsonl 无校验、坐标/缓冲校验 | P1 运行策略未冻结、ROI 取整规范、NMS 同分排序 |
 | 跨节点分歧 | Claude 3 条 P0 结论经核验为**误报**（见 §5） | — | 分歧声明已记录，供用户裁决 |
 
@@ -44,6 +44,22 @@
 ### 1.5 20 个陈旧 rpi 测试（契约漂移，subagent A 完成）
 - SAFETY_FIXES v3 加了 `WAIT_MOTION_DONE` 门禁但测试未同步（v3 文档自注"部分测试需更新"）。subagent A 更新 3 个测试文件（19 处），补 `accept_motion_done` 门禁步骤与 MOTION_DONE 帧，断言意图全部保留，**零修改 src 生产逻辑**。
 
+### 1.6 C 侧 P1/P2 修复（自主续作，独立提交 `6d67258a`）
+| 项 | 位置 | 修复 |
+|---|---|---|
+| P2-1 步进曲线溢出 | `ec_step_profile.c` 三角分支 | 峰值公式三项（2·a·d·total / d·start² / a·end²）逐一溢出防护，极端速率（≥1e9 Hz/s）fail-closed 返回 false 且不写结构体 |
+| P2-2 新轮清零时机 | `ec_protocol_gateway.c` inject | 计数/上下文清零移到状态机提交之后，仅 `transition.state == POWER_ON`（即 round_id 变化 + 三标志全满足）才清零；被拒确认不再清计数 |
+| P2-4 round_id 截断 | `ec_protocol_gateway.c` inject | `round_id > UINT16_MAX` 直接拒绝（否则出帧 task_id 截断、DISPLAY_ACK 轮次门禁永不满足 → 死锁） |
+| DISPLAY_ACK 长度不对称 | `ec_protocol.c` | 载荷严格 `== 6` 字节，与 Python 对齐（Claude P0-4 采纳项） |
+
+### 1.7 Python 网关异常兜底
+- `gateway.py:_dispatch` 最外层 `except SchedulerFault → FAULT`、`except Exception → CRASH`，意外异常不再炸穿 `feed_frame`/`feed_byte`（Claude P2-4 采纳项）。新增 CRASH 用例。
+
+**验证**：C 测试 **69 → 73 全过**（新增 C-STEP-012 溢出防护、C-GW-ROUND-002~004 新轮守卫、P-DACK 长载荷拒绝）；Python **134 → 135 + 41 subtests 全绿**。
+
+### 1.8 P2-3 去重键跨实现核对结论（无需改码）
+- Python `_item_task` 按 `(task_id, frame_seq)` 身份去重，C `ec_dedup` 按 `(task_id, frame_seq, fingerprint)` 去重——**两侧语义一致**：同身份重传 = DUPLICATE；改 frame_seq 的重传 = 新身份，在 WAIT_TASK 且轮次匹配时都会被接受并执行。冻结契约中"重传"= 同身份，故 P2-3 是语义澄清项而非缺陷。
+
 ---
 
 ## 2. 视觉：已修复的问题（Codex 节点落地，subagent B 定位）
@@ -67,12 +83,11 @@
 ### 3.1 C 侧（subagent C 复核，P0=0）
 | 级别 | 位置 | 问题 | 建议 |
 |---|---|---|---|
-| P1-1 | `ec_state_machine.c:110-114` | `RESEND_CACHED_RESPONSE` 在 VALIDATE_TASK/EXECUTING/WAIT_ITEM_RESULT 被发出，此时"缓存响应"不存在或非正确响应 | 与 `ec_app.c` 作者确认 RESEND 语义，限定到 ITEM_RESULT 已发出后的状态 |
-| P2-1 | `ec_step_profile.c:89-91,158-159` | `2*a*d*total_steps` 在极端参数（a=d≈4.29e9）下 uint64 溢出；当前工程参数不可达但应加输入上限或 `__int128` | 加参数上限校验（最省事） |
-| P2-2 | `ec_protocol_gateway.c:300-313` | MANUAL_NEW_ROUND 清零计数发生在状态机校验**之前**，被拒的确认也会清零 | 移到 consume 之后，以 `transition.state == POWER_ON` 为条件 |
-| P2-3 | `ec_dedup.c` + gateway:86-92 | 去重键含 frame_seq：PI 重传同内容任务但递增 frame_seq 会被判 NEW 重复执行 | 与 Python 侧核对重传语义 |
-| P2-4 | `ec_protocol_gateway.c:28` | round_id > 0xFFFF 时出帧 task_id 截断而 sm.round_id 保留全值，DISPLAY_ACK 轮次门禁永不满足 → 卡死 | inject 校验 `round_id <= UINT16_MAX` |
-| P3×9 | 详见 subagent C 报告 | decode_display_ack `>=6` vs Python `==6`；int16 大端转换 implementation-defined；255 拒绝静默无 NACK；`ack_consumed` 只写不读；枚举死状态；fallback 虚报峰值；魔法下标；Y 复用 X 限位宏；CRC32 碰撞未注释 | — |
+| P1-1 | `ec_state_machine.c:110-114` | `RESEND_CACHED_RESPONSE` 在 VALIDATE_TASK/EXECUTING/WAIT_ITEM_RESULT 被发出——**已核实为死动作**：网关 `consume_and_emit` 只物化 EMIT_BARRIER_READY/EMIT_MOTION_DONE/EMIT_ITEM_RESULT 三帧，`ec_app.c` 只处理 SAFE_LOCK/BEGIN_POST/BEGIN_HOMING/PREPARE_BARRIER/START_MOTION，RESEND 无任何执行者，重复任务到来时静默丢弃 | 需应用层作者定义"响应缓存"语义（缓存哪一帧、何时可重发），再在网关/App 层实现；本轮不猜写 |
+| P2-3 | `ec_dedup.c` + gateway:86-92 | 去重键含 frame_seq——**已核对：Python/C 两侧语义一致（同身份=重传），属语义澄清项，无需改码**（见 §1.8） | — |
+| P3×8 | 详见 subagent C 报告 | int16 大端转换 implementation-defined；255 拒绝静默无 NACK；`ack_consumed` 只写不读；枚举死状态；fallback 虚报峰值；魔法下标；Y 复用 X 限位宏；CRC32 碰撞未注释 | — |
+
+> 已修复并移出：P2-1（步进溢出防护）、P2-2（新轮清零时机）、P2-4（round_id 上限）、DISPLAY_ACK 长度（§1.6）。
 
 ### 3.2 Python 侧（Claude 核验后保留项）
 - **DISPLAY_ACK 长度不对称**（C `>=6` vs Python `==6`）：C 改严格 `!=6` 拒绝（P2，非 P0——真实流 Pi 恒发 6 字节）。
@@ -118,12 +133,12 @@
 ```
 电控 Python（PYTHONPATH=电控/src，.venv-test）:
   pytest 电控\tests -q -p no:cacheprovider
-  => 134 passed, 41 subtests passed in 0.23s
+  => 135 passed, 41 subtests passed in 0.25s
 
 电控 C（MSVC /W4 /WX）:
-  cmake -S . -B build-clean && cmake --build build-clean
-  .\build-clean\Debug\ec_logic_tests.exe
-  => ALL 69 STM32 LOGIC TESTS PASSED
+  cmake -S . -B build-fix && cmake --build build-fix
+  .\build-fix\Debug\ec_logic_tests.exe
+  => ALL 73 STM32 LOGIC TESTS PASSED
 
 视觉（PYTHONPATH=视觉/src，.venv-test）:
   pytest 视觉\tests -q -p no:cacheprovider
@@ -136,13 +151,17 @@
 ## 7. 修改文件清单（本轮）
 
 **电控（src）**
-- `电控/src/electrical_control/rpi/gateway.py` — MOTION_DONE 分发修复 + 有界入站缓存
+- `电控/src/electrical_control/rpi/gateway.py` — MOTION_DONE 分发修复 + 有界入站缓存 + `_dispatch` 异常兜底
 - `电控/src/electrical_control/integration/control_flow.py` — SUCCESS_COUNT_OVERFLOW 捕获进 FAULT_LOCK
 - `电控/src/electrical_control/rpi/__init__.py` — `_completed_receipts` 改 `deque(maxlen=512)`
+- `电控/stm32_logic/src/ec_protocol.c` — DISPLAY_ACK 严格 6 字节
+- `电控/stm32_logic/src/ec_step_profile.c` — 峰值公式溢出防护
+- `电控/stm32_logic/src/ec_protocol_gateway.c` — 新轮清零时机 + round_id 上限
 
 **电控（tests）**
-- `电控/tests/rpi/test_scheduler_rendering.py`、`test_gateway.py`、`test_boundaries_and_public_api.py` — 补 v3 门禁步骤（subagent A）
+- `电控/tests/rpi/test_scheduler_rendering.py`、`test_gateway.py`、`test_boundaries_and_public_api.py` — 补 v3 门禁步骤（subagent A）+ CRASH 用例
 - `电控/tests/integration/test_control_flow_guard.py` — 新增 SUCCESS_COUNT_OVERFLOW 用例
+- `电控/stm32_logic/tests/test_{protocol,step_profile,protocol_gateway}.c` — 新增溢出/长载荷/新轮守卫用例
 
 **视觉（Codex）**
 - `视觉/src/sorting_vision/{pipeline,coordinates,sort_plan,color_quant,drop_table}.py`、`视觉/src/jsonl_emitter.py`
@@ -156,11 +175,19 @@
 
 ## 8. 下一步建议（按优先级）
 
-1. **用户裁决** §5 分歧声明；裁决后把 Claude 报告中"采纳"项排期（C 侧 DISPLAY_ACK `!=6`、round_id 映射冻结、C 重同步、255 NACK）。
-2. **C 侧 P1/P2 修复**：P1-1 RESEND 语义（需与 ec_app.c 作者确认）→ P2-1 步进曲线输入上限 → P2-3 去重键与 Python 核对 → P2-4 round_id 上限校验。
+1. **用户裁决** §5 分歧声明；裁决后把 Claude 报告中"采纳"项排期（C 侧重同步、255 NACK、零 identity 防御、`accept_motion_done` 显式参数）。
+2. **C 侧 P1-1**：RESEND 语义确认（需与 ec_app.c 作者确认）→ 限定到 ITEM_RESULT 已发出后的状态。
 3. **视觉冻结项**：采集/推理异常停止-重试策略、ROI 取整规范、NMS 同分排序 + `target_seq` 稳定规则（需与下游共同冻结）。
-4. **清理**：`开源参考/视觉` 历史脚本归档（硬编码路径/串口/7 个副本）；`vision_loop_template.py` 压缩为文档；`visual/tests` 沙箱验证迁移到普通 shell 或 CI。
+4. **清理**：`开源参考/视觉` 历史脚本归档（硬编码路径/串口/7 个副本）；`vision_loop_template.py` 压缩为文档；`视觉/src/test_jsonl_emitter.py` 旧副本与 `tests/` 新副本去重；视觉测试迁移到普通 shell/CI。
 5. **ChatGPT 第三方视角**：投喂 `docs/prompts/chatgpt-independent-review-20260829.md`，与三节点结论交叉比对。
+
+## 9. 可回退性（git 检查点）
+
+本报告所有改动位于独立分支 **`20260829-multinode-review`**，检查点与修复提交：
+- `8416a638` — 审查检查点（电控 bug 修复 + 视觉优化 + 报告；含 SAFETY_FIXES v3 未提交的门禁代码）
+- `6d67258a` — C 侧 P1/P2 修复 + Python 网关异常兜底
+
+回退方式：`git checkout codex/stm32-motion-test-v1`（回到本轮前），或 `git reset --hard 8416a638`（回到检查点）。原分支 `codex/stm32-motion-test-v1` 未被改动。
 
 ---
 
