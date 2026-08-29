@@ -209,6 +209,19 @@
 
 > 待办提醒：决赛环节的"模拟污渍/缺陷图形、文字、二维码"识别与"信息完全一致同一盒"是目前唯一未实现的功能点（`info_decode` 占位），等决赛命题发布再落地。
 
+## 11. 主机侧闭环开发（2026-08-29 追加，多 agent 并行）
+
+赛题巡检后补建的生产链缺口：树莓派→STM32 出站发送器、显示渲染模块、端到端闭环测试。接口契约见 `docs/design/2026-08-29-host-side-chain-interfaces.md`，三个模块由并行 subagent 按冻结契约实现（`65ffed0d`）：
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| 串口抽象 | `rpi/serial_link.py` | `SerialLink` 协议 + `FakeSerialLink`；波特率/端口由部署注入，**不写死** |
+| 出站发送器 | `rpi/outbound.py` | `OutboundGateway`：发送冻结 ITEM_TASK/DISPLAY_ACK 帧；tx_seq 独立单调；task_id≠round/u16 越界/非法 payload fail-closed |
+| 显示渲染 | `rpi/display.py` | `DisplayViewModel`（序号/名称/图片/成功总数）+ `build_display_view` + `FakeDisplayRenderer`；真实 HDMI 渲染由部署注入 |
+| 闭环测试 | `tests/integration/test_host_side_chain.py` | 赛题"显示完成后才能分拣下一件"端到端验证（全 fake）：每件 1 条 ITEM_TASK、MOTION_DONE 门禁、显示完成前不派发下一件、显示总数==成功计数、sent=[ITEM_TASK,ACK,ITEM_TASK,ACK] |
+
+**验证**：电控全量 **167 passed + 49 subtests**（新增 31 用例）。仍待开发：真实串口适配器、真实 HDMI 渲染、MaixCAM 入站（payload 未冻结）。
+
 ---
 
 *主机侧纯逻辑结论；不构成固件、串口、相机、实机通过的证据。*
