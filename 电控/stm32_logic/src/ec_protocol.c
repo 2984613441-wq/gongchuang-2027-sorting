@@ -127,7 +127,9 @@ bool ec_proto_decode_display_ack(const uint8_t *payload, uint16_t payload_len,
                                  ec_proto_display_ack_t *out)
 {
     if ((payload == NULL) || (out == NULL)) return false;
-    if (payload_len < EC_DISPLAY_ACK_PAYLOAD_LEN) return false;
+    /* Exactly 6 bytes, matching the Python codec (== check), so a frame with a
+     * longer payload cannot diverge the two implementations. */
+    if (payload_len != EC_DISPLAY_ACK_PAYLOAD_LEN) return false;
 
     out->target_seq = payload[0];
     out->render_result = payload[1];

@@ -149,6 +149,20 @@ class PiProtocolGatewayTests(unittest.TestCase):
         self.assertEqual("ITEM_RESULT", outcome.event)
         self.assertEqual(1, scheduler.success_count)
 
+    def test_unexpected_scheduler_exception_becomes_crash_outcome(self) -> None:
+        class ExplodingScheduler:
+            current_task = object()
+
+            def accept_motion_done(self, **identity: object) -> None:
+                raise ValueError("unexpected internal fault")
+
+        gateway = PiProtocolGateway(ExplodingScheduler())
+
+        outcome = gateway.feed_frame(stm32_frame(Command.MOTION_DONE))
+
+        self.assertEqual("CRASH", outcome.event)
+        self.assertIsNotNone(outcome.fault)
+
 
 if __name__ == "__main__":
     unittest.main()

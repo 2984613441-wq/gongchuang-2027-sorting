@@ -115,7 +115,12 @@ class PiProtocolGateway:
         if cached is not _MISSING:
             return PiGatewayOutcome("DUPLICATE", outbound=cached)
 
-        outcome = self._handle(frame)
+        try:
+            outcome = self._handle(frame)
+        except SchedulerFault as exc:  # defensive: never leak scheduler faults
+            outcome = PiGatewayOutcome("FAULT", fault=str(exc))
+        except Exception as exc:  # fail closed instead of crashing the loop
+            outcome = PiGatewayOutcome("CRASH", fault=f"{type(exc).__name__}: {exc}")
         self._inbound_cache[identity] = outcome.outbound
         if len(self._inbound_cache) > _INBOUND_CACHE_CAPACITY:
             self._inbound_cache.popitem(last=False)

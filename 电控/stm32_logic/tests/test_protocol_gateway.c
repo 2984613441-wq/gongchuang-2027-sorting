@@ -382,6 +382,93 @@ static void test_result_idempotency(void)
     EXPECT_EQ_U32(1U, g.success_count);
 }
 
+static void test_new_round_guards(void)
+{
+    ec_gateway_t g;
+    ec_gateway_event_t ev;
+    ec_transition_t t;
+    ec_proto_frame_t frame;
+    uint8_t payload[8];
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    /* Drive one successful item so counters and item context are non-zero. */
+    frame.version = EC_PROTO_VERSION;
+    frame.sender = EC_DEVICE_PI;
+    frame.receiver = EC_DEVICE_STM32;
+    frame.task_id = 7U;
+    frame.frame_seq = 1U;
+    frame.command = EC_CMD_ITEM_TASK;
+    payload[0] = 0x01U; /* target_seq */
+    payload[1] = 0x02U; /* class_id */
+    payload[2] = 0x03U; /* image_id */
+    payload[3] = 0x00U;
+    payload[4] = 0x00U;
+    payload[5] = 0x00U;
+    payload[6] = 0x00U;
+    payload[7] = 0xFFU; /* grip_angle */
+    frame.payload = payload;
+    frame.payload_len = (uint16_t)sizeof(payload);
+    t = feed_frame(&g, &frame);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_TASK_SAFETY_VALIDATED;
+    ev.content_validated = true;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_MOTION_DONE;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_ITEM_RESULT_RECORDED;
+    ev.result_code = EC_RESULT_SUCCESS;
+    t = ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_DISPLAY_ACK, t.state);
+    EXPECT_EQ_U32(1U, g.success_count);
+    EXPECT_EQ_U32(0x01U, g.item_target_seq);
+
+    TEST_CASE_BEGIN("C-GW-ROUND-002");
+    /* A confirmation the machine rejects (same round_id while not in
+     * FAULT_LOCK) must NOT clear counters or item context. */
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED;
+    ev.round_id = 7U; /* not a new round id */
+    ev.round_closed = true;
+    ev.danger_area_clear = true;
+    ev.estop_released = true;
+    t = ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_DISPLAY_ACK, t.state);
+    EXPECT_EQ_U32(1U, g.success_count);
+    EXPECT_EQ_U32(0x01U, g.item_target_seq);
+
+    TEST_CASE_BEGIN("C-GW-ROUND-003");
+    /* round_id beyond UINT16_MAX would be truncated on the wire; reject it
+     * before any mutation. */
+    ev.round_id = UINT32_C(0x10000);
+    t = ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_DISPLAY_ACK, t.state);
+    EXPECT_EQ_U32(1U, g.success_count);
+    EXPECT_EQ_U32(0x01U, g.item_target_seq);
+
+    TEST_CASE_BEGIN("C-GW-ROUND-004");
+    /* A verified new round from FAULT_LOCK clears counters and item context. */
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_EMERGENCY_STOP;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_FAULT_LOCK, ec_gateway_state(&g));
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED;
+    ev.round_id = 8U;
+    ev.round_closed = true;
+    ev.danger_area_clear = true;
+    ev.estop_released = true;
+    t = ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_POWER_ON, t.state);
+    EXPECT_EQ_U32(0U, g.success_count);
+    EXPECT_EQ_U32(0U, g.item_target_seq);
+    EXPECT_EQ_U32(EC_RESULT_UNKNOWN, g.item_result_code);
+}
+
 void test_protocol_gateway(void)
 {
     test_boot_and_frame_assembly();
@@ -389,4 +476,5 @@ void test_protocol_gateway(void)
     test_display_ack_rejection();
     test_crc_rejection_and_round_gate();
     test_result_idempotency();
+    test_new_round_guards();
 }

@@ -69,6 +69,19 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         return none_transition(g);
     }
 
+    /* P1-FIX: Reject new tasks when success_count is at 255 and state is
+     * WAIT_TASK (the only state that accepts new items). The counter cannot
+     * represent 256, so a new potentially-successful task would overflow. */
+    if (g->sm.state == EC_STATE_WAIT_TASK && g->success_count == UINT8_MAX) {
+        return none_transition(g);
+    }
+
+    /* P1-FIX: Verify frame sender is PI (scheme B: Pi -> STM32).
+     * Reject frames from wrong sender to prevent replay/spoofing. */
+    if (frame->sender != EC_DEVICE_PI) {
+        return none_transition(g);
+    }
+
     event.type = EC_EVENT_ITEM_TASK_ACCEPTED;
     event.identity.task_id = (uint32_t)frame->task_id;
     event.identity.frame_seq = (uint32_t)frame->frame_seq;
@@ -91,6 +104,8 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         g->item_target_seq = item.target_seq;
         g->item_class_id = item.class_id;
         g->item_image_id = item.image_id;
+        g->item_x_mm10 = item.x_mm10;
+        g->item_y_mm10 = item.y_mm10;
     }
     return t;
 }
@@ -104,6 +119,12 @@ static ec_transition_t handle_display_ack(ec_gateway_t *g,
     bool valid;
 
     if (!ec_proto_decode_display_ack(frame->payload, frame->payload_len, &ack)) {
+        return none_transition(g);
+    }
+
+    /* P1-FIX: Verify frame sender is PI (scheme B: Pi -> STM32).
+     * Reject frames from wrong sender to prevent replay/spoofing. */
+    if (frame->sender != EC_DEVICE_PI) {
         return none_transition(g);
     }
 
@@ -172,6 +193,8 @@ void ec_gateway_init(ec_gateway_t *g)
     g->item_target_seq = 0U;
     g->item_class_id = 0U;
     g->item_image_id = 0U;
+    g->item_x_mm10 = 0;
+    g->item_y_mm10 = 0;
     g->item_result_code = EC_RESULT_UNKNOWN;
     g->tx_seq = 0U;
     g->rx_len = 0U;
@@ -275,6 +298,12 @@ ec_transition_t ec_gateway_inject(ec_gateway_t *g,
     e.content_validated = event->content_validated;
 
     if (event->type == EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED) {
+        /* P2-FIX: round_id is emitted as a uint16 task_id in outbound frames;
+         * a larger round id would be truncated on the wire and the DISPLAY_ACK
+         * round gate could never match. Reject instead of silently wrapping. */
+        if (event->round_id > UINT16_MAX) {
+            return none_transition(g);
+        }
         e.round_id = event->round_id;
     }
 
@@ -291,10 +320,28 @@ ec_transition_t ec_gateway_inject(ec_gateway_t *g,
 
     transition = consume_and_emit(g, &e);
 
+    /* P2-FIX: reset success_count and item context only when the state machine
+     * actually committed MANUAL_NEW_ROUND_CONFIRMED (FAULT_LOCK -> POWER_ON,
+     * which itself requires round_id change + round_closed + danger_area_clear
+     * + estop_released). A rejected confirmation must not clear counters. */
+    if (event->type == EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED &&
+        transition.state == EC_STATE_POWER_ON) {
+        g->success_count = 0U;
+        g->item_target_seq = 0U;
+        g->item_class_id = 0U;
+        g->item_image_id = 0U;
+        g->item_x_mm10 = 0;
+        g->item_y_mm10 = 0;
+        g->item_result_code = EC_RESULT_UNKNOWN;
+    }
+
     /* interface-contract sec. 6.1: success_count is 0..255, increments only
      * on the first valid SUCCESS result, and must not wrap 255 -> 0. Increment
      * only when the state machine actually committed WAIT_ITEM_RESULT ->
-     * WAIT_DISPLAY_ACK, so a duplicate or replayed ITEM_RESULT is idempotent. */
+     * WAIT_DISPLAY_ACK, so a duplicate or replayed ITEM_RESULT is idempotent.
+     * P1-FIX: At 255, reject NEW -> WAIT_TASK transitions that could accept
+     * another potentially-successful item (state machine allows it, but the
+     * counter cannot represent 256). */
     if (event->type == EC_EVENT_ITEM_RESULT_RECORDED &&
         pre_state == EC_STATE_WAIT_ITEM_RESULT &&
         transition.state == EC_STATE_WAIT_DISPLAY_ACK &&
@@ -320,6 +367,17 @@ size_t ec_gateway_tx_len(const ec_gateway_t *g)
 ec_state_t ec_gateway_state(const ec_gateway_t *g)
 {
     return (g != NULL) ? g->sm.state : EC_STATE_FAULT_LOCK;
+}
+
+bool ec_gateway_item_target(const ec_gateway_t *g, int16_t *x_mm10,
+                            int16_t *y_mm10)
+{
+    if ((g == NULL) || (x_mm10 == NULL) || (y_mm10 == NULL)) {
+        return false;
+    }
+    *x_mm10 = g->item_x_mm10;
+    *y_mm10 = g->item_y_mm10;
+    return true;
 }
 
 bool ec_gateway_rx_active(const ec_gateway_t *g)

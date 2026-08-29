@@ -128,6 +128,15 @@ void test_protocol(void)
         EXPECT_FALSE(ec_proto_decode_display_ack(dack_buf,
                                                  sizeof(dack_buf) - 1U,
                                                  &ack_out));
+        /* P2-4 (cross-check): a longer payload must also be rejected so the C
+         * side cannot diverge from the Python codec's exact-6-bytes rule. */
+        {
+            uint8_t long_buf[EC_DISPLAY_ACK_PAYLOAD_LEN + 1U];
+            (void)memcpy(long_buf, dack_buf, sizeof(dack_buf));
+            long_buf[sizeof(dack_buf)] = 0x00U;
+            EXPECT_FALSE(ec_proto_decode_display_ack(
+                long_buf, (uint16_t)sizeof(long_buf), &ack_out));
+        }
     }
 
     /* ITEM_TASK: full 8-byte payload golden (interface-contract sec. 5.2).
@@ -162,29 +171,29 @@ void test_protocol(void)
         item.target_seq = 0x01U;
         item.class_id = 0x02U;
         item.image_id = 0x02U;
-        item.x_mm10 = 1350;
-        item.y_mm10 = -1350;
+        item.x_mm10 = 1450;
+        item.y_mm10 = -1450;
         item.grip_angle = 0xFFU;
         EXPECT_TRUE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
-        EXPECT_EQ_U8(0x05U, enc[3]); /* X high: +1350 */
-        EXPECT_EQ_U8(0x46U, enc[4]); /* X low */
-        EXPECT_EQ_U8(0xFAU, enc[5]); /* Y high: -1350 */
-        EXPECT_EQ_U8(0xBAU, enc[6]); /* Y low */
+        EXPECT_EQ_U8(0x05U, enc[3]); /* X high: +1450 */
+        EXPECT_EQ_U8(0xAAU, enc[4]); /* X low */
+        EXPECT_EQ_U8(0xFAU, enc[5]); /* Y high: -1450 */
+        EXPECT_EQ_U8(0x56U, enc[6]); /* Y low */
 
         EXPECT_TRUE(ec_proto_decode_item_task(enc, sizeof(enc), &item));
-        EXPECT_EQ_I16(1350, item.x_mm10);
-        EXPECT_EQ_I16(-1350, item.y_mm10);
+        EXPECT_EQ_I16(1450, item.x_mm10);
+        EXPECT_EQ_I16(-1450, item.y_mm10);
     }
 
     /* ITEM_TASK: out-of-range X/Y, non-0xFF angle, and short payload reject. */
     TEST_CASE_BEGIN("P-ITEM-003");
     {
         static const uint8_t bad_x[] = {
-            0x01U, 0x02U, 0x02U, 0x05U, 0x47U, 0x03U, 0xE8U, 0xFFU
-        }; /* X=+1351 */
+            0x01U, 0x02U, 0x02U, 0x05U, 0xABU, 0x03U, 0xE8U, 0xFFU
+        }; /* X=+1451 */
         static const uint8_t bad_y[] = {
-            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0xFAU, 0xB9U, 0xFFU
-        }; /* Y=-1351 */
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0xFAU, 0x55U, 0xFFU
+        }; /* Y=-1451 */
         static const uint8_t bad_angle[] = {
             0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0x2DU
         };
@@ -210,13 +219,13 @@ void test_protocol(void)
         item.target_seq = 1U;
         item.class_id = 2U;
         item.image_id = 2U;
-        item.x_mm10 = 1351;
+        item.x_mm10 = 1451;
         item.y_mm10 = 0;
         item.grip_angle = 0xFFU;
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.x_mm10 = 0;
-        item.y_mm10 = -1351;
+        item.y_mm10 = -1451;
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.y_mm10 = 0;
