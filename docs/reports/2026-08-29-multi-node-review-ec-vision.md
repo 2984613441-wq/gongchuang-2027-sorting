@@ -220,7 +220,13 @@
 | 显示渲染 | `rpi/display.py` | `DisplayViewModel`（序号/名称/图片/成功总数）+ `build_display_view` + `FakeDisplayRenderer`；真实 HDMI 渲染由部署注入 |
 | 闭环测试 | `tests/integration/test_host_side_chain.py` | 赛题"显示完成后才能分拣下一件"端到端验证（全 fake）：每件 1 条 ITEM_TASK、MOTION_DONE 门禁、显示完成前不派发下一件、显示总数==成功计数、sent=[ITEM_TASK,ACK,ITEM_TASK,ACK] |
 
-**验证**：电控全量 **167 passed + 49 subtests**（新增 31 用例）。仍待开发：真实串口适配器、真实 HDMI 渲染、MaixCAM 入站（payload 未冻结）。
+**验证**：电控全量 **181 passed + 49 subtests**（新增 31+14 用例）。仍待开发：真实串口适配器、真实 HDMI 渲染（等屏幕到货实测）、MaixCAM 入站（payload 未冻结）。
+
+## 12. 屏幕到货与 HDMI 渲染器（2026-08-29 追加）
+
+- **屏规格**：树莓派 7"/10" 系列 HDMI 屏，本项目 **1024×600**（说明书提取，`docs/design/2026-08-29-hdmi-screen-arrival-verification.md` 含接线、config.txt、上电验证清单 8 项、FAQ）。上电验证为 L4 授权操作，待用户安排。
+- **真实渲染器**（`5923f82c`）：`rpi/display_hdmi.py` `HdmiDisplayRenderer`——Pillow 合成 1024×600 帧（序号/货物名称/图片/成功总数），`image_loader`/`frame_output`/`font_path` 全部注入（硬件参数不写死），fail-closed（图片加载失败不产半成品帧），`complete()` 对接 PendingRender→RenderReceipt→DISPLAY_ACK 闭环。14 用例，合成帧经视觉核验布局正确。
+- **部署提醒**：树莓派端渲染需注入中文字体（如 `fonts-wqy-zenhei`）与真实 frame_output（pygame/framebuffer）；图片目录、字体路径、输出方式均为部署配置。
 
 ---
 
