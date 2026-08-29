@@ -169,6 +169,7 @@ class Scheduler:
         self.display_ack_intent: DisplayAckIntent | None = None
         self._round_id: str | None = None
         self._seen_tasks: dict[tuple[str, int, int], ItemTaskPayload] = {}
+        self._estop_active = False
 
     @property
     def success_count(self) -> int:
@@ -178,11 +179,27 @@ class Scheduler:
     def is_faulted(self) -> bool:
         return self.state is SchedulerState.FAULT
 
+    @property
+    def estop_active(self) -> bool:
+        return self._estop_active
+
     def load_source(self, source: FakeTaskSource) -> None:
         self._source = source
 
+    def note_estop(self) -> None:
+        """Stop dispatching new tasks until a verified new round.
+
+        The physical e-stop circuit belongs to STM32; this flag only makes the
+        scheduler fail closed so it never hands out another ITEM_TASK while the
+        machine is stopped (competition rule: e-stop ends the round).
+        """
+
+        self._estop_active = True
+
     def next_task(self) -> ItemTaskPayload | ItemTaskContext | None:
         if self.state is not SchedulerState.READY or self._source is None:
+            return None
+        if self._estop_active:
             return None
         self._source.set_permitted(True)
         candidate = self._source.next_if_permitted()
@@ -328,6 +345,7 @@ class Scheduler:
         self.display_model = None
         self.display_ack_intent = None
         self._seen_tasks.clear()
+        self._estop_active = False
         self.state = SchedulerState.READY
 
 

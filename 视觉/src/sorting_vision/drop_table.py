@@ -11,13 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
+from .errors import VisionError
+
 
 ITEM_TASK_COORD_LIMIT = 1450
 MIN_BOX_ID = 1
 MAX_BOX_ID = 6
 
 
-class DropTableError(Exception):
+class DropTableError(VisionError):
     code = "DROP_TABLE_ERROR"
 
 

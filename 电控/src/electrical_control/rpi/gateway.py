@@ -179,6 +179,9 @@ class PiProtocolGateway:
 
         if command == int(Command.ESTOP):
             self.estop_active = True
+            note_estop = getattr(self.scheduler, "note_estop", None)
+            if callable(note_estop):
+                note_estop()
             return PiGatewayOutcome("ESTOP")
 
         return PiGatewayOutcome("IGNORED")

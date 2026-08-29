@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from .color_quant import color_name, dominant_color
-from .errors import EmptyDetectionError, InvalidDetectionError, InvalidInputError
+from .errors import EmptyDetectionError, InvalidDetectionError, InvalidInputError, VisionError
 from .types import BoundingBox, RawDetection
 
 
@@ -35,15 +35,15 @@ DEFAULT_COLOR_VOCABULARY = (
 )
 
 
-class TooManyGroupsError(Exception):
+class TooManyGroupsError(VisionError):
     code = "TOO_MANY_GROUPS"
 
 
-class UnknownColorError(Exception):
+class UnknownColorError(VisionError):
     code = "UNKNOWN_COLOR"
 
 
-class UnknownGroupError(Exception):
+class UnknownGroupError(VisionError):
     code = "UNKNOWN_GROUP"
 
 

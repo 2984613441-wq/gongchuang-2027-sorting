@@ -125,6 +125,21 @@ class PiProtocolGatewayTests(unittest.TestCase):
         self.assertEqual("ESTOP", outcome.event)
         self.assertTrue(gateway.estop_active)
 
+    def test_estop_blocks_new_tasks_until_verified_new_round(self) -> None:
+        scheduler = Scheduler()
+        scheduler.start_verified_new_round(VerifiedNewRound("round-new", True, True, True))
+        scheduler.load_source(FakeTaskSource([context()]))
+        gateway = PiProtocolGateway(scheduler)
+
+        gateway.feed_frame(stm32_frame(Command.ESTOP))
+
+        self.assertTrue(scheduler.estop_active)
+        self.assertIsNone(scheduler.next_task())
+
+        scheduler.start_verified_new_round(VerifiedNewRound("round-new", True, True, True))
+        self.assertFalse(scheduler.estop_active)
+        self.assertIsNotNone(scheduler.next_task())
+
     def test_reverse_direction_is_rejected(self) -> None:
         gateway = PiProtocolGateway(unlocked_scheduler())
         reverse = encode_outer_frame(

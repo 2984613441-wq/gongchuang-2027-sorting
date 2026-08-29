@@ -41,6 +41,10 @@ class DuplicateDetectionError(VisionError):
     code = "DUPLICATE_DETECTION"
 
 
+class DetectionLimitError(VisionError):
+    code = "DETECTION_LIMIT_EXCEEDED"
+
+
 class EmptyDetectionError(VisionError):
     code = "EMPTY_DETECTION"
 

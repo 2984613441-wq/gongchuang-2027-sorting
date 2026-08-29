@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from .config import InferenceConfig
-from .errors import DuplicateDetectionError, EmptyDetectionError, UnknownClassError
+from .errors import (
+    DetectionLimitError,
+    DuplicateDetectionError,
+    EmptyDetectionError,
+    UnknownClassError,
+)
 from .types import BackendOutput, BoundingBox, RawDetection
 
 
@@ -51,7 +56,7 @@ def postprocess(output: BackendOutput, config: InferenceConfig) -> tuple[RawDete
             f"class-aware NMS found {len(suppressed)} overlapping duplicate detection(s)"
         )
     if len(kept) > config.max_detections:
-        raise DuplicateDetectionError(
+        raise DetectionLimitError(
             f"detection count {len(kept)} exceeds configured maximum {config.max_detections}"
         )
     return kept
