@@ -230,6 +230,16 @@
 - **契约冻结**：`interface-contract.md` §4.1 新增 ACK/NACK 2 字节载荷 + 6 枚 NACK 原因码 + 重发/15 秒/fail-closed 边界。
 - 待办：E-6 重传上限 3 次待台架实测；Python 侧可选增强 D-1/D-2（resend_item_task、NACK 日志）。
 
+## 14. 多 agent 三路交付（2026-08-30，`bcacad0f`）
+
+| 路 | 内容 | 验证 |
+|---|---|---|
+| A1 Python 增强（D-1/D-2） | `protocol/ack_nack.py`（ACK/NACK 原因码+解析，与 C 侧逐值对齐）；`OutboundGateway.resend_item_task`（原样重放不递增 tx_seq + on_retransmit 钩子）；`PiProtocolGateway` ACK/NACK 入站解析 + STAGE 日志 | Python 192→**210 passed + 58 subtests** |
+| A2 树莓派部署包 | `电控/deploy/`：`run_chain.py`（真实链路骨架：PySerialLink→Scheduler→Outbound→HdmiDisplayRenderer，视觉源/图片/字体全注入）+ `install.sh`（config.txt 备份后追加 1024×600）+ `ec-chain.service` + `requirements.txt` + `README.md` | `--fake-link` 2 件闭环 demo exit 0 |
+| A3 固件测试修复 | `firmware/tests` 全绿（生产代码零改动）：axis_driver 单轴断言更新（P0-FIX 后单轴合法）；`host_stubs/` HAL 桩（HAL_GetTick）；test_app 启动链重写为真实 P0-FIX 行为（POST→HOMING→BARRIER 超时→FAULT_LOCK）；diag 掩码 01FF→03FF | 5 套件全绿（gcc -Werror） |
+
+**当前总状态**：电控 Python **210+58**、C 逻辑 **85/85**、固件 host 测试 **5 套件全绿**、视觉 **75**（full-access）。烧录 hex 0 错 0 警已实机验证（用户确认）。
+
 ## 12. 屏幕到货与 HDMI 渲染器（2026-08-29 追加）
 
 - **屏规格**：树莓派 7"/10" 系列 HDMI 屏，本项目 **1024×600**（说明书提取，`docs/design/2026-08-29-hdmi-screen-arrival-verification.md` 含接线、config.txt、上电验证清单 8 项、FAQ）。上电验证为 L4 授权操作，待用户安排。
