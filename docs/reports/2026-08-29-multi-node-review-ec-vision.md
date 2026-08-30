@@ -280,6 +280,22 @@
 
 **四项结论落档**（`2026-08-30-hardware-truth-convergence.md` §3）：USART 维持 USART3 主基线待实物确认；执行器双舵机独立基线；15 秒有条件批准（进展源 fail-closed）；运动标定顺序批准。
 
+## 18. 15 秒滚动失动监控落地（2026-08-30，`700c508`）
+
+按二次复核的"有条件批准"实施完成：
+
+| 条件 | 落地 |
+|---|---|
+| 单调 `last_observable_ms` + `watchdog_active` | ✅ 替代固定 15s 单点计时（`ec_app.c`） |
+| 令牌去重 | ✅ `ec_app_note_observable_progress`：单调 token，重复/过期不续时 |
+| **进展源默认 fail-closed** | ✅ `EC_APP_PROGRESS_SOURCE_ENABLED=0`（生产 Keil 构建死代码消除）；测试目标宏 1 + 运行期开关（boot 默认 OFF） |
+| MOTION_DONE 不重起 | ✅ 不触碰基准，显示阶段按剩余窗口 |
+| 无效/重复 DISPLAY_ACK 不续时 | ✅ 仅 `ACK_DISPLAY_CONSUMED` 首个有效结案 |
+| 回绕安全比较 | ✅ uint32 减法（含回绕测试） |
+| 测试 ≥8 条 | ✅ 8 条全过（新令牌续时/重复去重/恰 15s/14.9s 重计/MOTION_DONE 不重起/无效 ACK/tick 回绕/堵转 fail-closed） |
+
+验证：gcc + cmake/ctest 双通道全绿；宏 0/1 双配置 -Werror 通过；变异检查证明测试非空转。发现并修正：旧 READY 清除路径在当前状态机不可达（有效 ACK 转 PREPARE_BARRIER）→ 改用 `ACK_DISPLAY_CONSUMED` 作结案信号。
+
 ## 12. 屏幕到货与 HDMI 渲染器（2026-08-29 追加）
 
 - **屏规格**：树莓派 7"/10" 系列 HDMI 屏，本项目 **1024×600**（说明书提取，`docs/design/2026-08-29-hdmi-screen-arrival-verification.md` 含接线、config.txt、上电验证清单 8 项、FAQ）。上电验证为 L4 授权操作，待用户安排。
