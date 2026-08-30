@@ -11,7 +11,8 @@ add_executable(ec_firmware_host_tests
 target_include_directories(ec_firmware_host_tests PRIVATE
     ../App/Inc ../../../stm32_logic/include host_stubs)
 target_compile_definitions(ec_firmware_host_tests PRIVATE
-    EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1 EC_SERVO_TEST_BUILD=1 EC_GROUP_TEST_BUILD=1 EC_BARRIER_TEST_BUILD=1)
+    EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1 EC_SERVO_TEST_BUILD=1 EC_GROUP_TEST_BUILD=1 EC_BARRIER_TEST_BUILD=1
+    EC_APP_TEST_HOOKS=1 EC_APP_PROGRESS_SOURCE_ENABLED=1)
 if(MSVC)
   target_compile_options(ec_firmware_host_tests PRIVATE /W4 /WX /utf-8)
 else()
