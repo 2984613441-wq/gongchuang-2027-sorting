@@ -22,8 +22,9 @@
 | 链路 | 物理接口 | 电平 | 串口参数 |
 |------|---------|------|----------|
 | MaixCAM ↔ 树莓派 | UART ↔ CP2102(3.3V) ↔ USB | 3.3V TTL | 115200 8N1 |
-| 树莓派 ↔ STM32（主链路） | **USART2：PA2 TX / PA3 RX，交叉连接**（2026-08-30 同步：固件已切换 USART2 为主，`main.c` huart2；旧 USART3/PD8/PD9 主链路定义废弃） | 3.3V TTL，共 `GND_LOGIC` | 115200 8N1 |
-| STM32 备用链路 | USART3：PD8 TX / PD9 RX，独立接口，不与主链路并接（2026-08-30 起为备用，历史文档曾误标为主） | 3.3V TTL，共 `GND_LOGIC` | 115200 8N1 |
+| 树莓派 ↔ STM32（主链路） | USART3：PD8 TX / PD9 RX，交叉连接（**冻结基线 2026-08-25**） | 3.3V TTL，共 `GND_LOGIC` | 115200 8N1 |
+| STM32 备用链路 | USART2：PA2 TX / PA3 RX，独立接口，不与主链路并接 | 3.3V TTL，共 `GND_LOGIC` | 115200 8N1 |
+| 注 | 固件实现当前为 USART2（实现漂移，见 `2026-08-30-hardware-truth-convergence.md`）——待实物接线确认后二选一：接 PD8/PD9 则改固件回 USART3；接 PA2/PA3 且明确决定变更冻结接口才升级 V0.7 全库同步 | — | — |
 | 树莓派 ↔ STM32 | USB ↔ 探索者板载 USB 串口 | 3.3V TTL | [待定] |
 | 树莓派 → 显示屏 | Micro-HDMI | — | — |
 
