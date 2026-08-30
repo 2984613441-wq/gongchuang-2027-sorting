@@ -31,8 +31,8 @@
 ```text
 M144Z_M4_JP_R 的 1 脚 = PC6 = STEP_X
 M144Z_M4_JP_R 的 2 脚 = PC7 = DIR_Y
-M144Z_M4_JP_L 的 9 脚 = PD9 = UART_MAIN_RX
-M144Z_M4_JP_L 的 10 脚 = PD8 = UART_MAIN_TX
+M144Z_M4_JP_L 的 41 脚 = PA3 = UART_MAIN_RX
+M144Z_M4_JP_L 的 44 脚 = PA2 = UART_MAIN_TX
 ```
 
 在立创 EDA 中按“导入外部库 / KiCad Legacy Library（`.lib`）”选择 `M144Z-M4_CARRIER.lib`，然后搜索上面两个符号名。不同版本菜单名称可能不同；如果标准版不接受 `.lib`，改用 `M144Z-M4_CARRIER.kicad_sym` 或先用 KiCad 转换。

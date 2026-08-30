@@ -1,4 +1,4 @@
-﻿# STM32F407 载板 GPIO 与定时器分配（M144Z-M4 Mini Board 版）
+# STM32F407 载板 GPIO 与定时器分配（M144Z-M4 Mini Board 版）
 
 > 状态：候选分配，未冻结。主控板为 M144Z-M4 Mini Board（STM32F407ZGT6），排针针序来自用户手工抄录（`docs/design/min-system-board-pinout.md`）；JP_L/JP_R 方向已按用户确认，冻结前仍需独立审核与 1:1 打印核对。
 > 本文件对应实施计划 Task 2；排针编号约定：JP_L=左侧排针（2×25），JP_R=右侧排针（2×25），编号从靠近 TF 卡端开始，外列为奇数针号、内列为偶数针号。
@@ -16,8 +16,8 @@
 - LIGHT_EN（1）
 - X_HOME/X_END/Y_HOME/Y_END/Z_UP/Z_DOWN（6）
 - ESTOP_FB、START_SIG、MANUAL_RESET_SIG（3）
-- UART_MAIN_TX/UART_MAIN_RX（2，USART3）
-- UART_BACKUP_TX/UART_BACKUP_RX（2，USART2）
+- UART_MAIN_TX/UART_MAIN_RX（2，USART2）
+- UART_BACKUP_TX/UART_BACKUP_RX（2，USART3）
 - 驱动反馈 X/Y/Z READY/FAULT（预留，见第 3 节）
 
 ## 2 候选映射表
@@ -68,17 +68,17 @@
 
 | 功能 | 外设 | GPIO | 排针 | 说明 / 探索者 V3 参考冲突 | EDA 网名 |
 |---|---|---|---|---|---|
-| UART_MAIN_TX | USART3_TX | PD8 | JP_L-10 | 正式树莓派通信；115200 8N1 实测通过 | UART_MAIN_TX |
-| UART_MAIN_RX | USART3_RX | PD9 | JP_L-9 | 正式树莓派通信；115200 8N1 回显通过 | UART_MAIN_RX |
-| UART_BACKUP_TX | USART2_TX | PA2 | JP_L-44 | 备用接口；115200 8N1 实测通过 | UART_BACKUP_TX |
-| UART_BACKUP_RX | USART2_RX | PA3 | JP_L-41 | 备用接口；115200 8N1 回显通过 | UART_BACKUP_RX |
+| UART_MAIN_TX | USART2_TX | PA2 | JP_L-44 | 正式树莓派通信；115200 8N1 实测通过 | UART_MAIN_TX |
+| UART_MAIN_RX | USART2_RX | PA3 | JP_L-41 | 正式树莓派通信；115200 8N1 回显通过 | UART_MAIN_RX |
+| UART_BACKUP_TX | USART3_TX | PD8 | JP_L-10 | 备用接口；115200 8N1 实测通过 | UART_BACKUP_TX |
+| UART_BACKUP_RX | USART3_RX | PD9 | JP_L-9 | 备用接口；115200 8N1 回显通过 | UART_BACKUP_RX |
 | SWD | SWDIO/SWCLK | PA13/PA14 | SWD 排针 | 仅用于烧录调试，载板不占用 | 保留 |
 | TF/SDIO | SDIO | PC8(JP_R-11)、PC9(JP_R-12)、PC10(JP_R-6)、PC11(JP_R-7)、PC12(JP_R-9)、PD2(JP_R-8) | 见左列 | 板载 TF 卡，使用 TF 时不可占用 | 保留 |
 
 ## 3 预留与未分配项
 
 - 驱动反馈（可选）：DRV_X/Y/Z_FAULT、DRV_X/Y/Z_READY 预留候选：PD3/PD4（JP_R-27/JP_R-28）、PG10（JP_R-31）、PE1/PE0（JP_R-34/JP_R-33）、PC1（JP_R-35）等；默认 DNP，不占核心信号。
-- 正式通信采用 USART3（PD8/PD9），备用采用 USART2（PA2/PA3）；两套接口独立引出，不并接 TX/RX。
+- 正式通信采用 USART2（PA2/PA3），备用采用 USART3（PD8/PD9）；两套接口独立引出，不并接 TX/RX。
 - USART1（PA9/PA10）保留给板载 USB_UART，不作为第三套载板串口。
 - 六储蓄箱无电控网络；腕部旋转 WRIST_PWM 默认 DNP。
 

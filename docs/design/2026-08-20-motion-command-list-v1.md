@@ -6,7 +6,7 @@
 
 ## 1. 串口与帧格式
 
-- 主串口：USART3，PD8=TX，PD9=RX，交叉连接，共地。
+- 主串口：USART2，PA2=TX，PA3=RX，交叉连接，共地。
 - 参数：115200，8 数据位，无校验，1 停止位。
 - 文本命令以 `\r\n` 结尾，一行一条，行长度不超过 60 字节。
 - 每条命令必须返回一行响应；上位机收到响应后再发下一条，不流水线连发运动命令。
@@ -56,13 +56,13 @@
 | `MOVE Y DIR1 STEPS 2000 HZ 500` | Y 轴走 2000 步，500 Hz，方向 1 | `OK MOTION STARTING` |
 | `MOVE Z DIR0 STEPS 2000 HZ 500` | Z 通道走 2000 步，500 Hz（板外驱动预留） | `OK MOTION STARTING` |
 | `MOVE Z DIR1 STEPS 2000 HZ 500` | Z 通道走 2000 步，500 Hz（板外驱动预留） | `OK MOTION STARTING` |
-| `SERVO ARM` | 夹爪舵机授权 | `OK SERVO ARMED 10S` |
-| `SERVO PB10 P1000` | 夹爪开（已标定） | `OK SERVO STARTING 2S` |
-| `SERVO PB10 P1900` | 夹爪合（已标定） | `OK SERVO STARTING 2S` |
-| `SERVO PB10 P1100/1200/1300/1500/1700` | 夹爪中间位 | `OK SERVO STARTING 2S` |
-| `SERVO STOP` | 停止夹爪 PWM | `OK SERVO STOP` |
-| `GROUP ARM` | X/Y+夹爪组合授权 | `OK GROUP ARMED 10S` |
-| `GROUP START XDIR0 YDIR0 OPEN` | X/Y/夹爪组合，方向与开合自由组合 | `OK GROUP STARTING` |
+| `SERVO ARM` | Z 轴舵机授权 | `OK SERVO ARMED 10S` |
+| `SERVO PB11 P1000` | Z 轴升位（闭合占位，待标定） | `OK SERVO STARTING 2S` |
+| `SERVO PB11 P1900` | Z 轴降位（张开占位，待标定） | `OK SERVO STARTING 2S` |
+| `SERVO PB11 P1100/1200/1300/1500/1700` | Z 轴中间位 | `OK SERVO STARTING 2S` |
+| `SERVO STOP` | 停止 Z 轴舵机 PWM | `OK SERVO STOP` |
+| `GROUP ARM` | X/Y+Z 轴舵机组合授权 | `OK GROUP ARMED 10S` |
+| `GROUP START XDIR0 YDIR0 OPEN` | X/Y/Z 舵机组合，方向与升降自由组合 | `OK GROUP STARTING` |
 | `GROUP STOP` | 停止组合动作 | `OK GROUP STOP` |
 | `BARRIER ARM` | 四路挡板授权 | `OK BARRIER ARMED 10S` |
 | `BARRIER P<us>` | 四路挡板同时设指定脉宽 | `OK BARRIER SET ALL` |

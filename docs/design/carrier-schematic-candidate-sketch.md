@@ -43,7 +43,7 @@
 | 05 | `EXTERNAL_DRIVER_CTRL` | X/Y 板外备用接口和 Z 板外驱动控制接口 | 候选，X/Y 默认 DNP |
 | 06 | `SERVO_GRIPPER_LIGHT` | 四路挡板 PWM、夹爪、腕部预留、补光控制 | 候选，腕部 DNP |
 | 07 | `SAFETY_AND_INPUTS` | 限位、启动、人工复位、急停反馈接口与调理预留 | 候选 |
-| 08 | `COMM_DEBUG_TEST` | 正式 USART3、备用 USART2、SWD 保留、测试点和维护接口 | 候选 |
+| 08 | `COMM_DEBUG_TEST` | 正式 USART2、备用 USART3、SWD 保留、测试点和维护接口 | 候选 |
 | 09 | `CONNECTOR_SCHEDULE` | 板外连接器台账、方向、对端和未知字段 | 候选 |
 
 ## 3. 页面 00：层级与图例
@@ -113,10 +113,10 @@ TOP_HIERARCHY
 | `ESTOP_FB` | PG13 | JP_R-43 | 输入，仅反馈 | 安全态 | EXPLORER_REF 以太网 YT8512C；M144Z-M4 待验 |
 | `START_SIG` | PA4 | JP_L-40 | 输入 | 未触发 | EXPLORER_REF OLED/CAMERA HREF；M144Z-M4 待验 |
 | `MANUAL_RESET_SIG` | PF8 | JP_L-31 | 输入 | 未触发 | EXPLORER_REF 蜂鸣器；M144Z-M4 待验 |
-| `UART_MAIN_TX` | PD8 | JP_L-10 | USART3_TX | 空闲 | 实测 115200 8N1；M144Z-M4 排针位置待验 |
-| `UART_MAIN_RX` | PD9 | JP_L-9 | USART3_RX | 空闲 | 实测 115200 8N1 回显；M144Z-M4 排针位置待验 |
-| `UART_BACKUP_TX` | PA2 | JP_L-44 | USART2_TX | 空闲 | 实测 115200 8N1；M144Z-M4 排针位置待验 |
-| `UART_BACKUP_RX` | PA3 | JP_L-41 | USART2_RX | 空闲 | 实测 115200 8N1 回显；M144Z-M4 排针位置待验 |
+| `UART_MAIN_TX` | PA2 | JP_L-44 | USART2_TX | 空闲 | 实测 115200 8N1；M144Z-M4 排针位置待验 |
+| `UART_MAIN_RX` | PA3 | JP_L-41 | USART2_RX | 空闲 | 实测 115200 8N1 回显；M144Z-M4 排针位置待验 |
+| `UART_BACKUP_TX` | PD8 | JP_L-10 | USART3_TX | 空闲 | 实测 115200 8N1；M144Z-M4 排针位置待验 |
+| `UART_BACKUP_RX` | PD9 | JP_L-9 | USART3_RX | 空闲 | 实测 115200 8N1 回显；M144Z-M4 排针位置待验 |
 
 TF/SDIO、SWD、板载 USB_UART 和 USB_OTG 在本草图中只作为冲突审查标记，不接入载板功能网。
 
@@ -193,8 +193,8 @@ TF/SDIO、SWD、板载 USB_UART 和 USB_OTG 在本草图中只作为冲突审查
 
 | 接口/测试点 | 信号 | 说明 |
 |---|---|---|
-| `J_UART_MAIN` | `UART_MAIN_TX/UART_MAIN_RX/GND_LOGIC` | 正式 USART3；TX/RX 对端交叉 |
-| `J_UART_BACKUP` | `UART_BACKUP_TX/UART_BACKUP_RX/GND_LOGIC` | 备用 USART2；主备 TX/RX 不并接 |
+| `J_UART_MAIN` | `UART_MAIN_TX/UART_MAIN_RX/GND_LOGIC` | 正式 USART2；TX/RX 对端交叉 |
+| `J_UART_BACKUP` | `UART_BACKUP_TX/UART_BACKUP_RX/GND_LOGIC` | 备用 USART3；主备 TX/RX 不并接 |
 | `SWD` | SWDIO/SWCLK/GND | 使用 M144Z-M4 下方 SWD 接口，载板不复刻 MCU |
 | `TP_STEP_*` | 各轴 STEP | 仅测试点候选 |
 | `TP_DIR_*` | 各轴 DIR | 仅测试点候选 |
@@ -224,8 +224,8 @@ TF/SDIO、SWD、板载 USB_UART 和 USB_OTG 在本草图中只作为冲突审查
 | `J_Z_UP` / `J_Z_DOWN` | Z 限位 | 输入 | 外部开关 | 类型/线长 TBD | 候选 |
 | `J_ESTOP_FB` | 急停反馈 | 输入 | 急停辅助触点 | 只读，针序 TBD | 候选 |
 | `J_START` / `J_MANUAL_RESET` | 人机输入 | 输入 | 外部按钮 | 类型/针序 TBD | 候选 |
-| `J_UART_MAIN` | USART3 | 双向 | 树莓派 | TX/RX/GND，针序 TBD | 候选 |
-| `J_UART_BACKUP` | USART2 | 双向 | 备用上位机/树莓派 | TX/RX/GND，针序 TBD；禁止与主接口并接 | 候选 |
+| `J_UART_MAIN` | USART2 | 双向 | 树莓派 | TX/RX/GND，针序 TBD | 候选 |
+| `J_UART_BACKUP` | USART3 | 双向 | 备用上位机/树莓派 | TX/RX/GND，针序 TBD；禁止与主接口并接 | 候选 |
 
 ## 13. G1 草图验收边界
 

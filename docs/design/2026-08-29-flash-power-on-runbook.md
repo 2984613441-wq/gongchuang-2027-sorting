@@ -30,7 +30,7 @@
 |---|---|---|---|
 | 1 | 失电许可（POWER_PERMISSION） | 应用逻辑已激活，`ec_board_stm32.c` GPIO 采样仍注释 → `power_permission_check_lost()` 恒真 | POST 必然失败 → FAULT_LOCK；要跑完整启动链必须按 `POWER-PERMISSION-GPIO-SETUP.md` 接线（高有效+10k 上拉）或由用户明确决定临时跳过 |
 | 2 | 挡板反馈 | 无反馈输入映射，`ec_startup_sequence.c` 只靠 5s 超时 | BARRIER 阶段必超时失败 → 运动闭环不可达（与 SAFETY_FIXES v3"启动序列占位"一致） |
-| 3 | USART 通道 | **固件用 USART2 PA2/PA3（115200 8N1）**；`m144z-m4-tested-pin-pcb-map.md` 仍写"主 USART3 PD8/PD9"（**未同步，别按它接线**） | 接线必须接 **PA2/PA3**（交叉 TX/RX + GND），勿接 PD8/PD9 |
+| 3 | USART 通道 | **固件用 USART2 PA2/PA3（115200 8N1），2026-08-30 用户已拍板为正式主链路**（与固件 `huart2` 一致）；`m144z-m4-tested-pin-pcb-map.md` 已同步 | 接线必须接 **PA2/PA3**（交叉 TX/RX + GND），勿接 PD8/PD9；备用链路为 USART3 PD8/PD9 |
 | 4 | 诊断输出 | 生产固件 `EC_DIAGNOSTIC_BUILD=0` → 无 ASCII 诊断（`ec_diag_*` 空桩） | 串口验证需用二进制协议（0xA5 帧）客户端，或临时诊断构建观察 |
 | 5 | 固件主机测试 | `ec_motion_plan/demo/diag_disabled` 过；`ec_axis_driver_tests` 过期（单轴限制已解禁未同步）、`ec_firmware_host_tests` 缺 HAL 桩 | 测试滞后，非固件编译问题（Keil 编译已证明源码有效） |
 | 6 | ST-Link/BOOT0 | 调试器 ST-Link；BOOT0=0（否则进系统存储器） | 烧录前置确认 |
@@ -77,7 +77,7 @@
 ### 步骤 1：接线（按速查 §1-§2）
 1. 驱动板 X/Y：VIN=12V、V=5V（**不是 3.3V**）、STEP/DIR/EN 接速查表引脚（X: PC6/PA7/PA5；Y: PB6/PC7/PD7）、电机 1A/1B、2A/2B。
 2. 精简共地：12V 负 → 驱动板 GND → 降压 IN- → STM32 GND → 树莓派 GND（万用表验证）。
-3. 串口调试线：USB-TTL TX→PD9、RX→PD8、GND→GND（**树莓派先不接**）。
+3. 串口调试线：USB-TTL TX→PA3、RX→PA2、GND→GND（**树莓派先不接**）。
 
 ### 步骤 2：烧录固件
 1. Keil 打开 `电控/firmware/stm32f407_m144z/MDK-ARM/diankongv1.0.uvprojx`。
@@ -89,7 +89,7 @@
 ### 步骤 3：首次上电（最小系统）
 1. 只给 STM32 供电，接 USB-TTL。
 2. 串口 115200 8N1，发 `PING` → 期待 `OK PONG`。
-3. 无回显按速查 §5 排查（PD8 电平 3.3V？烧录成功？复位？）。
+3. 无回显按速查 §5 排查（PA2 电平 3.3V？烧录成功？复位？）。
 4. `INPUTS` → `ACTIVE=0000`（9 路悬空不触发）。
 
 ### 步骤 4：电机/舵机分阶段验证（诊断命令，速查 §4）

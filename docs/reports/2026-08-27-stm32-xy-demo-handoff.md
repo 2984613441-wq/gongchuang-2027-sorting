@@ -1,5 +1,7 @@
 # 2026-08-27 电控侧交接单 — XY 演示行程与 demo 参数
 
+> ⚠️ 2026-08-30 用户拍板：主链路已变更为 USART2/PA2/PA3；本文 USART3 主内容为历史事实，仅作参考。
+
 > 用途：电控侧下一位 agent 接手 STM32 继续开发时，直接以本文件为起点，不依赖已消失的对话。
 > 前一份交接：[2026-08-20-codex-handoff-current-progress.md](2026-08-20-codex-handoff-current-progress.md)
 > 本文聚焦：机械故障后演示方案降级为「视觉显示 + XYZ 串口 demo 循环」，其中 XY 单腿行程已按实机目测调至 16.5s。

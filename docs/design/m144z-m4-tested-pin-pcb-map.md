@@ -2,7 +2,7 @@
 
 > 状态：GPIO/定时器/UART 功能映射已按 2026-08-16 基线冻结；`JP_L/JP_R` 排针物理位置、EDA 网络和 PCB 仍为候选，尚未完成官方资料或万用表连续性验证。
 >
-> 正式通信使用 `PD8/PD9 = USART3`；`PA2/PA3 = USART2` 仅作备用。两个 UART 均须带独立 `GND_LOGIC`，禁止并接 TX/RX。
+> 正式通信使用 `PA2/PA3 = USART2`（2026-08-30 用户拍板主链路，原 USART3 主基线废弃）；`PD8/PD9 = USART3` 仅作备用。两个 UART 均须带独立 `GND_LOGIC`，禁止并接 TX/RX。
 
 ![M144Z-M4 实测引脚与 PCB 接口总图](./m144z-m4-tested-pin-pcb-map.png)
 
@@ -38,22 +38,22 @@
 | BARRIER_PWM_2 | TIM3_CH4 | PB1 | JP_L-34 | J_BARRIER_CTRL_2 + TP | PWM 通过 |
 | BARRIER_PWM_3 | TIM10_CH1 | PF6 | JP_L-29 | J_BARRIER_CTRL_3 + TP | PWM 通过 |
 | BARRIER_PWM_4 | TIM11_CH1 | PF7 | JP_L-30 | J_BARRIER_CTRL_4 + TP | PWM 通过 |
-| GRIP_PWM | TIM2_CH3 | PB10 | JP_R-23 | J_GRIPPER_CTRL + TP | PWM 通过 |
+| GRIP_PWM | TIM2_CH3 | PB10 | JP_R-23 | J_GRIPPER_CTRL + TP | 弃用（夹爪无舵机，唯一舵机=Z 轴升降在 PB11） |
 | WRIST_PWM | TIM2_CH4 | PB11 | JP_R-22 | J_WRIST_CTRL + TP | 改作 Z 轴舵机信号（复用 TIM2_CH4/PB11） |
 | LIGHT_EN | GPIO 输出 | PC0 | JP_R-36 | J_LIGHT + TP_LIGHT_EN | 输出翻转通过 |
-| X_HOME | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG7 | JP_R-14 | J_X_HOME | 低有效；历史输入/停步联动通过 |
-| X_END | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG6 | JP_R-13 | J_X_END | 低有效；历史输入读取通过 |
-| Y_HOME | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG9 | JP_R-30 | J_Y_HOME | 低有效；历史输入/停步联动通过 |
-| Y_END | GPIO 输入，外部 10k 上拉，MCU NOPULL | PD5 | JP_R-29 | J_Y_END | 低有效；历史输入读取通过 |
-| Z_UP | GPIO 输入，外部 10k 上拉，MCU NOPULL | PF11 | JP_L-32 | J_Z_UP | 低有效；历史双限位联动通过 |
-| Z_DOWN | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG14 | JP_R-44 | J_Z_DOWN | 低有效；历史双限位联动通过 |
-| ESTOP_FB | GPIO 输入，外部 10k 上拉，MCU NOPULL | PG13 | JP_R-43 | J_ESTOP_FB，只读 | 低有效；仅辅助反馈 |
-| START_SIG | GPIO 输入，外部 10k 上拉，MCU NOPULL | PA4 | JP_L-40 | J_START | 低有效；历史输入读取通过 |
-| MANUAL_RESET_SIG | GPIO 输入，外部 10k 上拉，MCU NOPULL | PF8 | JP_L-31 | J_MANUAL_RESET | 低有效；历史输入读取通过 |
-| UART_MAIN_TX | USART3_TX | PD8 | JP_L-10 | J_UART_MAIN.RX 对端 | 115200 8N1 发送通过 |
-| UART_MAIN_RX | USART3_RX | PD9 | JP_L-9 | J_UART_MAIN.TX 对端 | 115200 8N1 回显通过 |
-| UART_BACKUP_TX | USART2_TX | PA2 | JP_L-44 | J_UART_BACKUP.RX 对端 | 115200 8N1 发送通过 |
-| UART_BACKUP_RX | USART2_RX | PA3 | JP_L-41 | J_UART_BACKUP.TX 对端 | 115200 8N1 回显通过 |
+| X_HOME | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PG7 | JP_R-14 | J_X_HOME | 低有效；历史输入/停步联动通过 |
+| X_END | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PG6 | JP_R-13 | J_X_END | 低有效；历史输入读取通过 |
+| Y_HOME | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PG9 | JP_R-30 | J_Y_HOME | 低有效；历史输入/停步联动通过 |
+| Y_END | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PD5 | JP_R-29 | J_Y_END | 低有效；历史输入读取通过 |
+| Z_UP | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PF11 | JP_L-32 | J_Z_UP | 低有效；历史双限位联动通过 |
+| Z_DOWN | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PG14 | JP_R-44 | J_Z_DOWN | 低有效；历史双限位联动通过 |
+| ESTOP_FB | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PG13 | JP_R-43 | J_ESTOP_FB，只读 | 低有效；仅辅助反馈 |
+| START_SIG | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PA4 | JP_L-40 | J_START | 低有效；历史输入读取通过 |
+| MANUAL_RESET_SIG | GPIO 输入，内部上拉（无载板 PCB），MCU PULLUP | PF8 | JP_L-31 | J_MANUAL_RESET | 低有效；历史输入读取通过 |
+| UART_MAIN_TX | USART2_TX | PA2 | JP_L-44 | J_UART_MAIN.RX 对端 | 115200 8N1 发送通过 |
+| UART_MAIN_RX | USART2_RX | PA3 | JP_L-41 | J_UART_MAIN.TX 对端 | 115200 8N1 回显通过 |
+| UART_BACKUP_TX | USART3_TX | PD8 | JP_L-10 | J_UART_BACKUP.RX 对端 | 115200 8N1 发送通过 |
+| UART_BACKUP_RX | USART3_RX | PD9 | JP_L-9 | J_UART_BACKUP.TX 对端 | 115200 8N1 回显通过 |
 
 ## 2. PCB 必须放置
 

@@ -1,4 +1,4 @@
-﻿# 载板原理图接线施工单（自己画板用）
+# 载板原理图接线施工单（自己画板用）
 
 > 适用范围：M144Z-M4 Mini Board（STM32F407ZGT6）自制载板。
 > 状态：候选，未冻结。排针方向按用户确认：JP_L 第1行 PB15/PF12 靠 TF 卡端、PB15 外列；JP_R 第1行 PC6/PC7 靠 TF 卡端、PC7 内列（用户确认），仍建议 1:1 打印核对。
@@ -25,8 +25,8 @@
 | J_X_HOME / J_X_END / J_Y_HOME / J_Y_END / J_Z_UP / J_Z_DOWN | 各 2-3 针 | 限位开关输入（常闭优先），需调理后进 GPIO |
 | J_ESTOP_FB | 2 针 | 急停辅助触点反馈，只读信号 |
 | J_START / J_MANUAL_RESET | 各 2 针 | 启动 / 人工复位输入 |
-| J_UART_MAIN | 3-4 针 | 正式 USART3：PD8_TX/PD9_RX/GND_LOGIC |
-| J_UART_BACKUP | 3-4 针 | 备用 USART2：PA2_TX/PA3_RX/GND_LOGIC；与主串口独立 |
+| J_UART_MAIN | 3-4 针 | 正式 USART2：PA2_TX/PA3_RX/GND_LOGIC |
+| J_UART_BACKUP | 3-4 针 | 备用 USART3：PD8_TX/PD9_RX/GND_LOGIC；与主串口独立 |
 | TP_* | 测试点 | 每路 STEP/DIR/ENABLE/PWM/LIGHT_EN、主备 UART 和关键逻辑电源留测试点 |
 
 ## 2 信号接线表（照抄）
@@ -88,10 +88,10 @@
 
 | EDA 网名 | 来自 Mini Board | 接到 |
 |---|---|---|
-| UART_MAIN_TX | JP_L 第5行内列 = PD8（USART3_TX） | J_UART_MAIN.TX（接树莓派 RX） |
-| UART_MAIN_RX | JP_L 第5行外列 = PD9（USART3_RX） | J_UART_MAIN.RX（接树莓派 TX） |
-| UART_BACKUP_TX | JP_L 第22行内列 = PA2（USART2_TX） | J_UART_BACKUP.TX（接对端 RX） |
-| UART_BACKUP_RX | JP_L 第21行外列 = PA3（USART2_RX） | J_UART_BACKUP.RX（接对端 TX） |
+| UART_MAIN_TX | JP_L 第22行内列 = PA2（USART2_TX） | J_UART_MAIN.TX（接树莓派 RX） |
+| UART_MAIN_RX | JP_L 第21行外列 = PA3（USART2_RX） | J_UART_MAIN.RX（接树莓派 TX） |
+| UART_BACKUP_TX | JP_L 第5行内列 = PD8（USART3_TX） | J_UART_BACKUP.TX（接对端 RX） |
+| UART_BACKUP_RX | JP_L 第5行外列 = PD9（USART3_RX） | J_UART_BACKUP.RX（接对端 TX） |
 | GND_LOGIC | 公共地 | 两个 UART 接口分别带 GND；主备 TX/RX 不并接 |
 
 ## 3 电源网络（5V 主供电，3.3V 备选，互斥）

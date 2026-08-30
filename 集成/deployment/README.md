@@ -3,7 +3,7 @@
 ## 链路
 
 ```text
-视觉 JSONL  ->  action_bridge  ->  STM32 USART3 115200 8N1
+视觉 JSONL  ->  action_bridge  ->  STM32 USART2 115200 8N1
 ```
 
 视觉端只负责输出 JSONL，动作选择与安全门禁在桥接层。桥接层实现位于
