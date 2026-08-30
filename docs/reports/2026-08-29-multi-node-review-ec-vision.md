@@ -220,7 +220,15 @@
 | 显示渲染 | `rpi/display.py` | `DisplayViewModel`（序号/名称/图片/成功总数）+ `build_display_view` + `FakeDisplayRenderer`；真实 HDMI 渲染由部署注入 |
 | 闭环测试 | `tests/integration/test_host_side_chain.py` | 赛题"显示完成后才能分拣下一件"端到端验证（全 fake）：每件 1 条 ITEM_TASK、MOTION_DONE 门禁、显示完成前不派发下一件、显示总数==成功计数、sent=[ITEM_TASK,ACK,ITEM_TASK,ACK] |
 
-**验证**：电控全量 **181 passed + 49 subtests**（新增 31+14 用例）。仍待开发：真实串口适配器、真实 HDMI 渲染（等屏幕到货实测）、MaixCAM 入站（payload 未冻结）。
+**验证**：电控全量 **192 passed + 49 subtests**（新增 31+14+11 用例）；C 侧 **85/85**（MSVC+gcc 双零警告）。仍待开发：MaixCAM 入站（payload 未冻结）。
+
+## 13. 应答帧实施 + 真实串口适配器（2026-08-29/30，E-1/E-2 拍板落地）
+
+- **拍板**：用户确认 ACK/NACK 各 2 字节（原因+目标序号）、NACK 原因码 0x10~0x15 六枚（E-1/E-2）。
+- **C 侧实施**（`2c34d189`，C 测试 73→85）：ACK/NACK 编解码；`last_accepted_frame_seq` 顺序门；响应缓存（与 dedup 同窗口、原样重放不递增 tx_seq、miss fail-closed）；重复 DISPLAY_ACK → RESEND；255 拒绝与 ACK 校验失败由静默改 NACK。
+- **树莓派**：`PySerialLink`（pyserial 懒加载，USART2 115200 8N1 冻结默认——固件核对确认，端口部署注入；字节级帧解析复用 `decode_outer_frame`；512 字节防御上限；mock 测试 11 用例）。
+- **契约冻结**：`interface-contract.md` §4.1 新增 ACK/NACK 2 字节载荷 + 6 枚 NACK 原因码 + 重发/15 秒/fail-closed 边界。
+- 待办：E-6 重传上限 3 次待台架实测；Python 侧可选增强 D-1/D-2（resend_item_task、NACK 日志）。
 
 ## 12. 屏幕到货与 HDMI 渲染器（2026-08-29 追加）
 
