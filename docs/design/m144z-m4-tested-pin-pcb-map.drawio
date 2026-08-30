@@ -32,7 +32,7 @@
         <mxCell id="30" value="安全与人工输入&lt;br&gt;&lt;br&gt;PG7 X_HOME　PG6 X_END&lt;br&gt;PG9 Y_HOME　PD5 Y_END&lt;br&gt;PF11 Z_UP　PG14 Z_DOWN&lt;br&gt;PG13 ESTOP_FB（只读反馈）&lt;br&gt;PA4 START　PF8 MANUAL_RESET&lt;br&gt;&lt;br&gt;输入接口预留：上拉、RC、串联限流/保护位&lt;br&gt;急停主回路必须在板外切断危险动力" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#f8cecc;strokeColor=#b85450;fontSize=15;" vertex="1" parent="1">
           <mxGeometry x="1230" y="170" width="520" height="280" as="geometry"/>
         </mxCell>
-        <mxCell id="31" value="双 UART（独立接口，禁止并接）&lt;br&gt;&lt;br&gt;J_UART_MAIN&lt;br&gt;PD8 USART3_TX → 树莓派 RX&lt;br&gt;PD9 USART3_RX ← 树莓派 TX&lt;br&gt;GND_LOGIC&lt;br&gt;&lt;br&gt;J_UART_BACKUP&lt;br&gt;PA2 USART2_TX → 对端 RX&lt;br&gt;PA3 USART2_RX ← 对端 TX&lt;br&gt;GND_LOGIC&lt;br&gt;&lt;br&gt;两路均已在 115200 8N1 下实测" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;" vertex="1" parent="1">
+        <mxCell id="31" value="双 UART（独立接口，禁止并接）&lt;br&gt;&lt;br&gt;J_UART_MAIN&lt;br&gt;PA2 USART2_TX → 树莓派 RX&lt;br&gt;PA3 USART2_RX ← 树莓派 TX&lt;br&gt;GND_LOGIC&lt;br&gt;（2026-08-30 拍板主链路）&lt;br&gt;&lt;br&gt;J_UART_BACKUP&lt;br&gt;PD8 USART3_TX → 对端 RX&lt;br&gt;PD9 USART3_RX ← 对端 TX&lt;br&gt;GND_LOGIC&lt;br&gt;&lt;br&gt;两路均已在 115200 8N1 下实测" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;" vertex="1" parent="1">
           <mxGeometry x="1230" y="480" width="520" height="285" as="geometry"/>
         </mxCell>
 

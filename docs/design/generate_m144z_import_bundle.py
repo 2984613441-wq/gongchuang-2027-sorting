@@ -56,10 +56,10 @@ SIGNALS = {
     "PG13": ("ESTOP_FB", "GPIO_IN_NOPULL", "急停辅助反馈（只读）", "外部 10k 上拉、低有效；板载冲突待验"),
     "PA4": ("START_SIG", "GPIO_IN_NOPULL", "启动输入", "外部 10k 上拉、低有效；排针位置待验"),
     "PF8": ("MANUAL_RESET_SIG", "GPIO_IN_NOPULL", "人工复位输入", "外部 10k 上拉、低有效；排针位置待验"),
-    "PD8": ("UART_MAIN_TX", "USART3_TX", "主 UART TX -> 树莓派 RX", "已实测 115200 8N1"),
-    "PD9": ("UART_MAIN_RX", "USART3_RX", "主 UART RX <- 树莓派 TX", "已实测 115200 8N1"),
-    "PA2": ("UART_BACKUP_TX", "USART2_TX", "备用 UART TX", "已实测 115200 8N1"),
-    "PA3": ("UART_BACKUP_RX", "USART2_RX", "备用 UART RX", "已实测 115200 8N1"),
+    "PA2": ("UART_MAIN_TX", "USART2_TX", "主 UART TX -> 树莓派 RX", "已实测 115200 8N1；2026-08-30 用户拍板主链路"),
+    "PA3": ("UART_MAIN_RX", "USART2_RX", "主 UART RX <- 树莓派 TX", "已实测 115200 8N1；2026-08-30 用户拍板主链路"),
+    "PD8": ("UART_BACKUP_TX", "USART3_TX", "备用 UART TX", "已实测 115200 8N1；2026-08-30 起为备用"),
+    "PD9": ("UART_BACKUP_RX", "USART3_RX", "备用 UART RX", "已实测 115200 8N1；2026-08-30 起为备用"),
 }
 
 SPECIAL = {

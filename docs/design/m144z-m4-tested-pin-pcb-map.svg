@@ -37,7 +37,7 @@
 
   <rect x="1235" y="455" width="515" height="295" class="box" fill="#d5e8d4" stroke="#82b366"/>
   <text x="1260" y="487" class="h">双 UART（独立接口，禁止并接）</text>
-  <text x="1260" y="522" class="t"><tspan x="1260">J_UART_MAIN</tspan><tspan x="1260" dy="27">PD8 USART3_TX → 树莓派 RX</tspan><tspan x="1260" dy="27">PD9 USART3_RX ← 树莓派 TX</tspan><tspan x="1260" dy="27">+ GND_LOGIC</tspan><tspan x="1260" dy="38">J_UART_BACKUP</tspan><tspan x="1260" dy="27">PA2 USART2_TX → 对端 RX</tspan><tspan x="1260" dy="27">PA3 USART2_RX ← 对端 TX</tspan><tspan x="1260" dy="27">+ GND_LOGIC；两路均通过 115200 8N1 实测</tspan></text>
+  <text x="1260" y="522" class="t"><tspan x="1260">J_UART_MAIN</tspan><tspan x="1260" dy="27">PA2 USART2_TX → 树莓派 RX</tspan><tspan x="1260" dy="27">PA3 USART2_RX ← 树莓派 TX</tspan><tspan x="1260" dy="27">+ GND_LOGIC</tspan><tspan x="1260" dy="38">J_UART_BACKUP</tspan><tspan x="1260" dy="27">PD8 USART3_TX → 对端 RX</tspan><tspan x="1260" dy="27">PD9 USART3_RX ← 对端 TX</tspan><tspan x="1260" dy="27">+ GND_LOGIC；两路均通过 115200 8N1 实测</tspan></text>
 
   <path d="M660 210 H585 V270 H565" class="line" stroke="#82b366" marker-end="url(#arrowGreen)"/>
   <path d="M660 230 H590 V590 H565" class="line" stroke="#82b366" marker-end="url(#arrowGreen)"/>

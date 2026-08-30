@@ -1,4 +1,4 @@
-﻿排针,行,列,物理针号,GPIO/板载名,功能/定时器,设计网名,功能说明,状态/证据边界
+排针,行,列,物理针号,GPIO/板载名,功能/定时器,设计网名,功能说明,状态/证据边界
 JP_L,1,外列,1,PB15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,1,内列,2,PF12,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,2,外列,3,PF0,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
@@ -7,8 +7,8 @@ JP_L,3,外列,5,PF2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若
 JP_L,3,内列,6,PF3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,4,外列,7,PF4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,4,内列,8,PD10,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
-JP_L,5,外列,9,PD9,USART3_RX,UART_MAIN_RX,主 UART RX <- 树莓派 TX,已实测 115200 8N1
-JP_L,5,内列,10,PD8,USART3_TX,UART_MAIN_TX,主 UART TX -> 树莓派 RX,已实测 115200 8N1
+JP_L,5,外列,9,PD9,USART3_RX,UART_BACKUP_RX,备用 UART RX,已实测 115200 8N1；2026-08-30 起为备用
+JP_L,5,内列,10,PD8,USART3_TX,UART_BACKUP_TX,备用 UART TX,已实测 115200 8N1；2026-08-30 起为备用
 JP_L,6,外列,11,PD14,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,6,内列,12,PE15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,7,外列,13,PD15,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
@@ -39,10 +39,10 @@ JP_L,19,外列,37,PC4,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；�
 JP_L,19,内列,38,PA7,GPIO_OUT,DIR_X,X 轴 DIR,已实测输出；排针位置待验
 JP_L,20,外列,39,PA5,GPIO_OUT,ENABLE_X,X 轴 ENABLE（低有效）,已实测联动；排针位置待验
 JP_L,20,内列,40,PA4,GPIO_IN_PU,START_SIG,启动输入,已实测输入；排针位置待验
-JP_L,21,外列,41,PA3,USART2_RX,UART_BACKUP_RX,备用 UART RX,已实测 115200 8N1
+JP_L,21,外列,41,PA3,USART2_RX,UART_MAIN_RX,主 UART RX <- 树莓派 TX,已实测 115200 8N1；2026-08-30 拍板主链路
 JP_L,21,内列,42,PC2,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,22,外列,43,PC3,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
-JP_L,22,内列,44,PA2,USART2_TX,UART_BACKUP_TX,备用 UART TX,已实测 115200 8N1
+JP_L,22,内列,44,PA2,USART2_TX,UART_MAIN_TX,主 UART TX -> 树莓派 RX,已实测 115200 8N1；2026-08-30 拍板主链路
 JP_L,23,外列,45,PA1,UNASSIGNED,,未分配 GPIO,不用则放不连接标记；若作备用，必须使用独立网名并引出测试点
 JP_L,23,内列,46,UREF,TBD,,UREF 用途待确认,不贴网络标签；暂不连接，确认定义后再处理
 JP_L,24,外列,47,RST,SYSTEM,,主控复位脚,当前不接硬件复位则放不连接标记；若使用再命名 MCU_NRST
