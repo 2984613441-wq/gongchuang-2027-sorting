@@ -23,7 +23,7 @@
 | 外层帧 | `A5 5A` + 版本 `01` + CRC-16/MODBUS + `task_id/frame_seq/data_len` 大端 |
 | 设备 ID | `0x01` MaixCAM、`0x02` 树莓派、`0x03` STM32 |
 | ITEM_TASK 载荷 | **8 字节** = `target_seq(1) + class_id(1) + image_id(1) + X(2, int16 有符号大端) + Y(2, int16 有符号大端) + angle(1, 恒 0xFF)` |
-| X/Y 单位 | `0.1 mm`，原点=装置中心，`|value| > 1350`（±135.0 mm）越界拒绝 |
+| X/Y 单位 | `0.1 mm`，原点=装置中心，`|value| > 1450`（±145.0 mm）越界拒绝（2026-08-29 与 interface-contract V0.6 / item_context.py 对齐；此前旧值 ±135.0 已废弃） |
 | angle | 恒 `0xFF`（夹爪不旋转），`0..180` 本轮不用，不另加标志字节 |
 | image_id | `== class_id`，1:1，active 集 `{0,2,3,4,5,6}`；编解码层只透传，不断言 |
 
