@@ -9,6 +9,7 @@ reuses the frozen electrical_control.protocol helpers.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from electrical_control.protocol import (
@@ -39,10 +40,23 @@ class OutboundConfig:
 class OutboundGateway:
     """Encodes and sends ITEM_TASK / DISPLAY_ACK outer frames over a SerialLink."""
 
-    def __init__(self, link: SerialLink, *, config: OutboundConfig) -> None:
+    def __init__(
+        self,
+        link: SerialLink,
+        *,
+        config: OutboundConfig,
+        on_retransmit: Callable[[], None] | None = None,
+    ) -> None:
         self.link = link
         self.config = config
         self._tx_seq = 0
+        # D-1: cache of the exact bytes of the most recently sent ITEM_TASK
+        # frame plus the (task_id, frame_seq) identity it was sent for, so a
+        # timeout resend can replay the same wire bytes (same frame_seq) and
+        # hit the STM32 dedup -> RESEND path.
+        self._last_item_task_frame: bytes | None = None
+        self._last_item_task_key: tuple[int, int] | None = None
+        self._on_retransmit = on_retransmit
 
     @property
     def tx_seq(self) -> int:
@@ -70,8 +84,36 @@ class OutboundGateway:
             frame_seq=self._tx_seq,
             payload=payload,
         )
+        # D-1: cache the exact frame bytes for resend_item_task. The key is the
+        # task's own (task_id, frame_seq) identity (scheduler side), not the
+        # wire frame_seq (the outbound tx counter), so a resend of the same
+        # task is recognized even though the wire frame_seq differs.
+        self._last_item_task_frame = frame
+        self._last_item_task_key = (task_id, task.frame_seq)
         self.link.send(frame)
         return frame
+
+    def resend_item_task(self, task: ItemTaskContext) -> bytes:
+        """原样重放上次 send_item_task 的帧字节（不递增 tx_seq）。
+
+        与 STM32 的 RESEND 路径配对：超时重传复用同一 (task_id, frame_seq)，
+        STM32 按 dedup 判定为重复帧 → 重发缓存应答，不会重复执行。
+        """
+
+        cached = self._last_item_task_frame
+        cached_key = self._last_item_task_key
+        if cached is None or cached_key is None:
+            raise ValueError("no cached ITEM_TASK frame")
+        task_key = (task.task_id, task.frame_seq)
+        if task_key != cached_key:
+            raise ValueError(
+                f"task ({task_key[0]}, {task_key[1]}) does not match cached "
+                f"ITEM_TASK frame ({cached_key[0]}, {cached_key[1]})"
+            )
+        self.link.send(cached)
+        if self._on_retransmit is not None:
+            self._on_retransmit()
+        return cached
 
     def send_display_ack(self, intent: DisplayAckIntent) -> bytes:
         """Encode and send one DISPLAY_ACK for a completed render receipt.

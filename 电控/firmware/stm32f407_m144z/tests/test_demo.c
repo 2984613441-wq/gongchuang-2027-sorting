@@ -119,7 +119,7 @@ static void test_start_moves_x_first(void)
     TEST_ASSERT(g_last_start_axis == EC_AXIS_X);
     TEST_ASSERT(g_last_direction == EC_DIRECTION_0);
     TEST_ASSERT(g_last_start_hz == 800U);
-    TEST_ASSERT(g_last_start_steps == 3200U);
+    TEST_ASSERT(g_last_start_steps == 13200U);
 }
 
 static void test_full_loop_wraps(void)
@@ -166,7 +166,7 @@ static void test_full_loop_wraps(void)
     TEST_ASSERT(ec_demo_is_active());
     TEST_ASSERT(g_last_start_axis == EC_AXIS_X);
     TEST_ASSERT(g_last_direction == EC_DIRECTION_0);
-    TEST_ASSERT(g_last_start_steps == 3200U);
+    TEST_ASSERT(g_last_start_steps == 13200U);
 }
 
 static void test_stop(void)
@@ -218,12 +218,12 @@ static void test_move_timeout(void)
     ec_demo_init();
     TEST_ASSERT(ec_demo_start(0U));
 
-    /* phase 0 move: timeout = 3200*1000/800 + 1000 = 5000 ms. Stall it. */
-    g_counted_remaining = 3200U;
-    ec_demo_poll(4999U, 0U);
+    /* phase 0 move: timeout = 13200*1000/800 + 1000 = 17500 ms. Stall it. */
+    g_counted_remaining = 13200U;
+    ec_demo_poll(17499U, 0U);
     TEST_ASSERT(ec_demo_is_active());
 
-    ec_demo_poll(5000U, 0U);
+    ec_demo_poll(17500U, 0U);
     TEST_ASSERT(!ec_demo_is_active());
 }
 

@@ -1,5 +1,6 @@
 """Public API for the protocol V0.4 frozen subset."""
 
+from .ack_nack import ACK_REASONS, NACK_REASONS, decode_ack_nack_payload
 from .codec import ProtocolCodec
 from .direction import validate_direction
 from .display_ack import (
@@ -57,6 +58,7 @@ from .types import (
 )
 
 __all__ = [
+    "ACK_REASONS",
     "Command",
     "ContractNotFrozen",
     "CRC_LEN",
@@ -76,6 +78,7 @@ __all__ = [
     "ItemTaskIdentity",
     "ItemTaskPayload",
     "ItemResultPayload",
+    "NACK_REASONS",
     "OuterFrame",
     "PayloadError",
     "ProtocolCodec",
@@ -89,6 +92,7 @@ __all__ = [
     "crc32_iso_hdlc",
     "decode_item_task_identity_prefix",
     "decode_item_task_payload",
+    "decode_ack_nack_payload",
     "decode_outer_frame",
     "decode_item_result_payload",
     "decode_display_ack_payload",

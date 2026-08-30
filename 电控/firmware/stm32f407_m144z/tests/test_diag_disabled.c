@@ -1,4 +1,5 @@
 #include "ec_diag.h"
+#include "ec_demo.h"
 #include "ec_servo_test.h"
 #include "ec_step_test.h"
 
@@ -39,6 +40,11 @@ bool ec_motion_test_start_steps(ec_axis_t axis, ec_direction_t direction,
                                 uint16_t active_inputs)
 { (void)axis; (void)direction; (void)steps; (void)frequency_hz;
   (void)active_inputs; return false; }
+bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
+                                   ec_direction_t y_direction, uint32_t y_steps,
+                                   uint32_t frequency_hz, uint16_t active_inputs)
+{ (void)x_direction; (void)x_steps; (void)y_direction; (void)y_steps;
+  (void)frequency_hz; (void)active_inputs; return false; }
 uint32_t ec_motion_test_step_target(void) { return 0U; }
 uint32_t ec_motion_test_step_remaining(void) { return 0U; }
 ec_step_result_t ec_motion_test_step_result(void)
@@ -55,6 +61,11 @@ bool ec_servo_test_arm(uint16_t active_inputs, bool step_test_busy)
 bool ec_servo_test_start(uint16_t pulse_us, uint16_t active_inputs,
                          bool step_test_busy)
 { (void)pulse_us; (void)active_inputs; (void)step_test_busy; return false; }
+
+bool ec_demo_start(uint16_t active_inputs)
+{ (void)active_inputs; return false; }
+void ec_demo_stop(void) { }
+bool ec_demo_is_active(void) { return false; }
 
 int main(void)
 {

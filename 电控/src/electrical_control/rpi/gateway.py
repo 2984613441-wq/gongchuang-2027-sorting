@@ -7,23 +7,28 @@ an actuator. Display rendering remains an explicit, separately-owned step.
 
 from __future__ import annotations
 
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
 from electrical_control.protocol import (
+    ACK_REASONS,
     CRC_LEN,
     HEADER_0,
     HEADER_1,
     HEADER_LEN,
+    NACK_REASONS,
     Command,
     Device,
     PayloadError,
+    decode_ack_nack_payload,
     decode_item_result_payload,
     decode_outer_frame,
     encode_display_ack_frame,
 )
 
 from . import DisplayAckIntent, ItemResult, SchedulerFault
+from .log import STAGE, CentralLog
 
 
 # Bounded inbound dedup history: a replayed frame within the window is
@@ -42,8 +47,9 @@ class PiGatewayOutcome:
 class PiProtocolGateway:
     """Wire-facing gateway around an offline Scheduler."""
 
-    def __init__(self, scheduler) -> None:
+    def __init__(self, scheduler, *, logger: CentralLog | None = None) -> None:
         self.scheduler = scheduler
+        self.logger = logger
         self._rx = bytearray()
         self.tx_seq = 0
         self.estop_active = False
@@ -184,7 +190,42 @@ class PiProtocolGateway:
                 note_estop()
             return PiGatewayOutcome("ESTOP")
 
+        if command in (int(Command.ACK), int(Command.NACK)):
+            return self._handle_ack_nack(frame, command)
+
         return PiGatewayOutcome("IGNORED")
+
+    def _handle_ack_nack(self, frame, command: int) -> PiGatewayOutcome:
+        """Parse an inbound ACK(0x05)/NACK(0x06) two-byte response payload.
+
+        D-2: STM32 replies to our requests with reason(1) + target_seq(1).
+        The frozen reason code is mapped to its name (``ACK_ACCEPTED`` /
+        ``NACK_SINGLE_TASK_ONLY`` ...) for the outcome event; an as-yet
+        unknown code stays observable as ``UNKNOWN(0xNN)``. When a CentralLog
+        is injected, a STAGE entry is recorded so integration debugging can
+        see the STM32 rejection reason (STALE_OR_ORDER / SINGLE_TASK_ONLY /
+        ACK_NOT_APPLICABLE ...) without guessing from silence.
+        """
+
+        try:
+            reason_code, target_seq = decode_ack_nack_payload(frame.payload)
+        except PayloadError as exc:
+            return PiGatewayOutcome("FRAME_REJECTED", fault=str(exc))
+        kind = "ACK" if command == int(Command.ACK) else "NACK"
+        reasons = ACK_REASONS if command == int(Command.ACK) else NACK_REASONS
+        reason_name = reasons.get(reason_code)
+        if reason_name is None:
+            reason_name = f"UNKNOWN(0x{reason_code:02X})"
+        if self.logger is not None:
+            self.logger.record(
+                STAGE,
+                now=time.monotonic(),
+                task_id=frame.task_id,
+                frame_seq=frame.frame_seq,
+                target_seq=target_seq,
+                detail=f"{kind}:{reason_name} seq={target_seq}",
+            )
+        return PiGatewayOutcome(f"{kind}_{reason_name}")
 
 
 _MISSING = object()

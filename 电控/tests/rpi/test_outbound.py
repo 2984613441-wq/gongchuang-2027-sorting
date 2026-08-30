@@ -203,6 +203,106 @@ class SendItemTaskTests(unittest.TestCase):
         self.assertEqual(0, gateway.tx_seq)
 
 
+class ResendItemTaskTests(unittest.TestCase):
+    def test_resend_replays_exact_last_frame_without_incrementing_tx_seq(self) -> None:
+        link, gateway = new_gateway()
+        task = task_context(frame_seq=11)
+
+        first = gateway.send_item_task(task)
+        self.assertEqual(1, gateway.tx_seq)
+        replayed = gateway.resend_item_task(task)
+
+        # Byte-for-byte replay of the first send; the same (task_id, frame_seq)
+        # hits the STM32 dedup -> RESEND path instead of being a fresh task.
+        self.assertEqual(first, replayed)
+        self.assertEqual((first, first), link.sent)
+        self.assertEqual(1, decode_outer_frame(replayed).frame_seq)
+        self.assertEqual(1, gateway.tx_seq)
+
+    def test_resend_reuses_the_wire_seq_of_the_latest_send(self) -> None:
+        link, gateway = new_gateway()
+        first = gateway.send_item_task(task_context(frame_seq=11))
+        second = gateway.send_item_task(task_context(frame_seq=12))
+
+        replayed = gateway.resend_item_task(task_context(frame_seq=12))
+
+        self.assertEqual(second, replayed)
+        self.assertEqual(2, decode_outer_frame(replayed).frame_seq)
+        self.assertEqual((first, second, second), link.sent)
+        self.assertEqual(2, gateway.tx_seq)
+
+    def test_resend_before_any_send_raises(self) -> None:
+        link, gateway = new_gateway()
+
+        with self.assertRaisesRegex(ValueError, "no cached ITEM_TASK frame"):
+            gateway.resend_item_task(task_context())
+
+        self.assertEqual((), link.sent)
+        self.assertEqual(0, gateway.tx_seq)
+
+    def test_resend_rejects_task_id_mismatch(self) -> None:
+        link, gateway = new_gateway()
+        gateway.send_item_task(task_context(frame_seq=11))
+
+        with self.assertRaises(ValueError):
+            gateway.resend_item_task(task_context(task_id=ROUND_TASK_ID + 1, frame_seq=11))
+
+        self.assertEqual(1, len(link.sent))
+        self.assertEqual(1, gateway.tx_seq)
+
+    def test_resend_rejects_frame_seq_mismatch(self) -> None:
+        link, gateway = new_gateway()
+        gateway.send_item_task(task_context(frame_seq=11))
+
+        with self.assertRaises(ValueError):
+            gateway.resend_item_task(task_context(frame_seq=12))
+
+        self.assertEqual(1, len(link.sent))
+        self.assertEqual(1, gateway.tx_seq)
+
+    def test_resend_cache_tracks_the_latest_send(self) -> None:
+        link, gateway = new_gateway()
+        first = gateway.send_item_task(task_context(frame_seq=11))
+        second = gateway.send_item_task(task_context(frame_seq=12))
+
+        # The cache holds only the most recent ITEM_TASK; an older task cannot
+        # be replayed and must not silently send stale bytes.
+        with self.assertRaises(ValueError):
+            gateway.resend_item_task(task_context(frame_seq=11))
+
+        self.assertEqual(second, gateway.resend_item_task(task_context(frame_seq=12)))
+        self.assertEqual((first, second, second), link.sent)
+        self.assertEqual(2, gateway.tx_seq)
+
+    def test_resend_invokes_on_retransmit_hook(self) -> None:
+        link = FakeSerialLink()
+        calls: list[int] = []
+        gateway = OutboundGateway(
+            link,
+            config=OutboundConfig(ROUND_TASK_ID),
+            on_retransmit=lambda: calls.append(1),
+        )
+        task = task_context(frame_seq=11)
+
+        gateway.send_item_task(task)
+        gateway.resend_item_task(task)
+        gateway.resend_item_task(task)
+
+        self.assertEqual([1, 1], calls)
+        self.assertEqual(3, len(link.sent))
+        self.assertEqual(1, gateway.tx_seq)
+
+    def test_resend_without_hook_is_backward_compatible(self) -> None:
+        # The default constructor takes no on_retransmit and must not call it.
+        link, gateway = new_gateway()
+        task = task_context(frame_seq=11)
+
+        gateway.send_item_task(task)
+        replayed = gateway.resend_item_task(task)
+
+        self.assertEqual((replayed, replayed), link.sent)
+
+
 class SendDisplayAckTests(unittest.TestCase):
     def test_send_display_ack_encodes_intent_fields_and_sends(self) -> None:
         scheduler = unlocked_scheduler_with_item()

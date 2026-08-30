@@ -151,28 +151,28 @@ void test_protocol(void)
         item.target_seq = 0x01U;
         item.class_id = 0x02U;
         item.image_id = 0x02U;
-        item.x_mm10 = 1350;
-        item.y_mm10 = -1350;
+        item.x_mm10 = 1450;
+        item.y_mm10 = -1450;
         item.grip_angle = 0xFFU;
         TEST_ASSERT(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
-        TEST_ASSERT(enc[3] == 0x05U); /* X high: +1350 */
-        TEST_ASSERT(enc[4] == 0x46U); /* X low */
-        TEST_ASSERT(enc[5] == 0xFAU); /* Y high: -1350 */
-        TEST_ASSERT(enc[6] == 0xBAU); /* Y low */
+        TEST_ASSERT(enc[3] == 0x05U); /* X high: +1450 */
+        TEST_ASSERT(enc[4] == 0xAAU); /* X low */
+        TEST_ASSERT(enc[5] == 0xFAU); /* Y high: -1450 */
+        TEST_ASSERT(enc[6] == 0x56U); /* Y low */
 
         TEST_ASSERT(ec_proto_decode_item_task(enc, sizeof(enc), &item));
-        TEST_ASSERT(item.x_mm10 == 1350);
-        TEST_ASSERT(item.y_mm10 == -1350);
+        TEST_ASSERT(item.x_mm10 == 1450);
+        TEST_ASSERT(item.y_mm10 == -1450);
     }
 
     /* ITEM_TASK: out-of-range X/Y, non-0xFF angle, and short payload reject. */
     {
         static const uint8_t bad_x[] = {
-            0x01U, 0x02U, 0x02U, 0x05U, 0x47U, 0x03U, 0xE8U, 0xFFU
-        }; /* X=+1351 */
+            0x01U, 0x02U, 0x02U, 0x05U, 0xABU, 0x03U, 0xE8U, 0xFFU
+        }; /* X=+1451 */
         static const uint8_t bad_y[] = {
-            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0xFAU, 0xB9U, 0xFFU
-        }; /* Y=-1351 */
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0xFAU, 0x55U, 0xFFU
+        }; /* Y=-1451 */
         static const uint8_t bad_angle[] = {
             0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0x2DU
         };
@@ -197,13 +197,13 @@ void test_protocol(void)
         item.target_seq = 1U;
         item.class_id = 2U;
         item.image_id = 2U;
-        item.x_mm10 = 1351;
+        item.x_mm10 = 1451;
         item.y_mm10 = 0;
         item.grip_angle = 0xFFU;
         TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.x_mm10 = 0;
-        item.y_mm10 = -1351;
+        item.y_mm10 = -1451;
         TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.y_mm10 = 0;

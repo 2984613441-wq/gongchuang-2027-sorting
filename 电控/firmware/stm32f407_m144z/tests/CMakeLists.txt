@@ -5,9 +5,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_executable(ec_firmware_host_tests
     test_main.c test_inputs.c test_step_test.c test_servo_test.c test_group_test.c test_barrier_test.c test_diag.c test_safety_adapter.c test_app.c test_protocol.c
     ../App/Src/ec_inputs.c ../App/Src/ec_step_test.c ../App/Src/ec_servo_test.c ../App/Src/ec_group_test.c ../App/Src/ec_barrier_test.c ../App/Src/ec_diag.c
-    ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c
-    ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c ../../../stm32_logic/src/ec_crc32.c ../../../stm32_logic/src/ec_protocol.c)
-target_include_directories(ec_firmware_host_tests PRIVATE ../App/Inc ../../../stm32_logic/include)
+    ../App/Src/ec_demo.c ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c ../App/Src/ec_startup_sequence.c
+    ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c ../../../stm32_logic/src/ec_crc32.c ../../../stm32_logic/src/ec_protocol.c ../../../stm32_logic/src/ec_protocol_gateway.c
+    host_stubs/hal_stub.c)
+target_include_directories(ec_firmware_host_tests PRIVATE
+    ../App/Inc ../../../stm32_logic/include host_stubs)
 target_compile_definitions(ec_firmware_host_tests PRIVATE
     EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1 EC_SERVO_TEST_BUILD=1 EC_GROUP_TEST_BUILD=1 EC_BARRIER_TEST_BUILD=1)
 if(MSVC)
@@ -45,3 +47,30 @@ else()
       -Wall -Wextra -Werror -pedantic)
 endif()
 add_test(NAME ec_axis_driver_tests COMMAND ec_axis_driver_tests)
+
+add_executable(ec_motion_plan_tests
+    test_motion_plan.c
+    ../App/Src/ec_motion_plan.c
+    ../App/Src/ec_axis_driver.c)
+target_include_directories(ec_motion_plan_tests PRIVATE
+    ../App/Inc ../../../stm32_logic/include)
+if(MSVC)
+  target_compile_options(ec_motion_plan_tests PRIVATE /W4 /WX /utf-8)
+else()
+  target_compile_options(ec_motion_plan_tests PRIVATE
+      -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME ec_motion_plan_tests COMMAND ec_motion_plan_tests)
+
+add_executable(ec_demo_tests
+    test_demo.c
+    ../App/Src/ec_demo.c)
+target_include_directories(ec_demo_tests PRIVATE
+    ../App/Inc ../../../stm32_logic/include)
+if(MSVC)
+  target_compile_options(ec_demo_tests PRIVATE /W4 /WX /utf-8)
+else()
+  target_compile_options(ec_demo_tests PRIVATE
+      -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME ec_demo_tests COMMAND ec_demo_tests)

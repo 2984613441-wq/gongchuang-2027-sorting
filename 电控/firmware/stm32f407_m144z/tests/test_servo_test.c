@@ -8,14 +8,14 @@ static unsigned stop_count;
 static uint16_t last_pulse_us;
 static bool port_start_result;
 
-bool ec_servo_port_start(uint16_t pulse_us)
+bool ec_servo_port_start_z(uint16_t pulse_us)
 {
     start_count++;
     last_pulse_us = pulse_us;
     return port_start_result;
 }
 
-void ec_servo_port_stop(void)
+void ec_servo_port_stop_z(void)
 {
     stop_count++;
 }
