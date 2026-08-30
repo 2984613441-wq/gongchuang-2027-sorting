@@ -147,3 +147,7 @@ node_modules/
 # STM32 测试编译产物（build-* 目录）
 电控/firmware/stm32f407_m144z/tests/build-*/
 电控/stm32_logic/build-*/
+
+# Office 同步备份与验证临时产物
+.office-backup-*/
+.office-dump/
