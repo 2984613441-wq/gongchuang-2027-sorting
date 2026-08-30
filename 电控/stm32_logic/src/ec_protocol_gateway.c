@@ -2,6 +2,8 @@
 
 #include "ec_crc32.h"
 
+#include <string.h>
+
 static ec_transition_t none_transition(const ec_gateway_t *g)
 {
     ec_transition_t t;
@@ -35,9 +37,32 @@ static void emit_frame(ec_gateway_t *g, uint8_t command,
     g->tx_len = (written != 0U) ? written : 0U;
 }
 
+/* Queue an ACK frame (proposal sec. 3.3.1: reason(1) + target_seq(1)). */
+static void emit_ack(ec_gateway_t *g, uint8_t reason, uint8_t target_seq)
+{
+    uint8_t payload[EC_ACK_PAYLOAD_LEN];
+
+    payload[0] = reason;
+    payload[1] = target_seq;
+    emit_frame(g, EC_CMD_ACK, payload, sizeof(payload));
+}
+
+/* Queue a NACK frame (proposal sec. 3.3.2: reason(1) + target_seq(1)). */
+static void emit_nack(ec_gateway_t *g, uint8_t reason, uint8_t target_seq)
+{
+    uint8_t payload[EC_NACK_PAYLOAD_LEN];
+
+    payload[0] = reason;
+    payload[1] = target_seq;
+    emit_frame(g, EC_CMD_NACK, payload, sizeof(payload));
+}
+
 /* Consume an event, then materialise any EMIT_* actions as an outbound frame.
- * Only the first EMIT action wins; the current state machine never emits two
- * at once. */
+ * Only the first matching action wins; the current state machine never emits
+ * two at once. Existing EMIT_* (BARRIER_READY / MOTION_DONE / ITEM_RESULT)
+ * stay first; the ACK/NACK/RESEND/REJECT branches follow (proposal sec. 3.4).
+ * A RESEND replay writes the cached bytes directly and does NOT increment
+ * tx_seq (E-5); a cache miss fails closed (nothing emitted, tx_len stays 0). */
 static ec_transition_t consume_and_emit(ec_gateway_t *g, const ec_event_t *event)
 {
     ec_transition_t t = ec_sm_consume(&g->sm, event);
@@ -53,6 +78,35 @@ static ec_transition_t consume_and_emit(ec_gateway_t *g, const ec_event_t *event
         payload[1] = g->item_result_code;
         payload[2] = EC_RESULT_BASIS_CONTROL_SEQUENCE;
         emit_frame(g, EC_CMD_ITEM_RESULT, payload, sizeof(payload));
+    } else if ((t.actions & EC_ACTION_ACK_ITEM_ACCEPTED) != 0U) {
+        /* First acceptance of this item identity: ACK(ACCEPTED), then cache
+         * the exact response bytes for later RESEND replays. */
+        emit_ack(g, EC_ACK_REASON_ACCEPTED, g->item_target_seq);
+        ec_gateway_resp_cache_store(g, event->identity, g->tx_buf,
+                                    (uint16_t)g->tx_len);
+    } else if ((t.actions & EC_ACTION_ACK_DISPLAY_CONSUMED) != 0U) {
+        /* First valid DISPLAY_ACK consumption: ACK(ACK_CONSUMED), then cache.
+         * ack.target_seq == item_target_seq (content-validated upstream). */
+        emit_ack(g, EC_ACK_REASON_ACK_CONSUMED, g->item_target_seq);
+        ec_gateway_resp_cache_store(g, event->identity, g->tx_buf,
+                                    (uint16_t)g->tx_len);
+    } else if ((t.actions & EC_ACTION_RESEND_CACHED_RESPONSE) != 0U) {
+        const uint8_t *cached = NULL;
+        uint16_t cached_len = 0U;
+
+        if (ec_gateway_resp_cache_lookup(g, event->identity, &cached,
+                                         &cached_len)) {
+            (void)memcpy(g->tx_buf, cached, cached_len);
+            g->tx_len = cached_len;
+        }
+        /* Miss: fail-closed - nothing emitted, nothing executed. */
+    } else if ((t.actions & EC_ACTION_REJECT_NEW_TASK) != 0U) {
+        uint8_t reason;
+
+        reason = (event->round_id != g->sm.round_id)
+                     ? EC_NACK_WRONG_ROUND
+                     : EC_NACK_SINGLE_TASK_ONLY;
+        emit_nack(g, reason, UINT8_C(0xFF));
     }
 
     return t;
@@ -69,16 +123,19 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         return none_transition(g);
     }
 
-    /* P1-FIX: Reject new tasks when success_count is at 255 and state is
-     * WAIT_TASK (the only state that accepts new items). The counter cannot
-     * represent 256, so a new potentially-successful task would overflow. */
-    if (g->sm.state == EC_STATE_WAIT_TASK && g->success_count == UINT8_MAX) {
-        return none_transition(g);
-    }
-
     /* P1-FIX: Verify frame sender is PI (scheme B: Pi -> STM32).
      * Reject frames from wrong sender to prevent replay/spoofing. */
     if (frame->sender != EC_DEVICE_PI) {
+        return none_transition(g);
+    }
+
+    /* P1-FIX: Reject new tasks when success_count is at 255 and state is
+     * WAIT_TASK (the only state that accepts new items). The counter cannot
+     * represent 256, so a new potentially-successful task would overflow.
+     * Proposal sec. 3.4: explicit NACK replaces the former silent drop so the
+     * Pi learns the task was rejected instead of timing out. */
+    if (g->sm.state == EC_STATE_WAIT_TASK && g->success_count == UINT8_MAX) {
+        emit_nack(g, EC_NACK_TASK_REJECTED, item.target_seq);
         return none_transition(g);
     }
 
@@ -95,6 +152,20 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
     event.danger_area_clear = false;
     event.estop_released = false;
     event.content_validated = false;
+
+    /* Latch the item context BEFORE the event is consumed: the ACK(ACCEPTED)
+     * emitted by consume_and_emit must carry THIS item's target_seq. The
+     * context is only meaningful once the item is accepted (VALIDATE_TASK),
+     * and acceptance can only originate from WAIT_TASK - where the fields are
+     * unused - so a rejected task cannot corrupt an in-flight item's context.
+     * The post-consume latch below remains as the accepted-path guard. */
+    if (g->sm.state == EC_STATE_WAIT_TASK) {
+        g->item_target_seq = item.target_seq;
+        g->item_class_id = item.class_id;
+        g->item_image_id = item.image_id;
+        g->item_x_mm10 = item.x_mm10;
+        g->item_y_mm10 = item.y_mm10;
+    }
 
     t = consume_and_emit(g, &event);
 
@@ -142,6 +213,10 @@ static ec_transition_t handle_display_ack(ec_gateway_t *g,
             ((uint32_t)frame->task_id == g->sm.round_id);
 
     if (!valid) {
+        /* Content validation failed (target_seq / render_result / CRC / round):
+         * explicit NACK per proposal sec. 3.4 (E-8). CRC-bad frames never get
+         * here - they are dropped at the frame-level decode. */
+        emit_nack(g, EC_NACK_ACK_NOT_APPLICABLE, ack.target_seq);
         return none_transition(g);
     }
 
@@ -188,6 +263,7 @@ void ec_gateway_init(ec_gateway_t *g)
     (void)ec_dedup_init(&g->dedup, g->dedup_storage,
                         EC_GATEWAY_DEDUP_CAPACITY);
     ec_sm_init(&g->sm, &g->dedup);
+    ec_gateway_resp_cache_clear(g);
 
     g->success_count = 0U;
     g->item_target_seq = 0U;
@@ -199,6 +275,81 @@ void ec_gateway_init(ec_gateway_t *g)
     g->tx_seq = 0U;
     g->rx_len = 0U;
     g->tx_len = 0U;
+}
+
+void ec_gateway_resp_cache_store(ec_gateway_t *g, ec_dedup_key_t key,
+                                 const uint8_t *frame, uint16_t len)
+{
+    size_t index;
+    size_t free_index = EC_GATEWAY_RESP_CACHE_CAPACITY;
+
+    if ((g == NULL) || (frame == NULL) || (len == 0U) ||
+        (len > EC_GATEWAY_TX_MAX)) {
+        return;
+    }
+
+    for (index = 0U; index < EC_GATEWAY_RESP_CACHE_CAPACITY; ++index) {
+        ec_gateway_resp_cache_entry_t *entry = &g->resp_cache[index];
+
+        if (entry->occupied &&
+            (entry->key.task_id == key.task_id) &&
+            (entry->key.frame_seq == key.frame_seq) &&
+            (entry->key.payload_fingerprint == key.payload_fingerprint)) {
+            /* Same identity re-answered (e.g. ACK(ACCEPTED) then
+             * ACK(ACK_CONSUMED)): refresh the cached bytes. */
+            (void)memcpy(entry->frame, frame, len);
+            entry->len = len;
+            return;
+        }
+        if (!entry->occupied && (free_index == EC_GATEWAY_RESP_CACHE_CAPACITY)) {
+            free_index = index;
+        }
+    }
+
+    if (free_index != EC_GATEWAY_RESP_CACHE_CAPACITY) {
+        ec_gateway_resp_cache_entry_t *entry = &g->resp_cache[free_index];
+
+        entry->key = key;
+        (void)memcpy(entry->frame, frame, len);
+        entry->len = len;
+        entry->occupied = true;
+    }
+    /* Full: drop (fail-closed). Dedup capacity == cache capacity, so the
+     * dedup FULL -> FAULT_LOCK path fires first in practice. */
+}
+
+bool ec_gateway_resp_cache_lookup(const ec_gateway_t *g, ec_dedup_key_t key,
+                                  const uint8_t **frame, uint16_t *len)
+{
+    size_t index;
+
+    if ((g == NULL) || (frame == NULL) || (len == NULL)) return false;
+
+    for (index = 0U; index < EC_GATEWAY_RESP_CACHE_CAPACITY; ++index) {
+        const ec_gateway_resp_cache_entry_t *entry = &g->resp_cache[index];
+
+        if (entry->occupied &&
+            (entry->key.task_id == key.task_id) &&
+            (entry->key.frame_seq == key.frame_seq) &&
+            (entry->key.payload_fingerprint == key.payload_fingerprint)) {
+            *frame = entry->frame;
+            *len = entry->len;
+            return true;
+        }
+    }
+    return false;
+}
+
+void ec_gateway_resp_cache_clear(ec_gateway_t *g)
+{
+    size_t index;
+
+    if (g == NULL) return;
+
+    for (index = 0U; index < EC_GATEWAY_RESP_CACHE_CAPACITY; ++index) {
+        g->resp_cache[index].occupied = false;
+        g->resp_cache[index].len = 0U;
+    }
 }
 
 ec_transition_t ec_gateway_feed_byte(ec_gateway_t *g, uint8_t byte)
@@ -333,6 +484,9 @@ ec_transition_t ec_gateway_inject(ec_gateway_t *g,
         g->item_x_mm10 = 0;
         g->item_y_mm10 = 0;
         g->item_result_code = EC_RESULT_UNKNOWN;
+        /* Same window as dedup (proposal sec. 3.3.3 / E-7): a verified new
+         * round invalidates every cached response. */
+        ec_gateway_resp_cache_clear(g);
     }
 
     /* interface-contract sec. 6.1: success_count is 0..255, increments only

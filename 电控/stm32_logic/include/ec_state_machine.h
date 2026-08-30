@@ -62,6 +62,10 @@ typedef uint32_t ec_action_t;
 #define EC_ACTION_EMIT_ITEM_RESULT (UINT32_C(1) << 9U)
 #define EC_ACTION_RESEND_CACHED_RESPONSE (UINT32_C(1) << 10U)
 #define EC_ACTION_REJECT_NEW_TASK (UINT32_C(1) << 11U)
+/* ACK/NACK response actions (proposal 2026-08-29 sec. 3.3.4): the gateway
+ * materialises these as ACK/NACK frames and caches the response bytes. */
+#define EC_ACTION_ACK_ITEM_ACCEPTED (UINT32_C(1) << 12U)
+#define EC_ACTION_ACK_DISPLAY_CONSUMED (UINT32_C(1) << 13U)
 
 #define EC_ACTION_SAFE_LOCK                                                   \
     (EC_ACTION_STOP_ALL | EC_ACTION_DISABLE_DRIVERS | EC_ACTION_INHIBIT_POWER)
@@ -91,6 +95,12 @@ typedef struct {
     ec_dedup_key_t current_item;
     bool has_current_item;
     bool ack_consumed;
+    /* Order-gate watermark (proposal 2026-08-29 sec. 3.5): the frame_seq of
+     * the last accepted item this round. An ITEM_TASK whose frame_seq is
+     * <= this value and is not a dedup hit is stale/out-of-order and is
+     * rejected (aligned with Python state_machine/core.py). 0 = none
+     * accepted this round; cleared on a verified new round. */
+    uint32_t last_accepted_frame_seq;
 } ec_state_machine_t;
 
 void ec_sm_init(ec_state_machine_t *machine, ec_dedup_t *dedup);

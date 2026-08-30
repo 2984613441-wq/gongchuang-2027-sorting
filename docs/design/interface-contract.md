@@ -74,6 +74,25 @@
 | 0x05 | `ACK` | 双向 | 通用肯定应答 |
 | 0x06 | `NACK` | 双向 | 通用否定应答，含原因码 |
 
+**ACK / NACK 载荷（冻结于 2026-08-29，用户拍板 E-1/E-2；实现见 `电控/stm32_logic/src/ec_protocol.c`）**
+
+两者均为 **2 字节**：`原因码(1) + 目标序号(1)`。
+
+| 帧 | 原因码 | 名称 | 场景 |
+|----|--------|------|------|
+| ACK | `0x00` | `ACCEPTED` | STM32 接受 ITEM_TASK（目标序号 = 该件 target_seq） |
+| ACK | `0x01` | `ACK_CONSUMED` | STM32 消费首个有效 DISPLAY_ACK（目标序号 = 该 ACK 的 target_seq） |
+| NACK | `0x10` | `STALE_OR_ORDER` | 旧帧/乱序（frame_seq 不单调） |
+| NACK | `0x11` | `UNEXPECTED_MESSAGE` | 非本状态期望的消息类型 |
+| NACK | `0x12` | `SINGLE_TASK_ONLY` | 已有活动件时收到新 ITEM_TASK / 顺序门拒绝 |
+| NACK | `0x13` | `ACK_NOT_APPLICABLE` | DISPLAY_ACK 不匹配当前件/已消费/内容校验失败 |
+| NACK | `0x14` | `WRONG_ROUND` | 任务号与当前轮次不匹配 |
+| NACK | `0x15` | `TASK_REJECTED` | 通用拒绝（success_count==255 拒收新件等） |
+
+- 重复帧（同 `(task_id, frame_seq)`）→ **重发上次应答**（ACK/NACK 原样重放，不递增发送方序号），不得重复执行运动或投放（§7.2）。
+- 重发/应答均不更新 15 秒时间基准；无缓存应答时 fail-closed（不发射、不执行）。
+- 目标序号不可得时回显 `0xFF`。
+
 ### 4.2 视觉链命令（L1 — MaixCAM ↔ 树莓派）
 
 | 命令字 | 助记符 | 方向 | 说明 |

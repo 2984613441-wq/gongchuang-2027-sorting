@@ -194,3 +194,51 @@ bool ec_proto_decode_item_task(const uint8_t *payload, uint16_t payload_len,
     out->grip_angle = payload[7];
     return true;
 }
+
+bool ec_proto_encode_ack(uint8_t reason, uint8_t target_seq, uint8_t *out,
+                         uint16_t out_cap)
+{
+    if ((out == NULL) || (out_cap < EC_ACK_PAYLOAD_LEN)) return false;
+
+    out[0] = reason;
+    out[1] = target_seq;
+    return true;
+}
+
+bool ec_proto_decode_ack(const uint8_t *payload, uint16_t payload_len,
+                         uint8_t *reason, uint8_t *target_seq)
+{
+    if ((payload == NULL) || (reason == NULL) || (target_seq == NULL)) {
+        return false;
+    }
+    /* Exactly 2 bytes (== check), mirroring the DISPLAY_ACK codec so the C
+     * side cannot diverge from the Python codec's exact-length rule. */
+    if (payload_len != EC_ACK_PAYLOAD_LEN) return false;
+
+    *reason = payload[0];
+    *target_seq = payload[1];
+    return true;
+}
+
+bool ec_proto_encode_nack(uint8_t reason, uint8_t target_seq, uint8_t *out,
+                          uint16_t out_cap)
+{
+    if ((out == NULL) || (out_cap < EC_NACK_PAYLOAD_LEN)) return false;
+
+    out[0] = reason;
+    out[1] = target_seq;
+    return true;
+}
+
+bool ec_proto_decode_nack(const uint8_t *payload, uint16_t payload_len,
+                          uint8_t *reason, uint8_t *target_seq)
+{
+    if ((payload == NULL) || (reason == NULL) || (target_seq == NULL)) {
+        return false;
+    }
+    if (payload_len != EC_NACK_PAYLOAD_LEN) return false;
+
+    *reason = payload[0];
+    *target_seq = payload[1];
+    return true;
+}

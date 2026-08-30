@@ -63,6 +63,79 @@ static void boot_to_wait_task(ec_gateway_t *g)
     EXPECT_EQ_U32(EC_CMD_BARRIER_READY, tx_command(g));
 }
 
+/* Build and feed a standard PI-sourced ITEM_TASK frame (X = Y = 0). */
+static ec_transition_t feed_item_task(ec_gateway_t *g, uint16_t task_id,
+                                      uint16_t frame_seq, uint8_t target_seq,
+                                      uint8_t class_id, uint8_t image_id)
+{
+    ec_proto_frame_t frame;
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(&frame, 0, sizeof(frame));
+    frame.version = EC_PROTO_VERSION;
+    frame.sender = EC_DEVICE_PI;
+    frame.receiver = EC_DEVICE_STM32;
+    frame.task_id = task_id;
+    frame.frame_seq = frame_seq;
+    frame.command = EC_CMD_ITEM_TASK;
+    payload[0] = target_seq;
+    payload[1] = class_id;
+    payload[2] = image_id;
+    payload[3] = 0x00U;
+    payload[4] = 0x00U;
+    payload[5] = 0x00U;
+    payload[6] = 0x00U;
+    payload[7] = EC_PROTO_ITEM_TASK_ANGLE_NONE;
+    frame.payload = payload;
+    frame.payload_len = (uint16_t)sizeof(payload);
+    return feed_frame(g, &frame);
+}
+
+/* Drive the current item through safety-validated / motion-done / item-result /
+ * valid DISPLAY_ACK / barrier-verified, back to WAIT_TASK. */
+static void complete_item_cycle(ec_gateway_t *g)
+{
+    ec_gateway_event_t ev;
+    ec_proto_frame_t frame;
+    ec_proto_display_ack_t ack;
+    uint8_t ack_payload[EC_DISPLAY_ACK_PAYLOAD_LEN];
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_TASK_SAFETY_VALIDATED;
+    ev.content_validated = true;
+    (void)ec_gateway_inject(g, &ev);
+
+    ev.type = EC_EVENT_MOTION_DONE;
+    (void)ec_gateway_inject(g, &ev);
+
+    ev.type = EC_EVENT_ITEM_RESULT_RECORDED;
+    ev.result_code = EC_RESULT_SUCCESS;
+    (void)ec_gateway_inject(g, &ev);
+
+    /* Valid DISPLAY_ACK for the current item (content CRC rebuilt from the
+     * latched item context + success_count + result code). */
+    ack.target_seq = g->item_target_seq;
+    ack.render_result = EC_DISPLAY_ACK_RENDERED;
+    ack.display_crc32 = ec_proto_display_content_crc32(
+        g->item_target_seq, g->item_class_id, g->item_image_id,
+        g->success_count, g->item_result_code);
+    (void)ec_proto_encode_display_ack(&ack, ack_payload, sizeof(ack_payload));
+
+    (void)memset(&frame, 0, sizeof(frame));
+    frame.version = EC_PROTO_VERSION;
+    frame.sender = EC_DEVICE_PI;
+    frame.receiver = EC_DEVICE_STM32;
+    frame.task_id = (uint16_t)g->sm.round_id;
+    frame.frame_seq = 2U;
+    frame.command = EC_CMD_DISPLAY_ACK;
+    frame.payload = ack_payload;
+    frame.payload_len = (uint16_t)sizeof(ack_payload);
+    (void)feed_frame(g, &frame);
+
+    ev.type = EC_EVENT_BARRIER_AVOIDANCE_VERIFIED;
+    (void)ec_gateway_inject(g, &ev);
+}
+
 static void test_boot_and_frame_assembly(void)
 {
     ec_gateway_t g;
@@ -469,6 +542,277 @@ static void test_new_round_guards(void)
     EXPECT_EQ_U32(EC_RESULT_UNKNOWN, g.item_result_code);
 }
 
+static void test_response_frames(void)
+{
+    ec_gateway_t g;
+    ec_transition_t t;
+    ec_proto_frame_t out;
+    uint8_t ack_reason = 0U;
+    uint8_t ack_target = 0U;
+    uint8_t first_tx[EC_GATEWAY_TX_MAX];
+    size_t first_len;
+    uint16_t seq_after_accept;
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    TEST_CASE_BEGIN("C-GW-RESP-001");
+    /* Fresh ITEM_TASK -> ACK(ACCEPTED, item.target_seq) is emitted and the
+     * exact response bytes are cached (proposal sec. 3.4 / E-4). */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    EXPECT_EQ_U8(EC_CMD_ACK, tx_command(&g));
+    EXPECT_TRUE(ec_proto_decode(ec_gateway_tx_data(&g),
+                                ec_gateway_tx_len(&g), &out));
+    EXPECT_EQ_U32(EC_ACK_PAYLOAD_LEN, out.payload_len);
+    EXPECT_TRUE(ec_proto_decode_ack(out.payload, out.payload_len,
+                                    &ack_reason, &ack_target));
+    EXPECT_EQ_U8(EC_ACK_REASON_ACCEPTED, ack_reason);
+    EXPECT_EQ_U8(0x01U, ack_target);
+    EXPECT_EQ_U32(2U, g.tx_seq); /* BARRIER_READY(1) + ACK(2) */
+    first_len = ec_gateway_tx_len(&g);
+    EXPECT_TRUE(first_len <= sizeof(first_tx));
+    (void)memcpy(first_tx, ec_gateway_tx_data(&g), first_len);
+    seq_after_accept = g.tx_seq;
+
+    TEST_CASE_BEGIN("C-GW-RESP-002");
+    /* Duplicate ITEM_TASK (same task_id + frame_seq + payload) -> the cached
+     * ACK(ACCEPTED) is replayed byte-for-byte and tx_seq is NOT incremented
+     * (proposal sec. 3.2 rule 2 / E-5). */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    EXPECT_TRUE((t.actions & EC_ACTION_RESEND_CACHED_RESPONSE) != 0U);
+    EXPECT_EQ_U8(EC_CMD_ACK, tx_command(&g));
+    EXPECT_EQ_U32(seq_after_accept, g.tx_seq);
+    EXPECT_EQ_U32(first_len, ec_gateway_tx_len(&g));
+    EXPECT_TRUE(memcmp(first_tx, ec_gateway_tx_data(&g), first_len) == 0);
+}
+
+static void test_stale_and_order_gate(void)
+{
+    ec_gateway_t g;
+    ec_transition_t t;
+    ec_proto_frame_t out;
+    uint8_t nack_reason = 0U;
+    uint8_t nack_target = 0U;
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    /* Accept item seq 100, then complete the cycle back to WAIT_TASK so the
+     * order-gate watermark (last_accepted_frame_seq == 100) is set. */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    complete_item_cycle(&g);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, ec_gateway_state(&g));
+
+    TEST_CASE_BEGIN("C-GW-ORDER-001");
+    /* Stale frame: seq 50 <= last accepted 100 and never seen -> the order
+     * gate rejects it with NACK. Round matches, so the reason is
+     * SINGLE_TASK_ONLY (proposal sec. 3.4 / 3.6 item 4). */
+    t = feed_item_task(&g, 7U, 50U, 0x02U, 0x04U, 0x0AU);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, t.state);
+    EXPECT_TRUE((t.actions & EC_ACTION_REJECT_NEW_TASK) != 0U);
+    EXPECT_EQ_U8(EC_CMD_NACK, tx_command(&g));
+    EXPECT_TRUE(ec_proto_decode(ec_gateway_tx_data(&g),
+                                ec_gateway_tx_len(&g), &out));
+    EXPECT_TRUE(ec_proto_decode_nack(out.payload, out.payload_len,
+                                     &nack_reason, &nack_target));
+    EXPECT_EQ_U8(EC_NACK_SINGLE_TASK_ONLY, nack_reason);
+    EXPECT_EQ_U8(0xFFU, nack_target);
+
+    TEST_CASE_BEGIN("C-GW-ORDER-002");
+    /* Re-send of the same stale frame: dedup now holds it (recorded by the
+     * first observe) -> RESEND, but the response cache has no entry for it
+     * (it was rejected, never answered) -> fail-closed, nothing emitted. */
+    t = feed_item_task(&g, 7U, 50U, 0x02U, 0x04U, 0x0AU);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, t.state);
+    EXPECT_TRUE((t.actions & EC_ACTION_RESEND_CACHED_RESPONSE) != 0U);
+    EXPECT_EQ_U32(0U, ec_gateway_tx_len(&g));
+    EXPECT_EQ_U8(0xFFU, tx_command(&g));
+}
+
+static void test_display_ack_resend(void)
+{
+    ec_gateway_t g;
+    ec_transition_t t;
+    ec_gateway_event_t ev;
+    ec_proto_frame_t frame;
+    ec_proto_display_ack_t ack;
+    uint8_t ack_payload[EC_DISPLAY_ACK_PAYLOAD_LEN];
+    ec_proto_frame_t out;
+    uint8_t ack_reason = 0U;
+    uint8_t ack_target = 0U;
+    uint8_t first_tx[EC_GATEWAY_TX_MAX];
+    size_t first_len;
+    uint16_t seq_after_consume;
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    /* Accept item and drive to WAIT_DISPLAY_ACK. */
+    t = feed_item_task(&g, 7U, 1U, 0x02U, 0x04U, 0x05U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_TASK_SAFETY_VALIDATED;
+    ev.content_validated = true;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_MOTION_DONE;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_ITEM_RESULT_RECORDED;
+    ev.result_code = EC_RESULT_SUCCESS;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_DISPLAY_ACK, ec_gateway_state(&g));
+
+    /* Valid DISPLAY_ACK for the current item. */
+    ack.target_seq = 0x02U;
+    ack.render_result = EC_DISPLAY_ACK_RENDERED;
+    ack.display_crc32 = ec_proto_display_content_crc32(
+        0x02U, 0x04U, 0x05U, g.success_count, g.item_result_code);
+    EXPECT_TRUE(ec_proto_encode_display_ack(&ack, ack_payload,
+                                            sizeof(ack_payload)));
+
+    (void)memset(&frame, 0, sizeof(frame));
+    frame.version = EC_PROTO_VERSION;
+    frame.sender = EC_DEVICE_PI;
+    frame.receiver = EC_DEVICE_STM32;
+    frame.task_id = 7U;
+    frame.frame_seq = 2U;
+    frame.command = EC_CMD_DISPLAY_ACK;
+    frame.payload = ack_payload;
+    frame.payload_len = (uint16_t)sizeof(ack_payload);
+
+    TEST_CASE_BEGIN("C-GW-DACK-REPLAY-001");
+    /* First valid consumption -> ACK(ACK_CONSUMED, ack.target_seq) emitted and
+     * cached; PREPARE_BARRIER still set. */
+    t = feed_frame(&g, &frame);
+    EXPECT_EQ_U32(EC_STATE_PREPARE_BARRIER, t.state);
+    EXPECT_TRUE((t.actions & EC_ACTION_PREPARE_BARRIER) != 0U);
+    EXPECT_EQ_U8(EC_CMD_ACK, tx_command(&g));
+    EXPECT_TRUE(ec_proto_decode(ec_gateway_tx_data(&g),
+                                ec_gateway_tx_len(&g), &out));
+    EXPECT_TRUE(ec_proto_decode_ack(out.payload, out.payload_len,
+                                    &ack_reason, &ack_target));
+    EXPECT_EQ_U8(EC_ACK_REASON_ACK_CONSUMED, ack_reason);
+    EXPECT_EQ_U8(0x02U, ack_target);
+    first_len = ec_gateway_tx_len(&g);
+    EXPECT_TRUE(first_len <= sizeof(first_tx));
+    (void)memcpy(first_tx, ec_gateway_tx_data(&g), first_len);
+    seq_after_consume = g.tx_seq;
+
+    TEST_CASE_BEGIN("C-GW-DACK-REPLAY-002");
+    /* Repeat DISPLAY_ACK -> the cached ACK(ACK_CONSUMED) is replayed
+     * byte-for-byte without incrementing tx_seq; no second consumption, no
+     * re-release (proposal sec. 3.3.4 / 3.5 idempotency). */
+    t = feed_frame(&g, &frame);
+    EXPECT_EQ_U32(EC_STATE_PREPARE_BARRIER, t.state);
+    EXPECT_TRUE((t.actions & EC_ACTION_RESEND_CACHED_RESPONSE) != 0U);
+    EXPECT_EQ_U8(EC_CMD_ACK, tx_command(&g));
+    EXPECT_EQ_U32(seq_after_consume, g.tx_seq);
+    EXPECT_EQ_U32(first_len, ec_gateway_tx_len(&g));
+    EXPECT_TRUE(memcmp(first_tx, ec_gateway_tx_data(&g), first_len) == 0);
+}
+
+static void test_conflict_at_gateway(void)
+{
+    ec_gateway_t g;
+    ec_transition_t t;
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    /* Accept identity (7, 100) with payload A, then return to WAIT_TASK. */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    complete_item_cycle(&g);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, ec_gateway_state(&g));
+
+    TEST_CASE_BEGIN("C-GW-CONFLICT-001");
+    /* Same (task_id, frame_seq) with a DIFFERENT payload -> dedup CONFLICT ->
+     * FAULT_LOCK (interface-contract sec. 5.2); the response cache must not
+     * mask the conflict. */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x04U, 0x09U); /* class differs */
+    EXPECT_EQ_U32(EC_STATE_FAULT_LOCK, t.state);
+    EXPECT_EQ_U32(EC_FAULT_DEDUP_CONFLICT, t.fault_reason);
+    EXPECT_TRUE((t.actions & EC_ACTION_SAFE_LOCK) != 0U);
+}
+
+static void test_cache_cleared_on_new_round(void)
+{
+    ec_gateway_t g;
+    ec_gateway_event_t ev;
+    ec_transition_t t;
+    ec_proto_frame_t out;
+    uint8_t ack_reason = 0U;
+    uint8_t ack_target = 0U;
+    uint8_t nack_reason = 0U;
+    uint8_t nack_target = 0U;
+    uint16_t seq_before;
+
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+
+    /* Round 7: accept (7, 100) -> ACK(ACCEPTED) cached. */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+
+    TEST_CASE_BEGIN("C-GW-CACHE-CLEAR-001");
+    /* Fault, then a verified new round (8): dedup + response cache + order
+     * watermark are all cleared together (proposal sec. 3.3.3 / E-7). */
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_EMERGENCY_STOP;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_FAULT_LOCK, ec_gateway_state(&g));
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED;
+    ev.round_id = 8U;
+    ev.round_closed = true;
+    ev.danger_area_clear = true;
+    ev.estop_released = true;
+    t = ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_POWER_ON, t.state);
+
+    ev.type = EC_EVENT_POST_PASSED;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_HOMING_PASSED;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_BARRIER_AVOIDANCE_VERIFIED;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, ec_gateway_state(&g));
+
+    TEST_CASE_BEGIN("C-GW-CACHE-CLEAR-002");
+    /* Same seq as the old round, but the new round's task_id: dedup is
+     * cleared, so it is NEW -> a fresh ACK(ACCEPTED) is emitted (tx_seq
+     * increments), NOT a replay of the old cached ACK. */
+    seq_before = g.tx_seq;
+    t = feed_item_task(&g, 8U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    EXPECT_EQ_U8(EC_CMD_ACK, tx_command(&g));
+    EXPECT_TRUE(ec_proto_decode(ec_gateway_tx_data(&g),
+                                ec_gateway_tx_len(&g), &out));
+    EXPECT_TRUE(ec_proto_decode_ack(out.payload, out.payload_len,
+                                    &ack_reason, &ack_target));
+    EXPECT_EQ_U8(EC_ACK_REASON_ACCEPTED, ack_reason);
+    EXPECT_EQ_U8(0x01U, ack_target);
+    EXPECT_EQ_U32(seq_before + 1U, g.tx_seq); /* fresh emit, not a replay */
+
+    TEST_CASE_BEGIN("C-GW-CACHE-CLEAR-003");
+    /* Old task_id (7) after the new round: the round gate rejects with
+     * NACK(WRONG_ROUND) - the stale cached ACK is never replayed. */
+    t = feed_item_task(&g, 7U, 100U, 0x01U, 0x03U, 0x09U);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state); /* round-8 item ongoing */
+    EXPECT_TRUE((t.actions & EC_ACTION_REJECT_NEW_TASK) != 0U);
+    EXPECT_EQ_U8(EC_CMD_NACK, tx_command(&g));
+    EXPECT_TRUE(ec_proto_decode(ec_gateway_tx_data(&g),
+                                ec_gateway_tx_len(&g), &out));
+    EXPECT_TRUE(ec_proto_decode_nack(out.payload, out.payload_len,
+                                     &nack_reason, &nack_target));
+    EXPECT_EQ_U8(EC_NACK_WRONG_ROUND, nack_reason);
+    EXPECT_EQ_U8(0xFFU, nack_target);
+}
+
 void test_protocol_gateway(void)
 {
     test_boot_and_frame_assembly();
@@ -477,4 +821,9 @@ void test_protocol_gateway(void)
     test_crc_rejection_and_round_gate();
     test_result_idempotency();
     test_new_round_guards();
+    test_response_frames();
+    test_stale_and_order_gate();
+    test_display_ack_resend();
+    test_conflict_at_gateway();
+    test_cache_cleared_on_new_round();
 }

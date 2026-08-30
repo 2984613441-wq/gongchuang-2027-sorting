@@ -110,14 +110,43 @@ bool ec_proto_encode_display_ack(const ec_proto_display_ack_t *ack,
 bool ec_proto_decode_display_ack(const uint8_t *payload, uint16_t payload_len,
                                  ec_proto_display_ack_t *out);
 
+/* --- ACK / NACK payloads (0x05 / 0x06) - FROZEN by user adjudication
+ * 2026-08-29 (docs/design/2026-08-29-ack-response-definition-proposal.md,
+ * unresolved items E-1/E-2): reason(1) + target_seq(1) = 2 bytes.
+ * ACK reasons: ACCEPTED (ITEM_TASK accepted), ACK_CONSUMED (DISPLAY_ACK
+ * consumed). NACK reasons: STALE_OR_ORDER / UNEXPECTED_MESSAGE /
+ * SINGLE_TASK_ONLY / ACK_NOT_APPLICABLE / WRONG_ROUND / TASK_REJECTED.
+ * target_seq echoes the item identity; 0xFF when unavailable. */
+#define EC_ACK_PAYLOAD_LEN 2U
+#define EC_NACK_PAYLOAD_LEN 2U
+
+#define EC_ACK_REASON_ACCEPTED UINT8_C(0x00)
+#define EC_ACK_REASON_ACK_CONSUMED UINT8_C(0x01)
+
+#define EC_NACK_STALE_OR_ORDER UINT8_C(0x10)
+#define EC_NACK_UNEXPECTED_MESSAGE UINT8_C(0x11)
+#define EC_NACK_SINGLE_TASK_ONLY UINT8_C(0x12)
+#define EC_NACK_ACK_NOT_APPLICABLE UINT8_C(0x13)
+#define EC_NACK_WRONG_ROUND UINT8_C(0x14)
+#define EC_NACK_TASK_REJECTED UINT8_C(0x15)
+
+bool ec_proto_encode_ack(uint8_t reason, uint8_t target_seq, uint8_t *out,
+                         uint16_t out_cap);
+bool ec_proto_decode_ack(const uint8_t *payload, uint16_t payload_len,
+                         uint8_t *reason, uint8_t *target_seq);
+bool ec_proto_encode_nack(uint8_t reason, uint8_t target_seq, uint8_t *out,
+                          uint16_t out_cap);
+bool ec_proto_decode_nack(const uint8_t *payload, uint16_t payload_len,
+                          uint8_t *reason, uint8_t *target_seq);
+
 /* --- ITEM_TASK payload (0x21) - FROZEN (interface-contract.md sec. 5.2) ---
  * target_seq(1) + class_id(1) + image_id(1)
  * + X(2, int16 big-endian, 0.1 mm) + Y(2, int16 big-endian, 0.1 mm)
  * + grip_angle(1, always 0xFF) = 8 bytes.
- * X/Y origin = device center; |value| > 1350 (+-135.0 mm) is rejected.
+ * X/Y origin = device center; |value| > 1450 (+-145.0 mm) is rejected.
  * grip_angle must be 0xFF (claw does not rotate); 0..180 unused this round. */
 #define EC_PROTO_ITEM_TASK_PAYLOAD_LEN 8U
-#define EC_PROTO_ITEM_TASK_X_LIMIT 1350
+#define EC_PROTO_ITEM_TASK_X_LIMIT 1450
 #define EC_PROTO_ITEM_TASK_ANGLE_NONE UINT8_C(0xFF)
 
 typedef struct {

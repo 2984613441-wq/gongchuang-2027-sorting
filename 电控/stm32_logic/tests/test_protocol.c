@@ -236,4 +236,67 @@ void test_protocol(void)
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc,
                                                EC_PROTO_ITEM_TASK_PAYLOAD_LEN - 1U));
     }
+
+    /* ACK payload codec (proposal 2026-08-29 sec. 3.3.1, E-1):
+     * reason(1) + target_seq(1). */
+    TEST_CASE_BEGIN("P-ACK-001");
+    {
+        uint8_t enc[EC_ACK_PAYLOAD_LEN];
+        uint8_t reason = 0U;
+        uint8_t target = 0U;
+
+        EXPECT_TRUE(ec_proto_encode_ack(EC_ACK_REASON_ACCEPTED, 0x03U,
+                                        enc, sizeof(enc)));
+        EXPECT_EQ_U8(EC_ACK_REASON_ACCEPTED, enc[0]);
+        EXPECT_EQ_U8(0x03U, enc[1]);
+        EXPECT_TRUE(ec_proto_decode_ack(enc, sizeof(enc), &reason, &target));
+        EXPECT_EQ_U8(EC_ACK_REASON_ACCEPTED, reason);
+        EXPECT_EQ_U8(0x03U, target);
+
+        enc[0] = EC_ACK_REASON_ACK_CONSUMED;
+        EXPECT_TRUE(ec_proto_decode_ack(enc, sizeof(enc), &reason, &target));
+        EXPECT_EQ_U8(EC_ACK_REASON_ACK_CONSUMED, reason);
+        /* Exact 2-byte rule (== check) and NULL guards. */
+        EXPECT_FALSE(ec_proto_decode_ack(enc, sizeof(enc) - 1U, &reason,
+                                         &target));
+        EXPECT_FALSE(ec_proto_decode_ack(enc, sizeof(enc) + 1U, &reason,
+                                         &target));
+        EXPECT_FALSE(ec_proto_decode_ack(enc, sizeof(enc), NULL, &target));
+        EXPECT_FALSE(ec_proto_decode_ack(enc, sizeof(enc), &reason, NULL));
+        EXPECT_FALSE(ec_proto_encode_ack(EC_ACK_REASON_ACCEPTED, 0x01U,
+                                         enc, sizeof(enc) - 1U));
+        EXPECT_FALSE(ec_proto_encode_ack(EC_ACK_REASON_ACCEPTED, 0x01U,
+                                         NULL, sizeof(enc)));
+    }
+
+    /* NACK payload codec (proposal 2026-08-29 sec. 3.3.2, E-2):
+     * reason(1) + target_seq(1); reason codes 0x10..0x15. */
+    TEST_CASE_BEGIN("P-NACK-001");
+    {
+        uint8_t enc[EC_NACK_PAYLOAD_LEN];
+        uint8_t reason = 0U;
+        uint8_t target = 0U;
+
+        EXPECT_TRUE(ec_proto_encode_nack(EC_NACK_TASK_REJECTED, 0x07U,
+                                         enc, sizeof(enc)));
+        EXPECT_EQ_U8(EC_NACK_TASK_REJECTED, enc[0]);
+        EXPECT_EQ_U8(0x07U, enc[1]);
+        EXPECT_TRUE(ec_proto_decode_nack(enc, sizeof(enc), &reason, &target));
+        EXPECT_EQ_U8(EC_NACK_TASK_REJECTED, reason);
+        EXPECT_EQ_U8(0x07U, target);
+
+        enc[0] = EC_NACK_STALE_OR_ORDER;
+        EXPECT_TRUE(ec_proto_decode_nack(enc, sizeof(enc), &reason, &target));
+        EXPECT_EQ_U8(EC_NACK_STALE_OR_ORDER, reason);
+        EXPECT_FALSE(ec_proto_decode_nack(enc, sizeof(enc) - 1U, &reason,
+                                          &target));
+        EXPECT_FALSE(ec_proto_decode_nack(enc, sizeof(enc) + 1U, &reason,
+                                          &target));
+        EXPECT_FALSE(ec_proto_decode_nack(enc, sizeof(enc), NULL, &target));
+        EXPECT_FALSE(ec_proto_decode_nack(enc, sizeof(enc), &reason, NULL));
+        EXPECT_FALSE(ec_proto_encode_nack(EC_NACK_WRONG_ROUND, 0xFFU,
+                                          enc, sizeof(enc) - 1U));
+        EXPECT_FALSE(ec_proto_encode_nack(EC_NACK_WRONG_ROUND, 0xFFU,
+                                          NULL, sizeof(enc)));
+    }
 }

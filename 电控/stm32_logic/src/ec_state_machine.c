@@ -49,6 +49,7 @@ void ec_sm_init(ec_state_machine_t *machine, ec_dedup_t *dedup)
     machine->current_item = (ec_dedup_key_t){0U, 0U, 0U};
     machine->has_current_item = false;
     machine->ack_consumed = false;
+    machine->last_accepted_frame_seq = 0U;
 }
 
 ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
@@ -69,6 +70,7 @@ ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
             event->estop_released && (event->round_id != machine->round_id)) {
             ec_dedup_clear_for_verified_new_round(machine->dedup);
             machine->round_id = event->round_id;
+            machine->last_accepted_frame_seq = 0U;
             machine->state = EC_STATE_POWER_ON;
             machine->fault_reason = EC_FAULT_NONE;
             machine->actions = EC_ACTION_BEGIN_POST;
@@ -126,12 +128,23 @@ ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
         } else if ((result == EC_DEDUP_FULL) ||
                    (result == EC_DEDUP_INVALID)) {
             lock_machine(machine, EC_FAULT_DEDUP_CAPACITY_EXHAUSTED);
-        } else if ((result == EC_DEDUP_NEW) &&
-                   (machine->state == EC_STATE_WAIT_TASK)) {
-            machine->current_item = event->identity;
-            machine->has_current_item = true;
-            machine->ack_consumed = false;
-            machine->state = EC_STATE_VALIDATE_TASK;
+        } else if (result == EC_DEDUP_NEW) {
+            /* Order gate (aligned with Python state_machine/core.py): a frame
+             * whose seq is <= the last accepted seq is stale/out-of-order and
+             * is rejected. Dedup DUPLICATE takes priority (handled above), so
+             * this gate only catches old-but-never-seen identities. */
+            if ((machine->last_accepted_frame_seq != 0U) &&
+                (event->identity.frame_seq <=
+                 machine->last_accepted_frame_seq)) {
+                machine->actions = EC_ACTION_REJECT_NEW_TASK;
+            } else if (machine->state == EC_STATE_WAIT_TASK) {
+                machine->current_item = event->identity;
+                machine->has_current_item = true;
+                machine->ack_consumed = false;
+                machine->last_accepted_frame_seq = event->identity.frame_seq;
+                machine->state = EC_STATE_VALIDATE_TASK;
+                machine->actions = EC_ACTION_ACK_ITEM_ACCEPTED;
+            }
         }
     } else if ((machine->state == EC_STATE_VALIDATE_TASK) &&
                (event->type == EC_EVENT_TASK_SAFETY_VALIDATED) &&
@@ -154,8 +167,16 @@ ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
                event->content_validated &&
                matches_current_context(machine, event)) {
         machine->state = EC_STATE_PREPARE_BARRIER;
-        machine->actions = EC_ACTION_PREPARE_BARRIER;
+        machine->actions =
+            EC_ACTION_PREPARE_BARRIER | EC_ACTION_ACK_DISPLAY_CONSUMED;
         machine->ack_consumed = true;
+    } else if ((event->type == EC_EVENT_DISPLAY_ACK_VALIDATED) &&
+               matches_current_context(machine, event) &&
+               machine->ack_consumed) {
+        /* Repeat DISPLAY_ACK for the already-consumed current item: only
+         * re-send the cached state, never consume twice (state-machine
+         * pseudocode "duplicate ACK -> resend only"). */
+        machine->actions = EC_ACTION_RESEND_CACHED_RESPONSE;
     }
     return snapshot(machine);
 }
