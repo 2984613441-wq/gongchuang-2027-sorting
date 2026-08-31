@@ -13,13 +13,12 @@
 2. **通用推理契约**：配置、检测对象、过滤/NMS、坐标转换、整批识别、单目标复核和诊断 JSON，位于 `src/sorting_vision/`。
 3. **Raspberry Pi 适配层**：可使用 Ultralytics、ONNX Runtime 或以后验证过的其他运行时；V0.1 提供可选 Ultralytics 适配边界。
 4. **MaixCAM 适配层**：已落地 `MaixPyYoloBackend`（MaixPy 4.12.5，`maix.nn` 的
-   YOLOv5/v8/11），并保留 `MaixCamKmodelBackend` 作为纯注入边界；模型家族与输入
-   尺寸待 MaixHub 导出后冻结。
+   YOLOv5/v8/11），支持 YOLO11n / YOLOv8n / YOLOv5u。
 
 视觉推理端已确认为 MaixCAM（MaixPy 4.12.5，摄像头 GC4653，无 IMU），树莓派保持
 调度/显示职责；部署事实见 `docs/design/2026-08-23-maixcam-deployment-facts.md`。
-模型家族与输入尺寸仍未冻结，待 MaixHub 训练导出后确定。本轮不改写冻结架构或通信
-协议。
+**模型家族与输入尺寸已冻结**（2026-08-25）：YOLO11n，输入 448×448，MaixHub 任务 317458。
+本轮不改写冻结架构或通信协议。
 
 ## V0.1 模块
 
