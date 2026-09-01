@@ -1,0 +1,7 @@
+cube
+cuboid
+cylinder
+hexagonal_prism
+pentagonal_prism
+square_pyramid
+triangular_prism

@@ -44,7 +44,7 @@ class VisionLoopConfig:
     )
     input_width: int = 448
     input_height: int = 448
-    confidence: float = 0.35
+    confidence: float = 0.50
     hmirror: bool = False
     vflip: bool = False
     rotation: int = 0

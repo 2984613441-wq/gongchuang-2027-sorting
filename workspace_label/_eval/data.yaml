@@ -1,0 +1,11 @@
+path: "C:/Users/29845/Desktop/工创赛/workspace_label/_eval"
+train: images/val
+val: images/val
+names:
+  0: "cube"
+  1: "cuboid"
+  2: "cylinder"
+  3: "hexagonal_prism"
+  4: "pentagonal_prism"
+  5: "square_pyramid"
+  6: "triangular_prism"
