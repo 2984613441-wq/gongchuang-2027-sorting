@@ -37,13 +37,13 @@ def task_context(
     task_id: int = ROUND_TASK_ID,
     frame_seq: int = 11,
     target_seq: int = 1,
-    image_id: int = 3,
+    image_id: int = 2,
 ) -> ItemTaskContext:
     return ItemTaskContext(
         "round-new",
         task_id,
         frame_seq,
-        # grip_angle must be 0xFF on the wire: the claw does not rotate.
+        # image_id == class_id（冻结 1:1）；grip_angle 恒 0xFF（夹爪不旋转）。
         ItemTaskPayload(target_seq, 2, image_id, 0, 0, 0xFF),
     )
 

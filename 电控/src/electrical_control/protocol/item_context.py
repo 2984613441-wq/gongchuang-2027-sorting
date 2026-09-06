@@ -75,9 +75,9 @@ def decode_item_task_identity_prefix(payload: bytes) -> tuple[ItemTaskIdentity, 
 
 
 # Frozen ITEM_TASK wire constraints (interface-contract sec. 5.2): X/Y origin
-# = device center, units 0.1 mm, |value| > 1350 (+-135.0 mm) is out of range;
+# = device center, units 0.1 mm, |value| > 1450 (+-145.0 mm) is out of range;
 # grip_angle is always 0xFF (claw does not rotate; 0..180 unused this round).
-_ITEM_TASK_X_LIMIT = 1350
+_ITEM_TASK_X_LIMIT = 1450
 _ITEM_TASK_ANGLE_NONE = 0xFF
 
 
@@ -104,6 +104,10 @@ def encode_item_task_payload(item: ItemTaskPayload) -> bytes:
     _u8("grip_angle", item.grip_angle)
     if item.grip_angle != _ITEM_TASK_ANGLE_NONE:
         raise PayloadError("grip_angle must be 0xFF (claw does not rotate)")
+    if item.image_id != item.class_id:
+        raise PayloadError("image_id must equal class_id (frozen 1:1 invariant)")
+    if not 1 <= item.target_seq <= 255:
+        raise PayloadError("target_seq must be within [1, 255]")
     return (
         bytes((item.target_seq, item.class_id, item.image_id))
         + x.to_bytes(2, "big", signed=True)
@@ -128,6 +132,8 @@ def decode_item_task_payload(payload: bytes) -> ItemTaskPayload:
         raise PayloadError(f"x_position out of range (+-{_ITEM_TASK_X_LIMIT})")
     if not -_ITEM_TASK_X_LIMIT <= y <= _ITEM_TASK_X_LIMIT:
         raise PayloadError(f"y_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+    if payload[2] != payload[1]:
+        raise PayloadError("image_id must equal class_id (frozen 1:1 invariant)")
     return ItemTaskPayload(
         target_seq=payload[0],
         class_id=payload[1],

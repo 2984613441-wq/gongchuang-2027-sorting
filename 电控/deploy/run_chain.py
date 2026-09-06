@@ -49,6 +49,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -68,6 +69,10 @@ from electrical_control.rpi import (
     VerifiedNewRound,
     VisionTarget,
     build_item_task_queue,
+)
+from electrical_control.rpi.socket_vision_source import (
+    SocketVisionSource,
+    vision_listener,
 )
 from electrical_control.rpi.display import build_display_view
 from electrical_control.rpi.display_hdmi import HdmiDisplayRenderer
@@ -98,9 +103,22 @@ _WQY_ZENHEI_TTC = "/usr/share/fonts/truetype/wqy/wqy-zenhei/wqy-zenhei.ttc"
 # DEMO 夹具（仅 --fake-link 开发/冒烟模式使用；全部为演示数据，不是冻结参数）
 # ---------------------------------------------------------------------------
 DEMO_NAMES = {2: "红方柱", 4: "蓝圆柱"}  # class_id -> 货物名称（模拟本地 TF 卡名称表）
-DEMO_IMAGE_IDS = {2: 102, 4: 104}  # class_id -> image_id（模拟本地图片 ID 表）
+DEMO_IMAGE_IDS = {2: 2, 4: 4}  # class_id -> image_id（冻结 image_id == class_id 1:1）
 # box_id -> (x, y) 落料点，单位 0.1mm；注入后 ITEM_TASK payload 才可序列化（grip_angle=0xFF）
 DEMO_DROP_POINTS = {1: (100, 200), 2: (300, 400)}
+
+# 桥接打通阶段的占位落点（单位 0.1mm，落在 ±145mm 内）：任意 box 落到同一个
+# 固定安全点，只为让 ITEM_TASK 的 grip_angle=0xFF 成立、真帧可发。标定后替换
+# 为真实 6 盒坐标，只换这一张表。
+BRIDGE_DROP_POINT = (100, 200)
+
+
+def _bridge_drop_point(box_id: int) -> tuple[int, int]:
+    return BRIDGE_DROP_POINT
+
+
+def _identity_image_id(class_id: int) -> int:
+    return class_id  # image_id == class_id 冻结 1:1
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +344,21 @@ def build_placeholder_source(*, round_id: str, round_task_id: int, demo: bool) -
     return FakeTaskSource(contexts)
 
 
+def build_socket_source(*, round_id: str, round_task_id: int) -> SocketVisionSource:
+    """真实视觉源：SocketVisionSource + 占位落点表 + identity image_id。
+
+    box_id = class_id（class_id 已编码颜色×形状，用户拍板）；落点用固定占位点，
+    标定后替换 drop_point_for_box。task_id 用本轮 round_task_id，ingest 会拒绝
+    不匹配/为 0 的 batch（fail-closed）。
+    """
+    return SocketVisionSource(
+        round_id=round_id,
+        task_id=round_task_id,
+        image_id_for_class=_identity_image_id,
+        drop_point_for_box=_bridge_drop_point,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 模拟 STM32（仅 --fake-link 开发/冒烟用）
 # ---------------------------------------------------------------------------
@@ -454,9 +487,23 @@ def run(args: argparse.Namespace) -> int:
     outbound = OutboundGateway(  # 出站：ITEM_TASK / DISPLAY_ACK（task_id 与 round 严格校验）
         link, config=OutboundConfig(round_task_id=round_task_id)
     )
-    scheduler.load_source(
-        build_placeholder_source(round_id=round_id, round_task_id=round_task_id, demo=demo)
-    )
+    if demo:
+        scheduler.load_source(
+            build_placeholder_source(round_id=round_id, round_task_id=round_task_id, demo=demo)
+        )
+    else:
+        source = build_socket_source(round_id=round_id, round_task_id=round_task_id)
+        scheduler.load_source(source)
+        stop_event = threading.Event()
+        listener = threading.Thread(
+            target=vision_listener,
+            args=(source,),
+            kwargs={"stop_event": stop_event},
+            name="vision-listener",
+            daemon=True,
+        )
+        listener.start()
+        logger.info("视觉监听线程已启动: 0.0.0.0:8765")
 
     if args.start_round or demo:
         # 真实部署中三个独立权威（操作员确认 / STM32 就绪 / 双节点初始化）应来自
@@ -517,8 +564,10 @@ def run(args: argparse.Namespace) -> int:
                 cl.record(STAGE, now=time.monotonic(), detail="ESTOP：本轮结束")
                 logger.warning("急停已激活，本轮结束，链路停止")
                 return 0
-            logger.info("任务源已耗尽（当前为占位视觉源），本轮结束")
-            break
+            if demo:
+                logger.info("任务源已耗尽（demo 队列），本轮结束")
+                break
+            # 真实模式：SocketVisionSource 是动态源，暂无任务时继续等待新物体。
 
         # 2) 轮询入站：整帧交给网关分发
         frame = link.receive()
@@ -526,7 +575,7 @@ def run(args: argparse.Namespace) -> int:
             if time.monotonic() - last_status > 10.0:
                 logger.info("空闲: state=%s success=%d", scheduler.state.name, scheduler.success_count)
                 last_status = time.monotonic()
-            time.sleep(0.05)  # 轮询节流（~20Hz；PySerialLink.receive 自带 0.05s 超时）
+            time.sleep(0.005)  # 轮询节流（压缩空闲周期，降低视觉→串口转发延迟）
             continue
 
         outcome = gateway.feed_frame(frame)

@@ -11,20 +11,86 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 
-from electrical_control.protocol import ItemTaskPayload
+from electrical_control.protocol import ItemTaskPayload, PayloadError
 
 
 @dataclass(frozen=True, slots=True)
 class VisionTarget:
     target_seq: int
     class_id: int
-    box_id: int | None = None
+    confidence: int = 0  # 0-100（BATCH_TARGETS 线置信度，去抖/排序依据）
+    pixel_x: int = 0  # 中心点像素 X（去重/排序/复核定位，不进入运动）
+    pixel_y: int = 0  # 中心点像素 Y
+    box_id: int | None = None  # (color, shape) -> box_id 映射结果（未映射时 None）
 
 
 @dataclass(frozen=True, slots=True)
 class BatchTargets:
     task_id: int
     targets: tuple[VisionTarget, ...]
+
+
+# Frozen active class-id set (interface-contract §5.2): 1=cuboid absent this round.
+ACTIVE_CLASS_IDS = frozenset({0, 2, 3, 4, 5, 6})
+# BATCH_TARGETS per-target wire size (interface-contract §5.1, frozen 2026-09-01).
+_BATCH_TARGET_BYTES = 7
+_BATCH_ANGLE_NONE = 0xFF
+
+
+def parse_batch_targets(data: bytes) -> BatchTargets:
+    """Parse a frozen BATCH_TARGETS data region (big-endian 7 bytes/target).
+
+    Layout (interface-contract §5.1):
+        target_count(1) + task_id(2, BE) + target[N]
+    Each target:
+        class_id(1) + confidence(1, 0-100) + X(2, BE) + Y(2, BE) + angle(1, 0xFF)
+
+    X/Y are center pixel coordinates — not calibrated, used only for
+    dedup/sort/reacquire localization and never fed into motion. The
+    ``angle`` byte must be ``0xFF`` (claw does not rotate).
+    """
+
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise PayloadError("BATCH_TARGETS data must be bytes-like")
+    data = bytes(data)
+    if len(data) < 3:
+        raise PayloadError("BATCH_TARGETS data is shorter than its 3-byte header")
+    target_count = data[0]
+    task_id = int.from_bytes(data[1:3], "big")
+    expected = 3 + target_count * _BATCH_TARGET_BYTES
+    if len(data) != expected:
+        raise PayloadError(
+            f"BATCH_TARGETS data length {len(data)} != expected {expected} "
+            f"for {target_count} target(s)"
+        )
+
+    targets: list[VisionTarget] = []
+    for index in range(target_count):
+        offset = 3 + index * _BATCH_TARGET_BYTES
+        class_id = data[offset]
+        confidence = data[offset + 1]
+        pixel_x = int.from_bytes(data[offset + 2 : offset + 4], "big")
+        pixel_y = int.from_bytes(data[offset + 4 : offset + 6], "big")
+        angle = data[offset + 6]
+
+        if class_id not in ACTIVE_CLASS_IDS:
+            raise PayloadError(
+                f"class_id {class_id} not in frozen active set {sorted(ACTIVE_CLASS_IDS)}"
+            )
+        if confidence > 100:
+            raise PayloadError(f"confidence {confidence} out of range (0-100)")
+        if angle != _BATCH_ANGLE_NONE:
+            raise PayloadError("grip angle must be 0xFF (claw does not rotate)")
+        targets.append(
+            VisionTarget(
+                target_seq=index + 1,
+                class_id=class_id,
+                confidence=confidence,
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+            )
+        )
+    return BatchTargets(task_id=task_id, targets=tuple(targets))
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +101,7 @@ class TargetReacquireResponse:
     class_id: int | None = None
 
 
-ImageIdMap = Callable[[int], int]
+ImageIdMap = Callable[[int], int]  # deprecated: image_id is frozen to equal class_id
 DropPointForBox = Callable[[int], tuple[int, int]]
 
 
@@ -113,4 +179,5 @@ __all__ = [
     "TargetReacquireResponse",
     "VisionTarget",
     "build_item_task_queue",
+    "parse_batch_targets",
 ]
