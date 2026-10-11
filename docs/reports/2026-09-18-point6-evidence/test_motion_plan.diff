@@ -1,0 +1,227 @@
+--- test_motion_plan.before.c
++++ test_motion_plan.c
+@@ -53,10 +53,10 @@
+ 
+ /* —— 2026-09-18 生产路径期望 ————————————————————————————————
+  * X/Y 可达域为 X±950 / Y±975 (0.1mm)，原点 = 装置中心，
+- * HOME = (-900, -920)，PICK = (0, 0)，80 步/mm（steps = |Δmm10| × 8）。
++ * HOME = (0, 0)，PICK = (0, 0)，80 步/mm（steps = |Δmm10| × 8）。
+  * 每个原 MOVE_XY 都应拆成连续的单轴 MOVE；默认先 X 后 Y。
+- * ⚠️ HOME 一改（本次 -800 → -900/-920），HOME→PICK 与 PLACE→HOME 两段步数全变；
+- *    只有 PICK→PLACE 那一段与 HOME 无关、保持原值。 */
++ * ⚠️ HOME 改为上电原点后，HOME→PICK 两个零位移腿省略，其余步骤前移两格；
++ *    PICK→PLACE 步数不变，PLACE→HOME 必须重算。夹爪仍先闭合、搬运后张开。 */
+ static void assert_move(const ec_axis_step_t *step, ec_axis_t axis,
+                         uint32_t steps, ec_direction_t direction)
+ {
+@@ -75,55 +75,48 @@
+ 
+     TEST_ASSERT(EC_AXIS_PICK_PLACE_STEP_COUNT >= 11U);
+ 
+-    /* P3：抓取点已是参数；(0,0) 正是旧常量 EC_MOTION_PICK_X/Y_MM10 的值，
+-     * 所以下面所有数值期望一个都不用改（常量→参数是行为等价的改写）。 */
++    /* PICK 与 HOME 重合：先闭合夹爪，再向落点移动。 */
+     TEST_ASSERT(ec_motion_plan_build(&prog, 0, 0, 800, 500)); /* 落点 +80.0mm, +50.0mm */
+ 
+-    /* HOME -> PICK: X and Y are separate moves, followed by 闭合(夹住)。
+-     * delta = (0,0) - (-900,-920) = +900,+920 -> 7200,7360 steps。
++    /* HOME -> PICK: delta = (0,0)，两腿都省略，闭合动作成为 step[0]。
+      * 2026-09-18：Z 动作由「每位置一对降-升」改为「取料点只闭合、落料点只张开」 ——
+      * 夹爪是单自由度机构（张开=抬起、闭合=下压），闭合后能稳定夹持并保持，
+      * XY 移动期间舵机无需动作；原实现在取料点闭合后又张开，等于当场放掉物体。 */
+-#if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[0], EC_AXIS_X, 7200U, EC_MOTION_POSITIVE_X_DIR);
+-    assert_move(&prog.step[1], EC_AXIS_Y, 7360U, EC_MOTION_POSITIVE_Y_DIR);
+-#else
+-    assert_move(&prog.step[0], EC_AXIS_Y, 7360U, EC_MOTION_POSITIVE_Y_DIR);
+-    assert_move(&prog.step[1], EC_AXIS_X, 7200U, EC_MOTION_POSITIVE_X_DIR);
+-#endif
+-    TEST_ASSERT(prog.step[2].kind == EC_AXIS_STEP_Z_SERVO);
+-    TEST_ASSERT(prog.step[2].servo_pulse_us == EC_AXIS_Z_DOWN_US);   /* 闭合：夹住 */
++    TEST_ASSERT(prog.step[0].kind == EC_AXIS_STEP_Z_SERVO);
++    TEST_ASSERT(prog.step[0].servo_pulse_us == EC_AXIS_Z_DOWN_US);   /* 闭合：夹住 */
+ 
+     /* PICK -> PLACE: delta +800,+500 = 6400,4000 steps, 随后张开(释放)。 */
+ #if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[3], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
+-    assert_move(&prog.step[4], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
+-#else
+-    assert_move(&prog.step[3], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
+-    assert_move(&prog.step[4], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
+-#endif
+-    TEST_ASSERT(prog.step[5].kind == EC_AXIS_STEP_Z_SERVO);
+-    TEST_ASSERT(prog.step[5].servo_pulse_us == EC_AXIS_Z_UP_US);     /* 张开：释放 */
+-
+-    /* PLACE -> HOME: delta = (-900,-920) - (800,500) = -1700,-1420 -> 13600,11360 steps. */
+-#if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[6], EC_AXIS_X, 13600U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-    assert_move(&prog.step[7], EC_AXIS_Y, 11360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-#else
+-    assert_move(&prog.step[6], EC_AXIS_Y, 11360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-    assert_move(&prog.step[7], EC_AXIS_X, 13600U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-#endif
+-
+-    /* 八个已用步（6 个 XY 位移 + 2 个舵机动作），其后只有全零尾槽。 */
+-    TEST_ASSERT(prog.step[8].kind == EC_AXIS_STEP_MOVE);
+-    TEST_ASSERT(prog.step[8].axis == EC_AXIS_NONE);
+-    TEST_ASSERT(prog.step[8].steps == 0U);
+-    TEST_ASSERT(prog.step[8].y_steps == 0U);
+-    TEST_ASSERT(prog.step[8].servo_pulse_us == 0U);
++    assert_move(&prog.step[1], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
++    assert_move(&prog.step[2], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
++#else
++    assert_move(&prog.step[1], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
++    assert_move(&prog.step[2], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
++#endif
++    TEST_ASSERT(prog.step[3].kind == EC_AXIS_STEP_Z_SERVO);
++    TEST_ASSERT(prog.step[3].servo_pulse_us == EC_AXIS_Z_UP_US);     /* 张开：释放 */
++
++    /* PLACE -> HOME: delta = (0,0) - (800,500) = -800,-500 -> 6400,4000 steps. */
++#if EC_MOTION_XY_ORDER_X_FIRST
++    assert_move(&prog.step[4], EC_AXIS_X, 6400U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++    assert_move(&prog.step[5], EC_AXIS_Y, 4000U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
++#else
++    assert_move(&prog.step[4], EC_AXIS_Y, 4000U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
++    assert_move(&prog.step[5], EC_AXIS_X, 6400U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++#endif
++
++    /* 六个已用步（4 个 XY 位移 + 2 个舵机动作），其后只有全零尾槽。 */
++    for (size_t i = 6U; i < EC_AXIS_PICK_PLACE_STEP_COUNT; ++i) {
++        TEST_ASSERT(prog.step[i].kind == EC_AXIS_STEP_MOVE);
++        TEST_ASSERT(prog.step[i].axis == EC_AXIS_NONE);
++        TEST_ASSERT(prog.step[i].steps == 0U);
++        TEST_ASSERT(prog.step[i].y_steps == 0U);
++        TEST_ASSERT(prog.step[i].servo_pulse_us == 0U);
++    }
+ 
+     /* 回归保护：锁死 Z 宏语义（2026-09-18 曾因取值与实际机构相反导致计划反向动作）。 */
+     TEST_ASSERT(EC_AXIS_Z_DOWN_US == EC_AXIS_GRIPPER_CLOSE_US); /* 取料点=闭合 */
+@@ -137,31 +130,32 @@
+     ec_axis_pick_place_t prog;
+ 
+     TEST_ASSERT(ec_motion_plan_build(&prog, 0, 0, -600, -500)); /* 落点 -60.0mm, -50.0mm */
++    TEST_ASSERT(prog.step[0].kind == EC_AXIS_STEP_Z_SERVO);
++    TEST_ASSERT(prog.step[0].servo_pulse_us == EC_AXIS_Z_DOWN_US);
+ 
+     /* PICK -> PLACE(-600,-500): delta -600,-500 -> 4800,4000 steps. */
+ #if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[3], EC_AXIS_X, 4800U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-    assert_move(&prog.step[4], EC_AXIS_Y, 4000U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-#else
+-    assert_move(&prog.step[3], EC_AXIS_Y, 4000U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-    assert_move(&prog.step[4], EC_AXIS_X, 4800U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-#endif
+-
+-    /* PLACE -> HOME: delta = (-900,-920) - (-600,-500) = -300,-420 -> 2400,3360 steps. */
+-#if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[6], EC_AXIS_X, 2400U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-    assert_move(&prog.step[7], EC_AXIS_Y, 3360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-#else
+-    assert_move(&prog.step[6], EC_AXIS_Y, 3360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-    assert_move(&prog.step[7], EC_AXIS_X, 2400U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++    assert_move(&prog.step[1], EC_AXIS_X, 4800U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++    assert_move(&prog.step[2], EC_AXIS_Y, 4000U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
++#else
++    assert_move(&prog.step[1], EC_AXIS_Y, 4000U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
++    assert_move(&prog.step[2], EC_AXIS_X, 4800U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++#endif
++
++    TEST_ASSERT(prog.step[3].kind == EC_AXIS_STEP_Z_SERVO);
++    TEST_ASSERT(prog.step[3].servo_pulse_us == EC_AXIS_Z_UP_US);
++
++    /* PLACE -> HOME: delta = (0,0) - (-600,-500) = +600,+500 -> 4800,4000 steps. */
++#if EC_MOTION_XY_ORDER_X_FIRST
++    assert_move(&prog.step[4], EC_AXIS_X, 4800U, EC_MOTION_POSITIVE_X_DIR);
++    assert_move(&prog.step[5], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
++#else
++    assert_move(&prog.step[4], EC_AXIS_Y, 4000U, EC_MOTION_POSITIVE_Y_DIR);
++    assert_move(&prog.step[5], EC_AXIS_X, 4800U, EC_MOTION_POSITIVE_X_DIR);
+ #endif
+ }
+ 
+@@ -175,47 +169,30 @@
+      * 2026-09-18：Z 已改为「取料点只闭合、落料点只张开」，故此处只有两个 Z 动作。 */
+     TEST_ASSERT(ec_motion_plan_build(&prog, 0, 0, 800, 0));
+ 
+-#if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[0], EC_AXIS_X, 7200U, EC_MOTION_POSITIVE_X_DIR);
+-    assert_move(&prog.step[1], EC_AXIS_Y, 7360U, EC_MOTION_POSITIVE_Y_DIR);
+-#else
+-    assert_move(&prog.step[0], EC_AXIS_Y, 7360U, EC_MOTION_POSITIVE_Y_DIR);
+-    assert_move(&prog.step[1], EC_AXIS_X, 7200U, EC_MOTION_POSITIVE_X_DIR);
+-#endif
+-    TEST_ASSERT(prog.step[2].kind == EC_AXIS_STEP_Z_SERVO);      /* 闭合：夹住 */
+-
+-#if EC_MOTION_XY_ORDER_X_FIRST
+-    assert_move(&prog.step[3], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
+-    /* PICK -> PLACE 的 Y 位移为零被省略，故 Z 紧随其后落在 4。 */
+-    TEST_ASSERT(prog.step[4].kind == EC_AXIS_STEP_Z_SERVO);      /* 张开：释放 */
+-    assert_move(&prog.step[5], EC_AXIS_X, 13600U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-    assert_move(&prog.step[6], EC_AXIS_Y, 7360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-#else
+-    /* Y-first：被省略的是 Y 腿，非零的 X 腿照常发出。 */
+-    assert_move(&prog.step[3], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
+-    TEST_ASSERT(prog.step[4].kind == EC_AXIS_STEP_Z_SERVO);      /* 张开：释放 */
+-    assert_move(&prog.step[5], EC_AXIS_Y, 7360U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+-    assert_move(&prog.step[6], EC_AXIS_X, 13600U,
+-                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
+-#endif
+-
+-    /* 七个已用步（5 个 XY 位移 + 2 个舵机动作），其后只有全零尾槽。 */
+-    TEST_ASSERT(prog.step[7].kind == EC_AXIS_STEP_MOVE);
+-    TEST_ASSERT(prog.step[7].axis == EC_AXIS_NONE);
+-    TEST_ASSERT(prog.step[7].steps == 0U);
+-    TEST_ASSERT(prog.step[8].kind == EC_AXIS_STEP_MOVE);
+-    TEST_ASSERT(prog.step[8].axis == EC_AXIS_NONE);
+-    TEST_ASSERT(prog.step[8].steps == 0U);
++    /* HOME->PICK 两腿及往返 Y 腿均省略；X-first/Y-first 的剩余计划相同。 */
++    TEST_ASSERT(prog.step[0].kind == EC_AXIS_STEP_Z_SERVO);      /* 闭合：夹住 */
++    TEST_ASSERT(prog.step[0].servo_pulse_us == EC_AXIS_Z_DOWN_US);
++    assert_move(&prog.step[1], EC_AXIS_X, 6400U, EC_MOTION_POSITIVE_X_DIR);
++    TEST_ASSERT(prog.step[2].kind == EC_AXIS_STEP_Z_SERVO);      /* 张开：释放 */
++    TEST_ASSERT(prog.step[2].servo_pulse_us == EC_AXIS_Z_UP_US);
++    assert_move(&prog.step[3], EC_AXIS_X, 6400U,
++                (ec_direction_t)(1U - EC_MOTION_POSITIVE_X_DIR));
++
++    /* 四个已用步（2 个 XY 位移 + 2 个舵机动作），其后只有全零尾槽。 */
++    for (size_t i = 4U; i < EC_AXIS_PICK_PLACE_STEP_COUNT; ++i) {
++        TEST_ASSERT(prog.step[i].kind == EC_AXIS_STEP_MOVE);
++        TEST_ASSERT(prog.step[i].axis == EC_AXIS_NONE);
++        TEST_ASSERT(prog.step[i].steps == 0U);
++        TEST_ASSERT(prog.step[i].y_steps == 0U);
++        TEST_ASSERT(prog.step[i].servo_pulse_us == 0U);
++    }
+ }
+ 
+ static void test_boundary(void)
+ {
+     ec_axis_pick_place_t prog;
+ 
+-    /* 2026-09-18：实际生效的边界是机械可达域 X±1050/Y±950，
++    /* 2026-09-18：实际生效的边界是机械可达域 X±950/Y±975，
+      * 而不是协议合法域 ±1450（两者取交集）。越界会向物理上够不到的坐标发
+      * 脉冲，而 X/Y 已不装限位开关，没有任何硬件能发现越界。 */
+     TEST_ASSERT(ec_motion_plan_build(&prog, 0, 0,

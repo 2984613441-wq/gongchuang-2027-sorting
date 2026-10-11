@@ -1,0 +1,7 @@
+Final review: all report artifact links resolved.
+Host verification: X-first/Y-first/axis-driver compile/run exit=0 (host-green.json).
+Gate probes: 46 records, matched=46; actual observations include non-rejecting paths.
+Protected source/config MD5: 7/7 unchanged (protected-after.json).
+Test source matches passing snapshot test_motion_plan.after.c.
+SSH attempts: 2, exit=255, connect timeout. Remote MD5 remains UNVERIFIED.
+audit_md5.py/probe_gates.py: Python 3.9 grammar parse succeeded; Pi runtime not tested.

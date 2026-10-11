@@ -1,0 +1,75 @@
+{"case": "missing-port", "outcome": "SystemExit", "detail": "--port 必填（真实模式）；开发模式加 --fake-link", "pass_": true}
+{"case": "missing-round-id", "outcome": "SystemExit", "detail": "--round-id 必填（真实模式）", "pass_": true}
+{"case": "missing-round-task-id", "outcome": "SystemExit", "detail": "--round-task-id 必填（真实模式）", "pass_": true}
+{"case": "A-missing-file", "outcome": "SystemExit", "detail": "方案A 缺 [DropPoints]：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\point6-ymv7jde4\\absent 必须配置六盒落点", "pass_": true}
+{"case": "A-missing-section", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-missing-box-6", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-malformed-box-6", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-nan-coordinate", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-inf-coordinate", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-valid-six", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-unknown-box-rejects-item", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "A-finite-outside-mechanical-domain-is-not-startup-checked", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "B-missing-drop", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "B-invalid-drop", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "B-missing-angle", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "B-valid-six", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "B-nan-angle-is-not-rejected", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "BoxMap-absent", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "BoxMap-invalid-entries-skipped", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "PickPoint-invalid-returns-None", "outcome": "PermissionError", "detail": "[Errno 13] Permission denied: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\probe.ini'", "pass_": false}
+{"case": "names-argument-missing", "outcome": "SystemExit", "detail": "--names-file 必填（真实模式）：class_id -> 名称 的 JSON，如 {\"2\": \"红方柱\", \"4\": \"蓝圆柱\"}", "pass_": true}
+{"case": "names-file-missing", "outcome": "FileNotFoundError", "detail": "[Errno 2] No such file or directory: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\point6-ymv7jde4\\\\absent.json'", "pass_": true}
+Traceback (most recent call last):
+  File "C:\Users\29845\Desktop\工创赛\docs\reports\2026-09-18-point6-evidence\probe_gates.py", line 72, in <module>
+    p.write_text('{bad',encoding='utf-8')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\pathlib\__init__.py", line 809, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\pathlib\__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: 'C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\point6-ymv7jde4\\names.json'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen os>", line 377, in walk
+PermissionError: [WinError 5] 拒绝访问。: 'C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\point6-ymv7jde4'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\29845\Desktop\工创赛\docs\reports\2026-09-18-point6-evidence\probe_gates.py", line 37, in <module>
+    with tempfile.TemporaryDirectory(prefix='point6-', dir=Path(__file__).parent) as d:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\tempfile.py", line 971, in __exit__
+    self.cleanup()
+    ~~~~~~~~~~~~^^
+  File "D:\Lib\tempfile.py", line 975, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\tempfile.py", line 955, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\shutil.py", line 852, in rmtree
+    _rmtree_impl(path, dir_fd, onexc)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\shutil.py", line 689, in _rmtree_unsafe
+    for dirpath, dirnames, filenames in results:
+                                        ^^^^^^^
+  File "<frozen os>", line 413, in walk
+  File "D:\Lib\shutil.py", line 687, in onerror
+    onexc(os.scandir, err.filename, err)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\tempfile.py", line 927, in onexc
+    _resetperms(path)
+    ~~~~~~~~~~~^^^^^^
+  File "D:\Lib\tempfile.py", line 283, in _resetperms
+    _dont_follow_symlinks(_os.chmod, path, 0o700)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\tempfile.py", line 272, in _dont_follow_symlinks
+    func(path, *args, follow_symlinks=False)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [WinError 5] 拒绝访问。: 'C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\point6-ymv7jde4'

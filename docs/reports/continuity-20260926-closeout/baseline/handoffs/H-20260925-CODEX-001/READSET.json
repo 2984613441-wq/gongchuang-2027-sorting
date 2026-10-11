@@ -1,0 +1,118 @@
+{
+  "schema_version": "0.1.0",
+  "project_id": "ai-kingdom-continuity",
+  "handoff_id": "H-20260925-CODEX-001",
+  "captured_at": "2026-09-25T21:24:39.4324038+08:00",
+  "producer": "codex",
+  "coverage": "Ordered required inputs. Later acceptance/receipt files are post-read outputs and not inputs to their own receipt.",
+  "files": [
+    {
+      "path": "nodes\\codex\\START.md",
+      "sha256": "2F8D9E2980C54DBE70AF4A9FAFEFBE6B32E923AFA06C04E97E72A689CAEDF8B7",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 2350
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\INDEX.md",
+      "sha256": "7D2846031A410C9C775C1C00B98CF00CDA013FD78152E0FEB3090EF6776C9E9B",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 6786
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\SHARED-UNDERSTANDING.md",
+      "sha256": "1C2F8FD7A160B79C25EDA9CBC22B430FC5A89767DC84313386D852E1A3DC0D18",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 14788
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\STATE.md",
+      "sha256": "A60C206D91EE995F8BE83D542EF9C9309503467F2FFA295AEE3FCB93556BBEE0",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 7239
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\handoffs\\H-20260925-CODEX-001\\REQUEST.md",
+      "sha256": "3FF00FE46CBE762BDC5D2D71C3BD6DF558ACD78790257BF93F5113C997B0B976",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 5663
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\tasks\\codex-access\\REQUEST.md",
+      "sha256": "BB40FEDE1DEF29EE8874EA7EDE2CE3BC7237FE3E31B479264182C647880D9F38",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 1881
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\DECISIONS.md",
+      "sha256": "457ECABF098B74EA1C0F1C4F29375A268701C3731D87F93B8F78C1F7D5610254",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 6374
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\WORKING-NOTES.md",
+      "sha256": "19D47076D359D488AE089C987B8EF5950570CE7C468AAF7E14F23B8760B9401A",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 5552
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\PARAMETERS.yaml",
+      "sha256": "D7F7A04686965F9B0A05D9D27F5800E17D7E29D28799727C7BD9AC983338922D",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 8163
+    },
+    {
+      "path": "projects\\ai-kingdom-continuity\\EVIDENCE.md",
+      "sha256": "AE8FCD6017D7A558CA57BFDDEC9C2D076389B41900EEA9C2687DE50A442E86B9",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 11241
+    },
+    {
+      "path": "nodes\\codex\\ADAPTER.md",
+      "sha256": "91475AA4D8E6934DCE2262FA1B5E41FA44361290A7EA480B4F7FAA47C0E33A2B",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 2211
+    },
+    {
+      "path": "nodes\\codex\\responses\\BASELINE-AND-CONFLICTS-v0.1.md",
+      "sha256": "AE3922852CD511DD94DD851283AC228CF74449B55734F18509C34A5435F413CE",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 2370
+    },
+    {
+      "path": "nodes\\codex\\responses\\TEST-RESULTS-v0.1.json",
+      "sha256": "769A389D1159085A7B74D35C6C03980572F6AA808E54A52E6CD4EA059C151AA6",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 1203
+    },
+    {
+      "path": "BINDING-MANIFEST.yaml",
+      "sha256": "FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 3271
+    },
+    {
+      "path": "governance\\AUTHORITATIVE-SOURCES.yaml",
+      "sha256": "EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 16221
+    },
+    {
+      "path": "workflow\\CONTINUITY-CONTRACT.md",
+      "sha256": "D638C460941D1F574CF4A6F94AED01A27FA482554002AA62A8CE506E03B08C9B",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 5182
+    },
+    {
+      "path": "workflow\\EXECUTION-GATE-CONTRACT.md",
+      "sha256": "15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44",
+      "revision": "exact SHA256 snapshot",
+      "bytes": 7930
+    },
+    {
+      "path": "C:\\Users\\29845\\Documents\\Codex\\AGENTS.md",
+      "sha256": "1668BAC4179C81346CD8A7AAC72665857FC374363248F1B662CBE5B19D8AEEDB",
+      "revision": "existing guidance plus continuity v0.1.0",
+      "bytes": 6825
+    }
+  ]
+}

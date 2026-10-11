@@ -1,0 +1,185 @@
+# 精确参数与资产：ai-kingdom-continuity
+# 每项：key, value, unit, scope, source, verified_status, updated_at
+# 凭据只写安全引用，绝不粘贴密钥。
+project_id: ai-kingdom-continuity
+codex_access_revision: "0.1.0"
+codex_access_parameters:
+  project_root:
+    value: 'C:\Users\29845\AI-KINGDOM-PORTABLE-CORE\projects\ai-kingdom-continuity'
+    unit: absolute_windows_path
+    scope: unique_project_fact_source
+    source: 'USER_ANSWER Q-C01 and supplemental constraints, 2026-09-25'
+    status: USER_CONFIRMED
+  deadline:
+    value: '2026-09-25T22:00:00+08:00'
+    unit: ISO8601_datetime
+    timezone: Asia/Shanghai
+    scope: codex_node_access
+    source: 'User initial request'
+    status: USER_REPORTED
+  runtime_root:
+    value: 'C:\Users\29845\.codex'
+    unit: absolute_windows_path
+    scope: codex_runtime_not_shared_authority
+    source: 'BINDING-MANIFEST.yaml and local inspection'
+    status: NODE_OBSERVED
+  startup_entry:
+    value: 'C:\Users\29845\Documents\Codex\AGENTS.md'
+    unit: absolute_windows_path
+    scope: Codex_workspaces_under_Documents_Codex
+    source: 'Existing codex adapter; A-C01 authorization'
+    status: IMPLEMENTED_UNVERIFIED
+  pre_compaction:
+    value: MANUAL_REQUIRED
+    unit: capability_status
+    scope: codex_node
+    source: 'No callable pre-compaction hook verified in this session'
+    status: UNVERIFIED_AUTOMATION
+state_revision: 3
+updated_at: "2026-09-25T21:15:36+08:00"
+
+# ⚠ 时间戳口径（R12 / E17）：本文件中各参数的 updated_at 多为**估计值，未经测量**。
+# 惟一经实测的时点为 20:30:12 / 20:58:26 / 21:15:36(+08:00)。
+# **权威时间以文件系统 mtime 为准**；正文时间戳仅表示先后顺序。
+
+parameters:
+  - key: deadline
+    value: "2026-09-25T22:00:00+08:00"
+    unit: 绝对时间（北京时间 UTC+08:00）
+    scope: 五节点接入与真实验收（本节点仅承诺自身）
+    source: 用户本轮消息「今晚 22:00（北京时间）前」
+    verified_status: USER_REPORTED
+    updated_at: "2026-09-25T20:30:00+08:00"
+
+  - key: node_count
+    value: 5
+    unit: 节点数
+    scope: Claude / Codex / DeepSeek / Zcode / Grok
+    source: 00-SEND-TO-ALL-AI.md 第 1 行
+    verified_status: USER_REPORTED
+    updated_at: "2026-09-25T20:30:00+08:00"
+
+  - key: shared_governance_root
+    value: "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE"
+    unit: 绝对路径
+    scope: 跨 Provider 共享治理根（自声明）
+    source: "BINDING-MANIFEST.yaml → shared_governance_root；SHA256=FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5"
+    verified_status: NODE_OBSERVED（文件存在且哈希可复算）
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: portable_core_version
+    value: v1.1
+    unit: 版本
+    scope: BINDING-MANIFEST 声明的 portable_core_version
+    source: "BINDING-MANIFEST.yaml"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: authority_index_version
+    value: v1
+    unit: 版本
+    scope: governance/AUTHORITATIVE-SOURCES.yaml（phase 0.5）
+    source: "该文件 portable_core.version 字段"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: continuity_contract_version
+    value: v1
+    unit: 版本
+    scope: workflow/CONTINUITY-CONTRACT.md（authority_type: CANDIDATE）
+    source: "该文件头部 Version: v1 / Status: CANDIDATE"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: execution_gate_contract_version
+    value: v0.4
+    unit: 版本
+    scope: workflow/EXECUTION-GATE-CONTRACT.md（文件自身头部：Version v0.4 / Status ACTIVE / SHARED_GOVERNANCE_ASSET）
+    source: "该文件全文（本节点 2026-09-25T21:25 实际读取 100 行）；SHA256=15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44，7930 bytes"
+    verified_status: NODE_OBSERVED（全文读取 + 哈希复算）
+    updated_at: "2026-09-25T21:25:00+08:00"
+    conflict: "R11/Q9 —— AUTHORITATIVE-SOURCES.yaml 记该域为 v0.2，索引滞后于文件；本参数以文件自身为准并双记"
+
+  - key: execution_gate_contract_version_per_authority_index
+    value: v0.2
+    unit: 版本（**索引记载值**）
+    scope: governance/AUTHORITATIVE-SOURCES.yaml → domains.execution_gate
+    source: "AUTHORITATIVE-SOURCES.yaml（SHA256 EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB）"
+    verified_status: STALE_RELATIVE_TO_FILE —— 与文件自身 v0.4 不一致
+    updated_at: "2026-09-25T21:25:00+08:00"
+
+  - key: continuity_package_version
+    value: v0.1
+    unit: 版本
+    scope: AI-KINGDOM-CONTINUITY-v0.1（候选契约，非权威）
+    source: "zip 解包自 C:\\Users\\29845\\Downloads\\AI-KINGDOM-CONTINUITY-v0.1.zip，17963 bytes，mtime 2026-09-25 20:28:43"
+    verified_status: NODE_OBSERVED（16 个条目，哈希见 CONTRACT-v0.1/MANIFEST-SHA256.txt）
+    updated_at: "2026-09-25T20:47:00+08:00"
+
+  - key: dsh_runtime_root
+    value: "E:\\deepseek-harness"
+    unit: 绝对路径
+    scope: DSH 节点运行根
+    source: "BINDING-MANIFEST.yaml → providers.deepseek.runtime_root；AUTHORITATIVE-SOURCES.yaml → providers.deepseek.runtime_root"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: dsh_execution_active_root
+    value: "E:\\deepseek-harness\\empire"
+    unit: 绝对路径
+    scope: DSH 节点帝国执行活动根（**不是**共享治理权威）
+    source: "E:\\deepseek-harness\\empire\\system-root.yaml → active_root；SHA256=6C5FEC976FF9022169ADFFDF71C25611AD32DEA1170333E7E7FA433B9A80644F"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: dsh_entry_file
+    value: "C:\\Users\\29845\\.dsh\\AGENTS.md"
+    unit: 绝对路径
+    scope: DSH 节点全局指令入口（PROMPT_ENFORCED）
+    source: "BINDING-MANIFEST.yaml → providers.deepseek.entry；adapters/deepseek/adapter.yaml → runtime.entry；SHA256=C78D21A6FF8778A79E503691D980BAACFF2CB7DFE67CE35622640D8F3D2950E3，11942 bytes"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: dsh_adapter_version
+    value: "0.2.0"
+    unit: 版本
+    scope: AI-KINGDOM-PORTABLE-CORE/adapters/deepseek/adapter.yaml（status: ACTIVE，runtime.status: INSTALLED_RUNTIME_UNVERIFIED）
+    source: "adapter.yaml"
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T20:52:00+08:00"
+
+  - key: declared_active_root_in_dsh_agents_md
+    value: "C:\\Users\\29845\\.codex\\ai-kingdom\\system-root.yaml"
+    unit: 绝对路径（**声明**）
+    scope: 该路径在 ~/.dsh/AGENTS.md 第三节被声明为入口文件
+    source: "~/.dsh/AGENTS.md §三 入口文件"
+    verified_status: CONFLICTING — 实测该路径不存在（Test-Path = False）
+    updated_at: "2026-09-25T20:31:00+08:00"
+
+  - key: declared_skill_in_dsh_agents_md
+    value: "C:\\Users\\29845\\.codex\\skills\\ai-kingdom\\SKILL.md"
+    unit: 绝对路径（**声明**）
+    scope: 该路径在 ~/.dsh/AGENTS.md §三 被声明为治理 Skill
+    source: "~/.dsh/AGENTS.md §三 治理 Skill"
+    verified_status: CONFLICTING — 实测该路径不存在（Test-Path = False）；实际存在 `C:\\Users\\29845\\.agents\\skills\\ai-kingdom\\SKILL.md`（3546 bytes, mtime 2026-09-13 10:00:51）
+    updated_at: "2026-09-25T20:31:00+08:00"
+
+  - key: file_sandbox_policy
+    value: workspace-write
+    unit: 策略模式
+    scope: 本会话 DSH 文件沙箱；工作区 = E:\deepseek-harness
+    source: 运行时上下文（本会话）
+    verified_status: NODE_OBSERVED（对 C:\Users\29845\AI-KINGDOM-PORTABLE-CORE 的写入被拒绝）
+    updated_at: "2026-09-25T20:58:00+08:00"
+
+  - key: local_build_root
+    value: "E:\\deepseek-harness\\_staging\\deploy"
+    unit: 绝对路径
+    scope: 本节点可写区内、待转交的产物镜像（与共享布局同构）
+    source: 本节点实际操作
+    verified_status: NODE_OBSERVED
+    updated_at: "2026-09-25T21:03:00+08:00"
+
+secrets:
+  note: 本文件不含任何凭据；凭据仅以引用位置表示，绝不复制密钥/Token/Cookie。
+  referenced_only: []

@@ -1,0 +1,278 @@
+[
+  {
+    "case": "missing-port",
+    "outcome": "SystemExit",
+    "detail": "--port 必填（真实模式）；开发模式加 --fake-link",
+    "pass_": true
+  },
+  {
+    "case": "missing-round-id",
+    "outcome": "SystemExit",
+    "detail": "--round-id 必填（真实模式）",
+    "pass_": true
+  },
+  {
+    "case": "missing-round-task-id",
+    "outcome": "SystemExit",
+    "detail": "--round-task-id 必填（真实模式）",
+    "pass_": true
+  },
+  {
+    "case": "A-missing-file",
+    "outcome": "SystemExit",
+    "detail": "方案A 缺 [DropPoints]：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\absent 必须配置六盒落点",
+    "pass_": true
+  },
+  {
+    "case": "A-missing-section",
+    "outcome": "SystemExit",
+    "detail": "方案A 缺 [DropPoints]：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\probe.ini 必须配置六盒落点",
+    "pass_": true
+  },
+  {
+    "case": "A-missing-box-6",
+    "outcome": "SystemExit",
+    "detail": "方案A 六盒落点表不完整：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\probe.ini [DropPoints] 缺货格 [6]",
+    "pass_": true
+  },
+  {
+    "case": "A-malformed-box-6",
+    "outcome": "SystemExit",
+    "detail": "方案A 六盒落点表不完整：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\probe.ini [DropPoints] 缺货格 [6]",
+    "pass_": true
+  },
+  {
+    "case": "A-nan-coordinate",
+    "outcome": "ValueError",
+    "detail": "cannot convert float NaN to integer",
+    "pass_": true
+  },
+  {
+    "case": "A-inf-coordinate",
+    "outcome": "OverflowError",
+    "detail": "cannot convert float infinity to integer",
+    "pass_": true
+  },
+  {
+    "case": "A-valid-six",
+    "outcome": "returned",
+    "detail": "(50, 50)",
+    "pass_": true
+  },
+  {
+    "case": "A-unknown-box-rejects-item",
+    "outcome": "returned",
+    "detail": "None",
+    "pass_": true
+  },
+  {
+    "case": "A-finite-outside-mechanical-domain-is-not-startup-checked",
+    "outcome": "returned",
+    "detail": "(1000, 1000)",
+    "pass_": true
+  },
+  {
+    "case": "B-missing-drop",
+    "outcome": "SystemExit",
+    "detail": "方案B 缺 turntable_drop_point：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\probe.ini [TurntableAngles] 需配置 turntable_drop_point = x_mm, y_mm",
+    "pass_": true
+  },
+  {
+    "case": "B-invalid-drop",
+    "outcome": "SystemExit",
+    "detail": "turntable_drop_point 格式错误（需 x_mm, y_mm）：bad",
+    "pass_": true
+  },
+  {
+    "case": "B-missing-angle",
+    "outcome": "SystemExit",
+    "detail": "方案B 转盘角度表不完整：C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\probe.ini [TurntableAngles] 缺货格 [6]",
+    "pass_": true
+  },
+  {
+    "case": "B-valid-six",
+    "outcome": "returned",
+    "detail": "(50, 50)",
+    "pass_": true
+  },
+  {
+    "case": "B-nan-angle-is-not-rejected",
+    "outcome": "returned",
+    "detail": "nan",
+    "pass_": true
+  },
+  {
+    "case": "BoxMap-absent",
+    "outcome": "returned",
+    "detail": "{}",
+    "pass_": true
+  },
+  {
+    "case": "BoxMap-invalid-entries-skipped",
+    "outcome": "returned",
+    "detail": "{}",
+    "pass_": true
+  },
+  {
+    "case": "PickPoint-invalid-returns-None",
+    "outcome": "returned",
+    "detail": "None",
+    "pass_": true
+  },
+  {
+    "case": "names-argument-missing",
+    "outcome": "SystemExit",
+    "detail": "--names-file 必填（真实模式）：class_id -> 名称 的 JSON，如 {\"2\": \"红方柱\", \"4\": \"蓝圆柱\"}",
+    "pass_": true
+  },
+  {
+    "case": "names-file-missing",
+    "outcome": "FileNotFoundError",
+    "detail": "[Errno 2] No such file or directory: 'C:\\\\Users\\\\29845\\\\Desktop\\\\工创赛\\\\docs\\\\reports\\\\2026-09-18-point6-evidence\\\\gate-fixtures\\\\absent.json'",
+    "pass_": true
+  },
+  {
+    "case": "names-malformed-json",
+    "outcome": "JSONDecodeError",
+    "detail": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+    "pass_": true
+  },
+  {
+    "case": "names-noninteger-key",
+    "outcome": "ValueError",
+    "detail": "invalid literal for int() with base 10: 'bad'",
+    "pass_": true
+  },
+  {
+    "case": "names-incomplete-accepted-at-startup",
+    "outcome": "returned",
+    "detail": "{2: '红方柱'}",
+    "pass_": true
+  },
+  {
+    "case": "names-missing-1-fails-at-render",
+    "outcome": "ValueError",
+    "detail": "class_id 1 不在本地名称映射",
+    "pass_": true
+  },
+  {
+    "case": "font-explicit-missing",
+    "outcome": "SystemExit",
+    "detail": "字体文件不存在: C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\absent.ttf",
+    "pass_": true
+  },
+  {
+    "case": "font-default-missing-only-warns",
+    "outcome": "returned",
+    "detail": "None",
+    "pass_": true
+  },
+  {
+    "case": "image-dir-argument-missing",
+    "outcome": "SystemExit",
+    "detail": "--image-dir 必填（真实模式）：TF 卡货物图片目录",
+    "pass_": true
+  },
+  {
+    "case": "missing-image-dir-loader-created",
+    "outcome": "returned",
+    "detail": "True",
+    "pass_": true
+  },
+  {
+    "case": "missing-image-fails-on-load",
+    "outcome": "FileNotFoundError",
+    "detail": "image_id=1 在 C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\2026-09-18-point6-evidence\\gate-fixtures\\missing-images 下未找到（需 <image_id>.png/.jpg）",
+    "pass_": true
+  },
+  {
+    "case": "real-auto-refused",
+    "outcome": "SystemExit",
+    "detail": "--frame-output auto 只用于 --fake-link 主机测试。\n  真实模式必须显式指定 --frame-output fb0（HDMI 屏）；\n  auto 会在取不到 /dev/fb0 时静默降级为 none —— 屏幕全黑却不报错。",
+    "pass_": true
+  },
+  {
+    "case": "real-none-only-warns",
+    "outcome": "returned",
+    "detail": "True",
+    "pass_": true
+  },
+  {
+    "case": "real-file-accepted",
+    "outcome": "returned",
+    "detail": "True",
+    "pass_": true
+  },
+  {
+    "case": "fb0-open-denied",
+    "outcome": "SystemExit",
+    "detail": "打不开 /dev/fb0（MOCK no framebuffer access）：拒绝启动。\n  检查：ls -l /dev/fb0；当前用户是否在 video 组；HDMI 是否已输出。\n  只想在主机上跑链路请加 --fake-link。",
+    "pass_": true
+  },
+  {
+    "case": "missing-bpp",
+    "outcome": "FramebufferFormatError",
+    "detail": "读不到 /sys/class/graphics/fb0/bits_per_pixel：拒绝猜 bpp。\n  查：ls /sys/class/graphics/ ; cat /sys/class/graphics/fb0/bits_per_pixel\n  该节点缺失通常是 fbdev 兼容层没起来（vc4-kms-v3d 下 /dev/fb0 是影子节点）",
+    "pass_": true
+  },
+  {
+    "case": "unsupported-bpp",
+    "outcome": "FramebufferFormatError",
+    "detail": "bits_per_pixel=8 不支持（只支持 16/24/32）：按错误的格式写屏就是花屏，拒绝写",
+    "pass_": true
+  },
+  {
+    "case": "missing-size",
+    "outcome": "FramebufferFormatError",
+    "detail": "读不到 /sys/class/graphics/fb0/virtual_size（读到 None）：没有它无法确认帧写不写得下，拒绝写",
+    "pass_": true
+  },
+  {
+    "case": "valid-16bpp",
+    "outcome": "returned",
+    "detail": "FramebufferFormat(bpp=16, virtual_width=1024, virtual_height=600, line_length=2048)",
+    "pass_": true
+  },
+  {
+    "case": "frame-larger-than-device",
+    "outcome": "FramebufferFormatError",
+    "detail": "帧 1024x600 比 fb 可见区 800x600 大：写下去要么错位要么越界，拒绝写。\n  分辨率由 config.txt 的 hdmi_cvt 与 --width/--height 决定，两边必须一致",
+    "pass_": true
+  },
+  {
+    "case": "round-task-id-outside-u16",
+    "outcome": "PayloadError",
+    "detail": "round_task_id must be an unsigned 16-bit integer",
+    "pass_": true
+  },
+  {
+    "case": "scheduler-no-start-round-stays-locked",
+    "outcome": "returned",
+    "detail": "('RECOVERY_LOCK', None)",
+    "pass_": true
+  },
+  {
+    "case": "current-local-PickPoint",
+    "outcome": "returned",
+    "detail": "(0, -450)",
+    "pass_": true
+  },
+  {
+    "case": "current-local-BoxMap",
+    "outcome": "returned",
+    "detail": "{}",
+    "pass_": true
+  },
+  {
+    "case": "current-local-DropPoints",
+    "outcome": "returned",
+    "detail": "{1: (50, 50), 2: (50, 50), 3: (50, 50), 4: (50, 50), 5: (50, 50), 6: (50, 50)}",
+    "pass_": true
+  },
+  {
+    "case": "current-local-calibration-status",
+    "outcome": "returned",
+    "detail": "(True, {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0})",
+    "pass_": true
+  }
+]

@@ -1,0 +1,98 @@
+[
+  {
+    "name": "motion-x-first",
+    "command": [
+      "C:\\Users\\29845\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-pedantic",
+      "-I../App/Inc",
+      "-I../../../stm32_logic/include",
+      "test_motion_plan.c",
+      "../App/Src/ec_motion_plan.c",
+      "../App/Src/ec_axis_driver.c",
+      "-o",
+      "build-point6-codex-20260918/motion-x-first.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "motion-x-first",
+    "command": [
+      "S:\\firmware\\stm32f407_m144z\\tests\\build-point6-codex-20260918\\motion-x-first.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "ALL MOTION PLAN HOST TESTS PASSED\r\n",
+    "stderr": ""
+  },
+  {
+    "name": "motion-y-first",
+    "command": [
+      "C:\\Users\\29845\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-pedantic",
+      "-I../App/Inc",
+      "-I../../../stm32_logic/include",
+      "-DEC_MOTION_XY_ORDER_X_FIRST=0",
+      "test_motion_plan.c",
+      "../App/Src/ec_motion_plan.c",
+      "../App/Src/ec_axis_driver.c",
+      "-o",
+      "build-point6-codex-20260918/motion-y-first.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "motion-y-first",
+    "command": [
+      "S:\\firmware\\stm32f407_m144z\\tests\\build-point6-codex-20260918\\motion-y-first.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "ALL MOTION PLAN HOST TESTS PASSED\r\n",
+    "stderr": ""
+  },
+  {
+    "name": "axis-driver",
+    "command": [
+      "C:\\Users\\29845\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-pedantic",
+      "-I../App/Inc",
+      "-I../../../stm32_logic/include",
+      "test_axis_driver.c",
+      "../App/Src/ec_axis_driver.c",
+      "-o",
+      "build-point6-codex-20260918/axis-driver.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "axis-driver",
+    "command": [
+      "S:\\firmware\\stm32f407_m144z\\tests\\build-point6-codex-20260918\\axis-driver.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "ALL AXIS DRIVER HOST TESTS PASSED\r\n",
+    "stderr": ""
+  }
+]

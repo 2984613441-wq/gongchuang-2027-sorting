@@ -1,0 +1,44 @@
+[
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_motion_plan.c",
+    "before": "FAC02323F85D6FC4E966A80CA4188437",
+    "after": "FAC02323F85D6FC4E966A80CA4188437",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_axis_driver.c",
+    "before": "DBF1F6A7635E71C49A36A043DA0259F1",
+    "after": "DBF1F6A7635E71C49A36A043DA0259F1",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_motion_plan.h",
+    "before": "E5AF506543403889D193E0F8906B5F67",
+    "after": "E5AF506543403889D193E0F8906B5F67",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_axis_driver.h",
+    "before": "C04A44E03A4C1D6296876F31DDE0F0D7",
+    "after": "C04A44E03A4C1D6296876F31DDE0F0D7",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\deploy\\run_chain.py",
+    "before": "90493A3D38AF2FCB8CC974D1C7509DCC",
+    "after": "90493A3D38AF2FCB8CC974D1C7509DCC",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\deploy\\sorting_config.ini",
+    "before": "0ECDDB50718F3440E477113E493A4646",
+    "after": "0ECDDB50718F3440E477113E493A4646",
+    "unchanged": true
+  },
+  {
+    "path": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\calibration_config.ini",
+    "before": "D07784A3A43642B584494902D4F166BC",
+    "after": "D07784A3A43642B584494902D4F166BC",
+    "unchanged": true
+  }
+]

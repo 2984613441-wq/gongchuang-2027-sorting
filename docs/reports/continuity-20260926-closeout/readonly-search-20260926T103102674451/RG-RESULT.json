@@ -1,0 +1,23 @@
+{
+  "command": [
+    "rg",
+    "-n",
+    "--hidden",
+    "--no-ignore",
+    "-i",
+    "-F",
+    "-e",
+    "AUDIT4",
+    "-e",
+    "CHECK 1",
+    "-e",
+    "R3-14",
+    "-e",
+    "6 PASS / 5 PARTIAL / 3 NOT FIXED",
+    "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity",
+    "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek"
+  ],
+  "exit_code": 0,
+  "stdout": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md:60:| **R3-14** | 低 | 缺陷计数自相矛盾（\"6 条\"vs\"R4–R10 七条\"）；`R7` 仅在 RECEIPT 定义、无处引用（孤例） | 已修（见下 §5 计数更正） |\nC:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md:72:## 5. 计数更正（R3-14）\nC:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\INDEX.md:73:| **`R3-1–R3-14`** | **第三轮审计的判定与未承认缺陷（原审计书的 `N*`/`U*`，已重编）** | `EVIDENCE-TEST-20260925-AUDIT3.md` |\nC:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-RETEST.md:91:> 另发现 **14 项作者未承认的缺陷（R3-1–R3-14）**。\nC:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\STATE.md:45:| **S16** | **第三轮独立审计完成**：逐项核验作者的修复声明 | `EVIDENCE-TEST-20260925-AUDIT3.md` | ✅ 判定：作者 `EV-0022` 的\"已修\"为 **overclaim**；真正修好 3 项，6 项未修/部分修；另发现 **14 项**未承认缺陷（R3-1–R3-14） |\nC:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\STATE.md:46:| **S17** | R3-1–R3-14 已逐条修复 | `EVIDENCE-TEST-20260925-AUDIT3.md` §3 处置列 | `IMPLEMENTED_UNVERIFIED` —— **修复后尚未经第四轮独立验证** |\n",
+  "stderr": ""
+}

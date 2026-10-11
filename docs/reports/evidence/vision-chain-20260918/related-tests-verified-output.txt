@@ -1,0 +1,13 @@
+started=2026-09-18T12:28:00.823855+08:00
+cwd=C:\Users\29845\Desktop\工创赛\电控
+command=py -3 -m pytest -q -p no:cacheprovider tests/rpi/test_vision_ingest.py tests/rpi/test_socket_vision_source.py tests/rpi/test_pixel_to_device.py tests/rpi/test_two_stage_display.py tests/protocol/test_item_task_identity.py tests/rpi/test_display.py --basetemp C:\Users\29845\Desktop\工创赛\docs\reports\evidence\vision-chain-20260918\pytest-tmp-4b905b34d57843fda5209f643dbaa812 --tb=short -rs
+PYTHONPATH=C:\Users\29845\Desktop\工创赛\电控\src
+PYTHONUTF8=1 PYTHONDONTWRITEBYTECODE=1
+--- RAW OUTPUT ---
+........................................................................ [ 69%]
+...............................                                          [100%]
+103 passed in 0.89s
+
+--- END RAW OUTPUT ---
+exit_code=0
+finished=2026-09-18T12:28:02.722417+08:00

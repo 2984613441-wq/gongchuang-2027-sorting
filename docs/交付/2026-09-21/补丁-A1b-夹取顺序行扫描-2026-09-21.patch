@@ -1,0 +1,362 @@
+# 补丁 A1b —— 夹取顺序改「行扫描」（Y 从大到小 → 同行 X 从小到大）
+#
+# 落点 : 电控/src/electrical_control/pick_strategy/selector.py（新增排序键/排序函数）
+#        电控/src/electrical_control/pick_strategy/__init__.py（导出）
+#        电控/src/electrical_control/pick_strategy/chain_adapter.py（接入点：换函数）
+#        电控/tests/pick_strategy/test_row_scan_order.py（新增，8 条判据）
+# 应用 : 在仓库根执行  git apply -p1 "docs/交付/2026-09-21/补丁-A1b-夹取顺序行扫描-2026-09-21.patch"
+# 回退 : 从 docs/交付/2026-09-21/T6c-A1b-原始备份/ 覆盖回去（见交付说明 §回退）
+# 验收 : D:\python.exe -m pytest 电控/tests/pick_strategy -q
+# 注意 : `--pick-strategy` 默认仍是 off ⇒ 不启用时行为与接入前逐字节一致
+#
+diff --git a/电控/src/electrical_control/pick_strategy/selector.py b/电控/src/electrical_control/pick_strategy/selector.py
+--- a/电控/src/electrical_control/pick_strategy/selector.py
++++ b/电控/src/electrical_control/pick_strategy/selector.py
+@@ -18,6 +18,15 @@
+    :mod:`.state_machine` 的 ``WAIT_FRAME``）。
+ 6. **最近目标不可行时不得改抓更远的件**（任务要求三.7）：本模块先按距离选出
+    最近的一件，再判可行；不可行就整体拒识本件并给出原因。
++
++排序 vs 锁定（两件事，别混）
++----------------------------
++* :func:`select_target` / :func:`ordering_key` = **锁定**规则：离托盘无壁边最近
++  （需求三原文）。主键是 ``tray.rect.y_max − y`` 这类量，**依赖 ``[Tray] open_side``**。
++* :func:`order_by_row_scan` / :func:`row_scan_key` = **抓取顺序**规则
++  （2026-09-21 用户口径）：第一键 Y 从大到小、第二键同行 X 从小到大，
++  **不读任何配置**。实链（:func:`~electrical_control.pick_strategy.chain_adapter.make_payload_orderer`）
++  用的是这一条。
+ """
+ 
+ from __future__ import annotations
+@@ -209,6 +218,45 @@
+     return tuple(sorted(usable, key=lambda d: ordering_key(config, d)))
+ 
+ 
++def row_scan_key(det: Detection) -> tuple[float, float, int]:
++    """**行扫描**排序键：Y 从大到小 → 同行 X 从小到大 → target_seq。
++
++    用户口径（2026-09-21 确认）：从靠 Y 正方向那一排开始逐排往里；每排内从
++    最靠 HOME 那件（X 最小）沿 +X 依次抓。⇒ 效果 = "从上到下、每排从左到右"。
++
++    **它不吃 config**：不读 ``[Tray]``、不读 ``[Home]``，也不读 ``selection_mode``。
++    这正是它比 :func:`ordering_key` 稳的地方 —— 现役键的主键是
++    ``tray.rect.y_max − y``，**只有** ``[Tray] open_side = y_max`` 时它才等价于
++    "Y 降序"。该值已于 2026-09-21 现场【实测】确认
++    （``电控/deploy/pick_strategy.ini:38``：X 轴全部被挡住、只有 Y 正方向敞开），
++    所以**此刻**两者主键同序（`tests/pick_strategy/test_row_scan_order.py` 的
++    ``test_row_scan_agrees_with_open_edge_when_open_side_is_y_max`` 锁死了这一点）；
++    但它终归是**配置里的一行** —— 换托盘、改边界，或现场照抄仍是【待实测】的
++    ``pick_strategy.demo.ini:45``，顺序都会悄悄变。行扫描把这个前提从
++    "配置对不对"搬进了代码。
++
++    ponytail: "同一行" 只认 Y **完全相等**。同一排各件 Y 因识别抖动差几毫米时，
++    顺序会退化成"Y 大者先"，而不是严格的"这一排从左到右"。升级路径 = 按行容差
++    分桶（``round(y / tolerance)``）；但容差必须实测、只能从配置来（不得内置
++    魔法默认值），且那会把配置依赖再加回来 —— 本次按用户口径**不引入**。
++    """
++    return (-det.y_mm, det.x_mm, det.target_seq)
++
++
++def order_by_row_scan(
++    frame: VisionFrame, config: StrategyConfig
++) -> tuple[Detection, ...]:
++    """把一帧里的**可用件**按行扫描排序（实链接入用）。
++
++    签名与 :func:`order_by_open_edge` 相同，便于在 ``chain_adapter.py`` 里原地替换；
++    ``config`` 只用于 :func:`usable_detections` 的可用性过滤（无 box_id、
++    contour 模式缺半尺寸的件不参与排序），**不参与排序键本身**。
++    与 :func:`order_by_open_edge` 一样，它**只改顺序、不拒识**。
++    """
++    usable, _ = usable_detections(frame, config)
++    return tuple(sorted(usable, key=row_scan_key))
++
++
+ def describe_selection_limitation(mode: str) -> str:
+     """把当前选择模式的局限写清楚（写进日志，避免"看起来精确"的假象）。"""
+     if mode == SELECTION_CONTOUR:
+@@ -234,7 +282,9 @@
+     "VisionFrame",
+     "describe_selection_limitation",
+     "order_by_open_edge",
++    "order_by_row_scan",
+     "ordering_key",
++    "row_scan_key",
+     "select_target",
+     "usable_detections",
+ ]
+diff --git a/电控/src/electrical_control/pick_strategy/__init__.py b/电控/src/electrical_control/pick_strategy/__init__.py
+--- a/电控/src/electrical_control/pick_strategy/__init__.py
++++ b/电控/src/electrical_control/pick_strategy/__init__.py
+@@ -63,6 +63,8 @@
+     VisionFrame,
+     describe_selection_limitation,
+     order_by_open_edge,
++    order_by_row_scan,
++    row_scan_key,
+     select_target,
+ )
+ from electrical_control.pick_strategy.state_machine import (
+@@ -115,7 +117,9 @@
+     "describe_selection_limitation",
+     "drive_until_settled",
+     "order_by_open_edge",
++    "order_by_row_scan",
+     "plan",
++    "row_scan_key",
+     "select_target",
+     "to_commands",
+ ]
+diff --git a/电控/src/electrical_control/pick_strategy/chain_adapter.py b/电控/src/electrical_control/pick_strategy/chain_adapter.py
+--- a/电控/src/electrical_control/pick_strategy/chain_adapter.py
++++ b/电控/src/electrical_control/pick_strategy/chain_adapter.py
+@@ -12,8 +12,17 @@
+ 它**不**碰协议、**不**碰固件、**不**碰串口；也不接 `planner`/`state_machine`/`executor`
+ （那三个会与 `Scheduler` 形成两个权威，且现有 `ITEM_TASK` 表达不了它们的计划形状）。
+ 
++排序规则（2026-09-21 用户口径，**已从"离无壁边最近"改成行扫描**）
++------------------------------------------------------------------
++:func:`~electrical_control.pick_strategy.selector.order_by_row_scan`：第一键
++**Y 从大到小**（从靠 Y 正方向那排开始、逐排往里），第二键 **同行 X 从小到大**
++（每排从最靠 HOME 那件沿 +X 抓）⇒ 效果"从上到下、每排从左到右"。
++排序键**不读 `[Tray]`/`[Home]`**，故结果不再取决于托盘四边与无壁边配在哪一侧
++（那几项改了也不影响先后）。
++
+ 坐标换算（关键，别搞错）
+ ------------------------
++
+ `payload.pick_x_position / pick_y_position` 是 **0.1mm** 的
+ **【滑台记账坐标】**（`PICK = 物料装置坐标 + ToolOffset`，见
+ `electrical_control/rpi/pixel_to_device.py:478-503`）。
+@@ -27,9 +36,13 @@
+ * `selection_mode = center`【实测】：现有视觉线格式**只给中心像素、不给宽高**
+   （`视觉/src/maixcam_deploy/main.py:342-368` 丢弃 `obj.w/h`）⇒ 只能用**中心**到无壁边的距离，
+   不是真正的轮廓距离（最坏差约 20mm）。局限已由 `describe_selection_limitation()` 打印。
+-* `[Tray]` 的四个边界与 `open_side` **【待实测】**（`电控/deploy/pick_strategy.ini:24`）
+-  ⇒ **无壁边在哪一侧从未实测**。本适配器**不猜**：直接把该 ini 的值拿来用，
+-  并把未核实项清单打进日志，由现场决定要不要改那一行。
++* `[Tray] open_side = y_max` 已于 2026-09-21 现场【实测】确认
++  （`电控/deploy/pick_strategy.ini:38`：X 轴全部被挡住、只有 Y 正方向敞开）；
++  托盘四边其余值仍带【待实测】，`pick_strategy.demo.ini:45` 那份也还是【待实测】。
++  2026-09-21 起排序键改成行扫描、**不再读它们** ⇒ 这些项的取值**不再影响件的先后**
++  （现役键只在 `open_side = y_max` 时才与行扫描主键同序，见
++  `selector.row_scan_key` 的说明）；但它们仍进"未核实参数"清单
++  （`usable_detections` 的可用性过滤、contour 模式半尺寸仍取自 config），日志照打。
+ """
+ 
+ from __future__ import annotations
+@@ -44,7 +57,7 @@
+     Detection,
+     VisionFrame,
+     describe_selection_limitation,
+-    order_by_open_edge,
++    order_by_row_scan,
+ )
+ 
+ logger = logging.getLogger(__name__)
+@@ -117,7 +130,7 @@
+         frame = VisionFrame(
+             frame_id=frame_id_base, received_at_s=0.0, detections=tuple(dets)
+         )
+-        ordered_dets = order_by_open_edge(frame, config)   # 只按规则排序，不拒识
++        ordered_dets = order_by_row_scan(frame, config)   # 只按规则排序，不拒识
+ 
+         ordered: list[object] = [by_seq[d.target_seq] for d in ordered_dets]
+         # α：策略没排进来的件**不丢**，按原相对顺序接到队尾
+diff --git a/电控/tests/pick_strategy/test_row_scan_order.py b/电控/tests/pick_strategy/test_row_scan_order.py
+new file mode 100644
+--- /dev/null
++++ b/电控/tests/pick_strategy/test_row_scan_order.py
+@@ -0,0 +1,193 @@
++"""行扫描抓取顺序（A1b，2026-09-21）：Y 从大到小 → 同行 X 从小到大。
++
++用户口径（已确认）：第一键 **Y 从大到小**（从靠 Y 正方向那排开始、逐排往里），
++第二键 **同一行内 X 从小到大**（每排从最靠 HOME 那件沿 +X 依次抓）
++⇒ 效果"从上到下、每排从左到右"。它**取代**原先的「离托盘无壁边最近」规则。
++
++本文件锁死 5 条判据：
++1. 排序键就是 ``(-y, x, target_seq)``（第一键 Y 降、第二键 X 升）；
++2. **换掉 ``[Tray] open_side`` / 挪动 ``[Home]`` 都改不了顺序** —— 现役键会变，
++   行扫描不会（"不再依赖 [Tray] 与 [Home] 的配置"这句话在这里被证明，不是被声明）；
++3. ``[Tray] open_side = y_max`` 时与现役键**主键同序**（Y 互不相同则逐件同序）；
++4. **默认 off 逐字节等价**：``--pick-strategy`` 默认仍是 ``off``、off 时不构造
++   任何排序器 ⇒ 顺序与接入前完全一致；
++5. α 语义：启用时也**不丢件**（件数、集合都不变），件数 < 2 原样返回。
++
++跑法（两种都行）：
++    D:\\python.exe -m pytest tests/pick_strategy/test_row_scan_order.py
++    python tests/pick_strategy/test_row_scan_order.py
++"""
++
++from __future__ import annotations
++
++import importlib.util
++import sys
++import unittest
++from dataclasses import dataclass, replace
++from pathlib import Path
++
++_EC = Path(__file__).resolve().parents[2]          # 电控/
++_SRC = _EC / "src"
++if str(_SRC) not in sys.path:
++    sys.path.insert(0, str(_SRC))
++
++from electrical_control.pick_strategy import (  # noqa: E402
++    Detection,
++    Point,
++    VisionFrame,
++    build_config,
++    order_by_open_edge,
++    order_by_row_scan,
++    row_scan_key,
++)
++from electrical_control.pick_strategy.chain_adapter import (  # noqa: E402
++    make_payload_orderer,
++    payload_orderer_from_ini,
++)
++from electrical_control.pick_strategy.geometry import OPEN_SIDE_X_MIN  # noqa: E402
++
++DEMO_INI = _EC / "deploy" / "pick_strategy.demo.ini"
++RUN_CHAIN = _EC / "deploy" / "run_chain.py"
++
++
++def det(seq: int, x_mm: float, y_mm: float, box_id: int = 1) -> Detection:
++    return Detection(target_seq=seq, box_id=box_id, class_id=box_id,
++                     x_mm=x_mm, y_mm=y_mm)
++
++
++def frame(*dets: Detection) -> VisionFrame:
++    return VisionFrame(frame_id=1, received_at_s=0.0, detections=tuple(dets))
++
++
++def seqs(dets) -> list[int]:
++    return [d.target_seq for d in dets]
++
++
++@dataclass
++class _Payload:
++    """实链 payload 的最小面（只需要排序器读的那 4 个字段）。"""
++
++    target_seq: int
++    class_id: int
++    pick_x_position: int   # 0.1mm 滑台记账坐标 = 装置坐标 + ToolOffset
++    pick_y_position: int
++
++
++def payload(seq: int, cls: int, x_mm: float, y_mm: float, cfg) -> _Payload:
++    """按**装置坐标 mm** 造 payload（记账坐标 = 装置坐标 + ToolOffset）。"""
++
++    return _Payload(
++        target_seq=seq,
++        class_id=cls,
++        pick_x_position=int(round((x_mm + cfg.tool_offset.x_mm) * 10)),
++        pick_y_position=int(round((y_mm + cfg.tool_offset.y_mm) * 10)),
++    )
++
++
++# (x, y) —— Y 分三排（55 / 30 / 10），每排两件（X 30 / 70~80）
++CORPUS = ((1, 70.0, 30.0), (2, 30.0, 30.0), (3, 30.0, 55.0),
++          (4, 80.0, 55.0), (5, 30.0, 10.0))
++# Y 降序 → 同行 X 升序
++EXPECTED = [3, 4, 2, 1, 5]
++
++
++class RowScanOrderTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls) -> None:
++        cls.cfg = build_config(DEMO_INI)
++
++    def test_row_scan_key_is_y_desc_then_x_asc(self) -> None:
++        """判据 1：第一键 Y 降、第二键 X 升；同排同 X 才用 target_seq。"""
++
++        self.assertEqual((-55.0, 30.0, 3), row_scan_key(det(3, 30.0, 55.0)))
++        got = order_by_row_scan(frame(*(det(s, x, y) for s, x, y in CORPUS)), self.cfg)
++        self.assertEqual(EXPECTED, seqs(got))
++
++    def test_row_scan_ignores_tray_and_home(self) -> None:
++        """判据 2：行扫描不吃 [Tray]/[Home]，现役键吃 —— 这是"更稳"的实测证据。"""
++
++        fr = frame(*(det(s, x, y) for s, x, y in CORPUS))
++        base = order_by_row_scan(fr, self.cfg)
++
++        # 无壁边改到另一侧 + HOME 挪到别处
++        other = replace(
++            self.cfg,
++            tray=replace(self.cfg.tray, open_side=OPEN_SIDE_X_MIN),
++            home=Point(0.0, 0.0),
++        )
++        self.assertEqual(EXPECTED, seqs(order_by_row_scan(fr, other)),
++                         "行扫描顺序不该受 [Tray]/[Home] 影响")
++
++        # 反证：现役键在同样两套配置下顺序确实变了（否则本用例没有杀伤力）
++        self.assertNotEqual(seqs(order_by_open_edge(fr, self.cfg)),
++                            seqs(order_by_open_edge(fr, other)))
++
++    def test_row_scan_agrees_with_open_edge_when_open_side_is_y_max(self) -> None:
++        """判据 3：open_side = y_max 时两者主键同序（Y 互不相同 ⇒ 逐件同序）。"""
++
++        fr = frame(*(det(s, x, y) for s, x, y in CORPUS))
++        self.assertEqual([1, 2, 3, 4, 5], sorted(s.target_seq for s in fr.detections))
++        self.assertEqual(seqs(order_by_open_edge(fr, self.cfg)),
++                         seqs(order_by_row_scan(fr, self.cfg)))
++
++    def test_orderer_is_alpha_and_keeps_every_payload(self) -> None:
++        """判据 5：启用时也**不丢件**；件数 < 2 原样返回。"""
++
++        orderer = make_payload_orderer(self.cfg)
++        payloads = tuple(payload(s, 1, x, y, self.cfg) for s, x, y in CORPUS)
++        ordered = orderer(payloads)
++
++        self.assertEqual(len(payloads), len(ordered))
++        self.assertEqual({id(p) for p in payloads}, {id(p) for p in ordered})
++        self.assertEqual(EXPECTED, [p.target_seq for p in ordered])
++
++        one = payloads[:1]
++        self.assertEqual(one, orderer(one), "单件必须原样返回（逐字节一致）")
++        self.assertEqual((), orderer(()), "空输入必须原样返回")
++
++    def test_unusable_payload_is_moved_to_tail_not_dropped(self) -> None:
++        """α：缺抓取点的件排到队尾，**不丢**。"""
++
++        orderer = make_payload_orderer(self.cfg)
++        good = payload(3, 1, 30.0, 55.0, self.cfg)
++        broken = _Payload(target_seq=9, class_id=1,
++                          pick_x_position=None, pick_y_position=None)  # type: ignore[arg-type]
++        rest = payload(5, 1, 30.0, 10.0, self.cfg)
++
++        ordered = orderer((broken, rest, good))
++        self.assertEqual([3, 5, 9], [p.target_seq for p in ordered])
++
++    def test_missing_config_disables_the_orderer(self) -> None:
++        """默认/缺失 ⇒ 不启用排序器（调用方保持原顺序 = 接入前行为）。"""
++
++        self.assertIsNone(payload_orderer_from_ini(_EC / "deploy" / "不存在的.ini"))
++
++    def test_default_pick_strategy_is_still_off(self) -> None:
++        """判据 4（默认 off 逐字节等价）：默认值必须是 off，off 就不构造排序器。
++
++        `run_chain.py` 是部署脚本（py3.9+），在旧解释器上加载不了 ⇒ 跳过而不是假装通过。
++        """
++
++        spec = importlib.util.spec_from_file_location("run_chain_probe", RUN_CHAIN)
++        self.assertIsNotNone(spec)
++        try:
++            module = importlib.util.module_from_spec(spec)
++            spec.loader.exec_module(module)  # type: ignore[union-attr]
++            args = module.parse_args([])
++        except Exception as exc:  # noqa: BLE001
++            raise unittest.SkipTest(f"run_chain.py 在本解释器加载不了：{exc}") from None
++
++        self.assertEqual("off", args.pick_strategy,
++                         "--pick-strategy 默认必须是 off（off 才会逐字节等于接入前）")
++        self.assertEqual("off", module.parse_args(["--pick-strategy", "off"]).pick_strategy)
++
++    def test_row_scan_is_exported_by_the_package(self) -> None:
++        import electrical_control.pick_strategy as pkg
++
++        for name in ("order_by_row_scan", "row_scan_key"):
++            self.assertIn(name, pkg.__all__)
++            self.assertIn(name, dir(pkg))
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)

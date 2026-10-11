@@ -1,0 +1,307 @@
+ENVIRONMENT {"dependencies": {"numpy": true, "onnx": false, "onnxruntime": true}, "executable": "D:\\python.exe", "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]", "root": "C:\\Users\\29845\\Desktop\\工创赛"}
+BOUNDARY: read-only datasets/models/configs; no model inference, device connection, training, remap execution, or production writes.
+REMAP_FACT {"fixed_points": [], "id_set_after": [0, 1, 2, 3, 4, 5, 6], "id_set_before": [0, 1, 2, 3, 4, 5, 6], "mapping": {"0": 3, "1": 6, "2": 4, "3": 2, "4": 5, "5": 1, "6": 0}, "warning": "0..6 range alone cannot distinguish the two class permutations; remap is not idempotent."}
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\training\\remap_labels.py", "sha256": "54e9bf013680668d1f267bb951b496551716bbecabb3742a03e4f9dd5e02d0e8"}
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:1: #!/usr/bin/env python3
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:2: """把 LabelImg 标的类别编号，重映射回正确的 0-6 顺序。
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:3: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:4: 背景：用户的 LabelImg 精简版没读到 classes.txt，类别编号按"第一次输入
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:5: 类别名的顺序"定的。真实下拉顺序（从上到下）为：
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:6:     六棱柱, 三棱柱, 五棱柱, 圆柱, 四棱锥, 长方体, cube
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:7: 对应旧编号 0..6。而模型要求的正确顺序是：
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:8:     0=cube, 1=cuboid, 2=cylinder, 3=hexagonal_prism,
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:9:     4=pentagonal_prism, 5=square_pyramid, 6=triangular_prism
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:10: 所以需要把旧编号按 REMAP 重映射。
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:11: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:12: 同时把"没用到的空照片"（.txt 为 0 字节）连同图片移到 _unused/ 子目录，
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:13: 避免它们混进训练集。可回退：文件只是移动，没删除。
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:14: """
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:15: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:16: from __future__ import annotations
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:17: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:18: from pathlib import Path
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:19: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:20: # 旧 LabelImg 编号 -> 正确编号
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:21: REMAP = {0: 3, 1: 6, 2: 4, 3: 2, 4: 5, 5: 1, 6: 0}
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:22: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:23: # 正确的类别名（顺序 0-6），用于验证时打印
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:24: CLASSES = (
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:25:     "cube", "cuboid", "cylinder", "hexagonal_prism",
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:26:     "pentagonal_prism", "square_pyramid", "triangular_prism",
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:27: )
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:28: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:29: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:30: def main() -> int:
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:31:     base = Path(r"C:\Users\29845\Desktop\工创赛\workspace_label")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:32:     unused = base / "_unused"
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:33:     unused.mkdir(exist_ok=True)
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:34: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:35:     n_remapped = 0
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:36:     n_moved = 0
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:37: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:38:     for txt in sorted(base.glob("img_*.txt")):
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:39:         jpg = txt.with_suffix(".jpg")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:40:         if txt.stat().st_size == 0:
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:41:             # 空标签 -> 没用到的照片，移走（图片一起移）
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:42:             txt.rename(unused / txt.name)
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:43:             if jpg.exists():
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:44:                 jpg.rename(unused / jpg.name)
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:45:             n_moved += 1
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:46:             continue
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:47: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:48:         lines = txt.read_text(encoding="utf-8").splitlines()
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:49:         out = []
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:50:         for line in lines:
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:51:             parts = line.split()
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:52:             if not parts:
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:53:                 continue
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:54:             old = int(parts[0])
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:55:             new = REMAP.get(old, old)
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:56:             out.append(" ".join([str(new)] + parts[1:]))
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:57:         txt.write_text("\n".join(out) + "\n", encoding="utf-8")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:58:         n_remapped += 1
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:59: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:60:     # 验证：统计重映射后的各类别框数
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:61:     counts = {i: 0 for i in range(7)}
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:62:     total_boxes = 0
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:63:     for txt in sorted(base.glob("img_*.txt")):
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:64:         for line in txt.read_text(encoding="utf-8").splitlines():
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:65:             parts = line.split()
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:66:             if not parts:
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:67:                 continue
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:68:             counts[int(parts[0])] += 1
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:69:             total_boxes += 1
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:70: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:71:     print(f"remapped  : {n_remapped} 个标签文件")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:72:     print(f"moved     : {n_moved} 张空照片 -> {unused.name}/")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:73:     print(f"total box : {total_boxes}")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:74:     print("--- 重映射后各类别框数 ---")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:75:     for i in range(7):
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:76:         print(f"  {i} {CLASSES[i]:<18} {counts[i]}")
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:77:     return 0
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:78: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:79: 
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:80: if __name__ == "__main__":
+C:\Users\29845\Desktop\工创赛\视觉\training\remap_labels.py:81:     raise SystemExit(main())
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\class.txt", "sha256": "e3ded2ae8ebf3d98c7b288983dc301072c0022224b07de0fbd4ca343b91bc6b5"}
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:1: cube
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:2: cuboid
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:3: cylinder
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:4: hexagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:5: pentagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:6: square_pyramid
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\class.txt:7: triangular_prism
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\classes.txt", "sha256": "7fef2a8f3c42deeafd8430b040abb4f1448f80deaed42c114fc3b1659e471964"}
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:1: cube
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:2: cuboid
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:3: cylinder
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:4: hexagonal_prism
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:5: pentagonal_prism
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:6: square_pyramid
+C:\Users\29845\Desktop\工创赛\workspace_label\classes.txt:7: triangular_prism
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\models\\labels_yolo5s_geom7c.txt", "sha256": "e3ded2ae8ebf3d98c7b288983dc301072c0022224b07de0fbd4ca343b91bc6b5"}
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:1: cube
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:2: cuboid
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:3: cylinder
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:4: hexagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:5: pentagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:6: square_pyramid
+C:\Users\29845\Desktop\工创赛\视觉\models\labels_yolo5s_geom7c.txt:7: triangular_prism
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\training\\data.yaml", "sha256": "88dd4dc0e75ea1e147ee8fccd6743c97fb20ffd798c9f23e23c52b91b9b864f9"}
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:1: # 工创赛 7 类三维几何体检测
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:2: path: D:/AAAdesktop1/shijue/yolo_dataset
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:3: train: images/train
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:4: val: images/val
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:5: 
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:6: nc: 7
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:7: names:
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:8:   0: cube
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:9:   1: cuboid
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:10:   2: cylinder
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:11:   3: hexagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:12:   4: pentagonal_prism
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:13:   5: square_pyramid
+C:\Users\29845\Desktop\工创赛\视觉\training\data.yaml:14:   6: triangular_prism
+TEXT_FILE {"path": "D:\\AAAdesktop1\\shijue\\yolo_dataset\\data.yaml", "sha256": "88dd4dc0e75ea1e147ee8fccd6743c97fb20ffd798c9f23e23c52b91b9b864f9"}
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:1: # 工创赛 7 类三维几何体检测
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:2: path: D:/AAAdesktop1/shijue/yolo_dataset
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:3: train: images/train
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:4: val: images/val
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:5: 
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:6: nc: 7
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:7: names:
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:8:   0: cube
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:9:   1: cuboid
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:10:   2: cylinder
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:11:   3: hexagonal_prism
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:12:   4: pentagonal_prism
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:13:   5: square_pyramid
+D:\AAAdesktop1\shijue\yolo_dataset\data.yaml:14:   6: triangular_prism
+LABEL_STATS {"boxes": 618, "counts": {"0": 33, "1": 72, "2": 73, "3": 47, "4": 89, "5": 148, "6": 156}, "empty_files": 0, "file_count": 386, "invalid_rows": [], "path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels", "sha256_names_and_contents": "83af8ea106c3fed3c2e9da0769ad2fc4137fb99c7f9875a62e7bd535bd1a6fb6"}
+LABEL_STATS {"boxes": 87, "counts": {"0": 28, "1": 3, "2": 4, "3": 20, "4": 9, "5": 18, "6": 5}, "empty_files": 0, "file_count": 64, "invalid_rows": [], "path": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label", "sha256_names_and_contents": "788a50bfa6609e692bc95cef347ea289e13813b26c029a1781899fd2bb9a2659"}
+LABEL_STATS {"boxes": 0, "counts": {}, "empty_files": 148, "file_count": 148, "invalid_rows": [], "path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\_unused\\labels", "sha256_names_and_contents": "186b653714961c451ec0152e769fbfbb7f6efb11eb78b5c59d87265a84002580"}
+LABEL_STATS {"boxes": 0, "counts": {}, "empty_files": 124, "file_count": 124, "invalid_rows": [], "path": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\_unused", "sha256_names_and_contents": "97657a75ca5cd00568472d089ef62f105365fe03ff8467450c56a53ad03ca4df"}
+IMAGE_STATS {"count": 386, "count_by_parent": {"C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\images": 386}, "dataset": "preliminary"}
+IMAGE_STATS {"count": 64, "count_by_parent": {"C:\\Users\\29845\\Desktop\\工创赛\\workspace_label": 64}, "dataset": "workspace_label"}
+IMAGE_STATS {"count": 638, "count_by_parent": {"D:\\AAAdesktop1\\shijue\\yolo_dataset\\images\\train": 511, "D:\\AAAdesktop1\\shijue\\yolo_dataset\\images\\val": 127}, "dataset": "current_yolo"}
+IMAGE_MATCH_COMPARE {"comparison": "preliminary -> workspace_label", "counts": {"no_byte_identical_image": 322, "old_to_new_remap_exact": 64}, "examples": {"old_to_new_remap_exact": [{"image_sha256": "5604dd414ea07a332cc35b9355635e1bf34a1062a4e1dcf8fba11fee54d1ba80", "left": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels\\session_1787758510_img_00002.txt", "left_rows": [[6, [0.774554, 0.164062, 0.375, 0.328125]]], "right": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00070.txt", "right_rows": [[0, [0.774554, 0.164062, 0.375, 0.328125]]]}, {"image_sha256": "48672035d8e8bcd22ccf92d5af751935772c2da009aca6dcf603e052d65872e6", "left": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels\\session_1787758510_img_00004.txt", "left_rows": [[6, [0.417411, 0.80692, 0.415179, 0.386161]]], "right": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00085.txt", "right_rows": [[0, [0.417411, 0.80692, 0.415179, 0.386161]]]}, {"image_sha256": "b34c5774f5c80e5dee152b954dc010124176746b4b90580f01cb97b6bdcbcb48", "left": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels\\session_1787758510_img_00006.txt", "left_rows": [[3, [0.446429, 0.401786, 0.303571, 0.308036]]], "right": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00090.txt", "right_rows": [[2, [0.446429, 0.401786, 0.303571, 0.308036]]]}, {"image_sha256": "25cad0c20ab92b6b968a84f59c159aed9939179819c76d41e82ea68e50f4b7df", "left": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels\\session_1787758510_img_00007.txt", "left_rows": [[6, [0.233259, 0.600446, 0.421875, 0.441964]]], "right": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00034.txt", "right_rows": [[0, [0.233259, 0.600446, 0.421875, 0.441964]]]}]}, "left_root": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary"}
+IMAGE_MATCH_COMPARE {"comparison": "preliminary -> current_yolo", "counts": {"no_byte_identical_image": 386}, "examples": {}, "left_root": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary"}
+IMAGE_MATCH_COMPARE {"comparison": "workspace_label -> current_yolo", "counts": {"no_byte_identical_image": 64}, "examples": {}, "left_root": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label"}
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\labels\\session_1787758510_img_00019.txt", "sha256": "6db3167fc85ac2c3a5e40bc90f526b2b4d4e7f67e51cfff98d6d91af0b4639a9"}
+C:\Users\29845\Desktop\工创赛\视觉\datasets\preliminary\labels\session_1787758510_img_00019.txt:1: 4 0.496652 0.352679 0.354911 0.348214
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00004.txt", "sha256": "30784446a8c0d82b2fea8e95a092e7db813e0f7b2c1725d75d1fbcfd5531c3d6"}
+C:\Users\29845\Desktop\工创赛\workspace_label\img_00004.txt:1: 5 0.496652 0.352679 0.354911 0.348214
+B07_SAMPLE_IMAGE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\datasets\\preliminary\\images\\session_1787758510_img_00019.jpg", "sha256": "dc32a6fafc3f39ed62d23c8c5b30f780a1b0c6209f9b9ae2c55b2dc0352ac4a7"}
+B07_SAMPLE_IMAGE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00004.jpg", "sha256": "dc32a6fafc3f39ed62d23c8c5b30f780a1b0c6209f9b9ae2c55b2dc0352ac4a7"}
+LABEL_STATS {"boxes": 803, "counts": {"0": 87, "1": 74, "2": 117, "3": 149, "4": 141, "5": 115, "6": 120}, "empty_files": 0, "file_count": 511, "invalid_rows": [], "path": "D:\\AAAdesktop1\\shijue\\yolo_dataset\\labels\\train", "sha256_names_and_contents": "36ae3d2d43e89e2f73ec68aa9bea5cb8231971aaa5a4f33699e2563fb49a01ae"}
+LABEL_STATS {"boxes": 211, "counts": {"0": 21, "1": 20, "2": 32, "3": 39, "4": 40, "5": 33, "6": 26}, "empty_files": 0, "file_count": 127, "invalid_rows": [], "path": "D:\\AAAdesktop1\\shijue\\yolo_dataset\\labels\\val", "sha256_names_and_contents": "62f1d8d28512eb93bdd1de1e8a446d30991b9c9182e77aaf6e92f16a7623519e"}
+CURRENT_YOLO_VS_VOC {"method": "exact multiset of (class index from XML object name, normalized box rounded to six decimals)", "mismatches": [], "object_names": {"cube": 108, "cuboid": 94, "cylinder": 149, "hexagonal_prism": 188, "pentagonal_prism": 181, "square_pyramid": 148, "triangular_prism": 146}, "outcomes": {"xml_name_and_box_match": 638}}
+TEXT_FILE {"path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\manifest.json", "sha256": "7c99b3e31a7f55ddb03d3f0af1c39bed7f8a35aee7b66d154e50f8196ae3ca90"}
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:1: {
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:2:   "schema_version": "voc-to-yolo-dataset-v1",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:3:   "merged": true,
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:4:   "base": "block_dataset_v1_7class_round2",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:5:   "workspace_added": 64,
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:6:   "workspace_source": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:7:   "classes": [
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:8:     "cube",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:9:     "cuboid",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:10:     "cylinder",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:11:     "hexagonal_prism",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:12:     "pentagonal_prism",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:13:     "square_pyramid",
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:14:     "triangular_prism"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:15:   ]
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\manifest.json:16: }
+TEXT_FILE {"path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\data.yaml", "sha256": "46be86da27ef1c0614836fd06b26421a7a00b1c6e944e19717b626dacd3bb541"}
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:1: path: "D:/AAAdesktop1/shijue/ultralytics-8.3.163/datasets/block_dataset_v1_7class_round3"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:2: train: images/train
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:3: val: images/val
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:4: test: images/test
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:5: names:
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:6:   0: "cube"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:7:   1: "cuboid"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:8:   2: "cylinder"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:9:   3: "hexagonal_prism"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:10:   4: "pentagonal_prism"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:11:   5: "square_pyramid"
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\datasets\block_dataset_v1_7class_round3\data.yaml:12:   6: "triangular_prism"
+TEXT_FILE {"path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\runs\\block_detector\\block_yolo11n_e100_round3\\args.yaml", "sha256": "2d3f1119ec8133a9d19f68ad991cb66d7ffe1cb2a0ec25eeff8b85d14287d067"}
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:1: task: detect
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:2: mode: train
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:3: model: yolo11n.pt
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:4: data: datasets\block_dataset_v1_7class_round3\data.yaml
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:5: epochs: 100
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:6: time: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:7: patience: 100
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:8: batch: 16
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:9: imgsz: 448
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:10: save: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:11: save_period: -1
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:12: cache: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:13: device: '0'
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:14: workers: 0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:15: project: runs\block_detector
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:16: name: block_yolo11n_e100_round3
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:17: exist_ok: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:18: pretrained: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:19: optimizer: auto
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:20: verbose: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:21: seed: 42
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:22: deterministic: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:23: single_cls: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:24: rect: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:25: cos_lr: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:26: close_mosaic: 10
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:27: resume: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:28: amp: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:29: fraction: 1.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:30: profile: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:31: freeze: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:32: multi_scale: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:33: overlap_mask: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:34: mask_ratio: 4
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:35: dropout: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:36: val: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:37: split: val
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:38: save_json: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:39: conf: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:40: iou: 0.7
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:41: max_det: 300
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:42: half: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:43: dnn: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:44: plots: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:45: source: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:46: vid_stride: 1
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:47: stream_buffer: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:48: visualize: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:49: augment: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:50: agnostic_nms: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:51: classes: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:52: retina_masks: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:53: embed: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:54: show: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:55: save_frames: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:56: save_txt: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:57: save_conf: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:58: save_crop: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:59: show_labels: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:60: show_conf: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:61: show_boxes: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:62: line_width: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:63: format: torchscript
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:64: keras: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:65: optimize: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:66: int8: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:67: dynamic: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:68: simplify: true
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:69: opset: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:70: workspace: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:71: nms: false
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:72: lr0: 0.01
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:73: lrf: 0.01
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:74: momentum: 0.937
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:75: weight_decay: 0.0005
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:76: warmup_epochs: 3.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:77: warmup_momentum: 0.8
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:78: warmup_bias_lr: 0.1
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:79: box: 7.5
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:80: cls: 0.5
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:81: dfl: 1.5
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:82: pose: 12.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:83: kobj: 1.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:84: nbs: 64
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:85: hsv_h: 0.015
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:86: hsv_s: 0.7
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:87: hsv_v: 0.4
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:88: degrees: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:89: translate: 0.1
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:90: scale: 0.5
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:91: shear: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:92: perspective: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:93: flipud: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:94: fliplr: 0.5
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:95: bgr: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:96: mosaic: 1.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:97: mixup: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:98: cutmix: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:99: copy_paste: 0.0
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:100: copy_paste_mode: flip
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:101: auto_augment: randaugment
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:102: erasing: 0.4
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:103: cfg: null
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:104: tracker: botsort.yaml
+D:\AAAdesktop1\shijue\ultralytics-8.3.163\runs\block_detector\block_yolo11n_e100_round3\args.yaml:105: save_dir: runs\block_detector\block_yolo11n_e100_round3
+LABEL_STATS {"boxes": 917, "counts": {"0": 115, "1": 79, "2": 126, "3": 175, "4": 159, "5": 140, "6": 123}, "empty_files": 0, "file_count": 574, "invalid_rows": [], "path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\train", "sha256_names_and_contents": "508154398264c29bb4c4fdde5119263bb48f803d8aa165b79f7f225dc4631909"}
+LABEL_STATS {"boxes": 89, "counts": {"0": 11, "1": 8, "2": 13, "3": 15, "4": 14, "5": 13, "6": 15}, "empty_files": 0, "file_count": 64, "invalid_rows": [], "path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\val", "sha256_names_and_contents": "8851ad6860bd2c786d7c3c5c35765e549c623dcf64373b40ead81d59610a5f21"}
+LABEL_STATS {"boxes": 95, "counts": {"0": 10, "1": 10, "2": 14, "3": 18, "4": 17, "5": 13, "6": 13}, "empty_files": 0, "file_count": 64, "invalid_rows": [], "path": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\test", "sha256_names_and_contents": "3da9a0f11371b06cee82a4b495f5679fd647b17feebb72328af8c6a3839a099d"}
+IMAGE_MATCH_COMPARE {"comparison": "workspace_label -> round3/ws_train", "counts": {"same": 64}, "examples": {"same": [{"image_sha256": "3270eef9b77cfac30de525c244cfb6cfd62e807e65b7767fbe897d4510bd5884", "left": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00003.txt", "left_rows": [[5, [0.386161, 0.205357, 0.334821, 0.258929]], [4, [0.13058, 0.204241, 0.261161, 0.252232]]], "right": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\train\\ws_img_00003.txt", "right_rows": [[5, [0.386161, 0.205357, 0.334821, 0.258929]], [4, [0.13058, 0.204241, 0.261161, 0.252232]]]}, {"image_sha256": "dc32a6fafc3f39ed62d23c8c5b30f780a1b0c6209f9b9ae2c55b2dc0352ac4a7", "left": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00004.txt", "left_rows": [[5, [0.496652, 0.352679, 0.354911, 0.348214]]], "right": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\train\\ws_img_00004.txt", "right_rows": [[5, [0.496652, 0.352679, 0.354911, 0.348214]]]}, {"image_sha256": "1724558831d71d6e6ebd3e159121f62a5b21a33831b6025d56fa4814bc0050d6", "left": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00007.txt", "left_rows": [[0, [0.876116, 0.145089, 0.247768, 0.200893]], [4, [0.647321, 0.848214, 0.375, 0.285714]]], "right": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\train\\ws_img_00007.txt", "right_rows": [[0, [0.876116, 0.145089, 0.247768, 0.200893]], [4, [0.647321, 0.848214, 0.375, 0.285714]]]}, {"image_sha256": "e3eeb8e263afda845b38ad1fdd6ea76b76edfdfc91380923b8d391af252c5f54", "left": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label\\img_00014.txt", "left_rows": [[3, [0.6875, 0.209821, 0.339286, 0.308036]]], "right": "D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class_round3\\labels\\train\\ws_img_00014.txt", "right_rows": [[3, [0.6875, 0.209821, 0.339286, 0.308036]]]}]}, "left_root": "C:\\Users\\29845\\Desktop\\工创赛\\workspace_label"}
+PRELIMINARY_LABEL_COHORTS {"counts": {"listed_for_auto_label": 175, "listed_for_auto_label/archive_label_empty": 57, "listed_for_auto_label/archive_label_missing": 118, "preexisting_label": 211, "preexisting_label/archive_label_equal": 211}, "note": "Saved list and archive establish provenance, not independent semantic ground truth for shapes.", "saved_auto_input_count": 323}
+TEXT_FILE {"path": "C:\\Users\\29845\\Desktop\\工创赛\\archive\\datasets\\raw-capture-2026-08-27\\session_1787758510\\img_00019.txt", "sha256": "6db3167fc85ac2c3a5e40bc90f526b2b4d4e7f67e51cfff98d6d91af0b4639a9"}
+C:\Users\29845\Desktop\工创赛\archive\datasets\raw-capture-2026-08-27\session_1787758510\img_00019.txt:1: 4 0.496652 0.352679 0.354911 0.348214
+ONNX_RUNTIME {"action": "CPU session load/introspection only; no session.run; no camera input", "providers": ["AzureExecutionProvider", "CPUExecutionProvider"], "version": "1.26.0"}
+ONNX_MODEL {"CPU_session_load": "PASS", "actual_opsets": [{"domain": "", "version": 13}], "bytes": 10447760, "class_count_from_embedded_names": 7, "embedded_metadata": {"args": "{'batch': 1, 'half': False, 'dynamic': False, 'simplify': True, 'opset': 12, 'nms': False}", "author": "Ultralytics", "batch": "1", "channels": "3", "date": "2026-08-25T11:18:57.244448", "description": "Ultralytics YOLO11n model trained on D:\\AAAdesktop1\\shijue\\ultralytics-8.3.163\\datasets\\block_dataset_v1_7class\\data.yaml", "docs": "https://docs.ultralytics.com", "imgsz": "[448, 448]", "license": "AGPL-3.0 License (https://ultralytics.com/license)", "names": "{0: 'cube', 1: 'cuboid', 2: 'cylinder', 3: 'hexagonal_prism', 4: 'pentagonal_prism', 5: 'square_pyramid', 6: 'triangular_prism'}", "stride": "32", "task": "detect", "version": "8.3.163"}, "embedded_names": {"0": "cube", "1": "cuboid", "2": "cylinder", "3": "hexagonal_prism", "4": "pentagonal_prism", "5": "square_pyramid", "6": "triangular_prism"}, "inputs": [{"dtype": "tensor(float)", "name": "images", "shape": [1, 3, 448, 448]}], "ir_version": 7, "outputs": [{"dtype": "tensor(float)", "name": "output0", "shape": [1, 11, 4116]}], "path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\models\\best_maixcam_opset13.onnx", "sha256": "da15c580fb0c8d6324f117eb12ab00494eba136b66c5970400996ef5145ad758"}
+ONNX_MODEL {"CPU_session_load": "PASS", "actual_opsets": [{"domain": "", "version": 13}], "bytes": 36556987, "class_count_from_embedded_names": 7, "embedded_metadata": {"args": "{'batch': 1, 'half': False, 'dynamic': False, 'simplify': True, 'opset': 13, 'nms': False}", "author": "Ultralytics", "batch": "1", "channels": "3", "date": "2026-09-03T02:50:39.334039", "description": "Ultralytics YOLOv5s model trained on D:/AAAdesktop1/shijue/yolo_dataset/data.yaml", "docs": "https://docs.ultralytics.com", "imgsz": "[448, 448]", "license": "AGPL-3.0 License (https://ultralytics.com/license)", "names": "{0: 'cube', 1: 'cuboid', 2: 'cylinder', 3: 'hexagonal_prism', 4: 'pentagonal_prism', 5: 'square_pyramid', 6: 'triangular_prism'}", "stride": "32", "task": "detect", "version": "8.3.163"}, "embedded_names": {"0": "cube", "1": "cuboid", "2": "cylinder", "3": "hexagonal_prism", "4": "pentagonal_prism", "5": "square_pyramid", "6": "triangular_prism"}, "inputs": [{"dtype": "tensor(float)", "name": "images", "shape": [1, 3, 448, 448]}], "ir_version": 7, "outputs": [{"dtype": "tensor(float)", "name": "output0", "shape": [1, 11, 4116]}], "path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\models\\yolo5s_geom7c_opset13.onnx", "sha256": "3685a194a4b768b2b5d068efe7a181a448ff4aa7d83b128b294c0ea47c273b66"}
+ONNX_MODEL {"CPU_session_load": "PASS", "actual_opsets": [{"domain": "", "version": 17}], "bytes": 36622719, "class_count_from_embedded_names": 7, "embedded_metadata": {"args": "{'batch': 1, 'half': False, 'dynamic': False, 'simplify': True, 'opset': 17, 'nms': False}", "author": "Ultralytics", "batch": "1", "channels": "3", "date": "2026-09-03T03:14:57.177285", "description": "Ultralytics YOLOv5s model trained on D:/AAAdesktop1/shijue/yolo_dataset/data.yaml", "docs": "https://docs.ultralytics.com", "imgsz": "[448, 448]", "license": "AGPL-3.0 License (https://ultralytics.com/license)", "names": "{0: 'cube', 1: 'cuboid', 2: 'cylinder', 3: 'hexagonal_prism', 4: 'pentagonal_prism', 5: 'square_pyramid', 6: 'triangular_prism'}", "stride": "32", "task": "detect", "version": "8.3.163"}, "embedded_names": {"0": "cube", "1": "cuboid", "2": "cylinder", "3": "hexagonal_prism", "4": "pentagonal_prism", "5": "square_pyramid", "6": "triangular_prism"}, "inputs": [{"dtype": "tensor(float)", "name": "images", "shape": [1, 3, 448, 448]}], "ir_version": 8, "outputs": [{"dtype": "tensor(float)", "name": "output0", "shape": [1, 11, 4116]}], "path": "C:\\Users\\29845\\Desktop\\工创赛\\视觉\\models\\yolo5s_geom7c_opset17.onnx", "sha256": "2cfb159f262abf94033a0e0e6878c727749f565f165951909cd59db617088214"}
+MUD_FILES_IN_MODELS {"files": []}
+AUDIT_COMPLETE: introspection only; 320x320 MaixCAM runtime configuration was not changed.

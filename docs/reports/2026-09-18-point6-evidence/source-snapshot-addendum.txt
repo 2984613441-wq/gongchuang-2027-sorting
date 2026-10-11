@@ -1,0 +1,1572 @@
+
+FILE: 电控/src/electrical_control/rpi/__init__.py MD5: 1b6cf044664a0fd9b69e875bd9ad2956
+   1: """Offline Raspberry Pi scheduler skeleton; no hardware adapters live here."""
+   2: 
+   3: from __future__ import annotations
+   4: 
+   5: from collections import deque
+   6: from dataclasses import dataclass
+   7: from enum import Enum, auto
+   8: from typing import Iterable, Mapping
+   9: 
+  10: from electrical_control.protocol import (
+  11:     DisplayContent,
+  12:     ItemTaskPayload,
+  13:     ResultIdentityConflict,
+  14:     RoundSuccessCounter,
+  15:     SuccessCountOverflow,
+  16:     build_display_content,
+  17: )
+  18: from .vision_ingest import (
+  19:     BatchTargets,
+  20:     FakeVisionSource,
+  21:     ImageIdMap,
+  22:     TargetReacquireResponse,
+  23:     VisionTarget,
+  24:     build_item_task_queue,
+  25: )
+  26: 
+  27: 
+  28: class SchedulerState(Enum):
+  29:     RECOVERY_LOCK = auto()
+  30:     READY = auto()
+  31:     ACTIVE = auto()
+  32:     WAIT_MOTION_DONE = auto()
+  33:     WAIT_ITEM_RESULT = auto()
+  34:     WAIT_RENDER = auto()
+  35:     FAULT = auto()
+  36: 
+  37: 
+  38: class SchedulerFault(RuntimeError):
+  39:     pass
+  40: 
+  41: 
+  42: @dataclass(frozen=True)
+  43: class VerifiedNewRound:
+  44:     round_id: str
+  45:     human_confirmed: bool
+  46:     stm32_safe: bool
+  47:     both_nodes_initialized: bool
+  48: 
+  49: 
+  50: @dataclass(frozen=True)
+  51: class ItemTaskContext:
+  52:     round_id: str
+  53:     task_id: int
+  54:     frame_seq: int
+  55:     payload: ItemTaskPayload
+  56: 
+  57: 
+  58: @dataclass(frozen=True)
+  59: class ItemResult:
+  60:     round_id: str
+  61:     task_id: int
+  62:     frame_seq: int
+  63:     target_seq: int
+  64:     result_code: int
+  65: 
+  66: 
+  67: @dataclass(frozen=True)
+  68: class RenderReceipt:
+  69:     round_id: str
+  70:     task_id: int
+  71:     target_seq: int
+  72:     content_crc32: int
+  73: 
+  74: 
+  75: # Bounded provenance history: one entry per completed render receipt. The
+  76: # one-byte round success counter bounds items per round, but across many
+  77: # rounds an unbounded module-level list would grow forever; cap it globally.
+  78: _COMPLETED_RECEIPT_CAPACITY = 512
+  79: _completed_receipts: deque[RenderReceipt] = deque(maxlen=_COMPLETED_RECEIPT_CAPACITY)
+  80: 
+  81: 
+  82: def _record_completed_receipt(receipt: RenderReceipt) -> RenderReceipt:
+  83:     _completed_receipts.append(receipt)
+  84:     return receipt
+  85: 
+  86: 
+  87: def _was_completed_by_pending(receipt: RenderReceipt) -> bool:
+  88:     return any(receipt is completed for completed in _completed_receipts)
+  89: 
+  90: 
+  91: @dataclass(frozen=True)
+  92: class DisplayAckIntent:
+  93:     task: ItemTaskContext
+  94:     target_seq: int
+  95:     render_result: str
+  96:     content_crc32: int
+  97: 
+  98:     @property
+  99:     def content_crc32_bytes(self) -> bytes:
+ 100:         return self.content_crc32.to_bytes(4, "big")
+ 101: 
+ 102: 
+ 103: class PendingRender:
+ 104:     def __init__(self, model: DisplayContent, task: ItemTaskContext) -> None:
+ 105:         self._model = model
+ 106:         self._task = task
+ 107:         self.receipt: RenderReceipt | None = None
+ 108:         self._closed = False
+ 109: 
+ 110:     def complete(self) -> RenderReceipt:
+ 111:         if self._closed:
+ 112:             raise RuntimeError("render is already closed")
+ 113:         self._closed = True
+ 114:         self.receipt = _record_completed_receipt(
+ 115:             RenderReceipt(
+ 116:                 self._task.round_id,
+ 117:                 self._task.task_id,
+ 118:                 self._task.payload.target_seq,
+ 119:                 self._model.crc32,
+ 120:             )
+ 121:         )
+ 122:         return self.receipt
+ 123: 
+ 124:     def failed(self) -> None:
+ 125:         self._closed = True
+ 126: 
+ 127:     def cancelled(self) -> None:
+ 128:         self._closed = True
+ 129: 
+ 130: 
+ 131: class FakeRenderer:
+ 132:     def __init__(self, task: ItemTaskContext) -> None:
+ 133:         self._task = task
+ 134: 
+ 135:     def present(self, model: DisplayContent) -> PendingRender:
+ 136:         return PendingRender(model, self._task)
+ 137: 
+ 138: 
+ 139: class FakeTaskSource:
+ 140:     def __init__(self, tasks: Iterable[ItemTaskPayload | ItemTaskContext]) -> None:
+ 141:         self._tasks = iter(tuple(tasks))
+ 142:         self._permitted = False
+ 143: 
+ 144:     def set_permitted(self, permitted: bool) -> None:
+ 145:         self._permitted = permitted
+ 146: 
+ 147:     def next_if_permitted(self) -> ItemTaskPayload | ItemTaskContext | None:
+ 148:         if not self._permitted:
+ 149:             return None
+ 150:         return next(self._tasks, None)
+ 151: 
+ 152: 
+ 153: class Scheduler:
+ 154:     """Offline scheduler; starts in RECOVERY_LOCK until a verified new round.
+ 155: 
+ 156:     diagnostic_snapshot is a read-only mapping from a previous process (for
+ 157:     example round_id, success_count, last_task) used only for diagnostics. It
+ 158:     never restores, resumes, or clears state, and it cannot authorize an old
+ 159:     round to continue after a restart.
+ 160:     """
+ 161: 
+ 162:     def __init__(self, *, diagnostic_snapshot: Mapping[str, object] | None = None) -> None:
+ 163:         self.state = SchedulerState.RECOVERY_LOCK
+ 164:         self._counter = RoundSuccessCounter()
+ 165:         self.diagnostic_snapshot = dict(diagnostic_snapshot or {})
+ 166:         self._source: FakeTaskSource | None = None
+ 167:         self.current_task: ItemTaskContext | None = None
+ 168:         self.display_model: DisplayContent | None = None
+ 169:         self.display_ack_intent: DisplayAckIntent | None = None
+ 170:         self._round_id: str | None = None
+ 171:         self._seen_tasks: dict[tuple[str, int, int], ItemTaskPayload] = {}
+ 172:         self._estop_active = False
+ 173: 
+ 174:     @property
+ 175:     def success_count(self) -> int:
+ 176:         return self._counter.value
+ 177: 
+ 178:     @property
+ 179:     def is_faulted(self) -> bool:
+ 180:         return self.state is SchedulerState.FAULT
+ 181: 
+ 182:     @property
+ 183:     def estop_active(self) -> bool:
+ 184:         return self._estop_active
+ 185: 
+ 186:     def load_source(self, source: FakeTaskSource) -> None:
+ 187:         self._source = source
+ 188: 
+ 189:     def note_estop(self) -> None:
+ 190:         """Stop dispatching new tasks until a verified new round.
+ 191: 
+ 192:         The physical e-stop circuit belongs to STM32; this flag only makes the
+ 193:         scheduler fail closed so it never hands out another ITEM_TASK while the
+ 194:         machine is stopped (competition rule: e-stop ends the round).
+ 195:         """
+ 196: 
+ 197:         self._estop_active = True
+ 198: 
+ 199:     def next_task(self) -> ItemTaskPayload | ItemTaskContext | None:
+ 200:         if self.state is not SchedulerState.READY or self._source is None:
+ 201:             return None
+ 202:         if self._estop_active:
+ 203:             return None
+ 204:         self._source.set_permitted(True)
+ 205:         candidate = self._source.next_if_permitted()
+ 206:         self._source.set_permitted(False)
+ 207:         if candidate is None:
+ 208:             return None
+ 209:         if not self._counter.can_accept_new_item:
+ 210:             self._fault("success counter cannot admit another potentially successful item")
+ 211:         if isinstance(candidate, ItemTaskContext):
+ 212:             if candidate.round_id != self._round_id:
+ 213:                 self._fault("task does not belong to verified round")
+ 214:             identity = (candidate.round_id, candidate.task_id, candidate.frame_seq)
+ 215:             previous = self._seen_tasks.get(identity)
+ 216:             if previous is not None and previous != candidate.payload:
+ 217:                 self._fault("same task identity has conflicting payloads")
+ 218:             self._seen_tasks[identity] = candidate.payload
+ 219:             self.current_task = candidate
+ 220:             self.display_ack_intent = None
+ 221:             # Transition to WAIT_MOTION_DONE after accepting task
+ 222:             self.state = SchedulerState.WAIT_MOTION_DONE
+ 223:         return candidate
+ 224: 
+ 225:     def accept_motion_done(self, **event_identity: object) -> None:
+ 226:         """Enforce that motion has completed for the current task.
+ 227: 
+ 228:         This is the first gate in the MOTION_DONE → ITEM_RESULT → DISPLAY_ACK
+ 229:         sequence. Must be called before accept_item_result.
+ 230: 
+ 231:         Validates:
+ 232:         - Current task exists
+ 233:         - State is WAIT_MOTION_DONE
+ 234:         - event_identity matches current task (round_id, task_id, frame_seq)
+ 235: 
+ 236:         Transitions to WAIT_ITEM_RESULT state.
+ 237:         """
+ 238:         task = self.current_task
+ 239:         if task is None:
+ 240:             self._fault("motion_done arrived without an active item")
+ 241:         if self.state is not SchedulerState.WAIT_MOTION_DONE:
+ 242:             self._fault(f"motion_done arrived in wrong state: {self.state}")
+ 243: 
+ 244:         # Validate event_identity matches task (round_id, task_id, frame_seq)
+ 245:         expected_round_id = task.round_id
+ 246:         expected_task_id = task.task_id
+ 247:         expected_frame_seq = task.frame_seq
+ 248: 
+ 249:         actual_round_id = event_identity.get("round_id")
+ 250:         actual_task_id = event_identity.get("task_id")
+ 251:         actual_frame_seq = event_identity.get("frame_seq")
+ 252: 
+ 253:         if (actual_round_id != expected_round_id or
+ 254:             actual_task_id != expected_task_id or
+ 255:             actual_frame_seq != expected_frame_seq):
+ 256:             self._fault(
+ 257:                 f"motion_done identity mismatch: "
+ 258:                 f"expected ({expected_round_id}, {expected_task_id}, {expected_frame_seq}), "
+ 259:                 f"got ({actual_round_id}, {actual_task_id}, {actual_frame_seq})"
+ 260:             )
+ 261: 
+ 262:         # Transition to WAIT_ITEM_RESULT
+ 263:         self.state = SchedulerState.WAIT_ITEM_RESULT
+ 264:         return None
+ 265: 
+ 266:     def note_reconnect(self) -> None:
+ 267:         return None
+ 268: 
+ 269:     def note_retransmission(self) -> None:
+ 270:         return None
+ 271: 
+ 272:     def note_display_retry(self) -> None:
+ 273:         return None
+ 274: 
+ 275:     def accept_item_result(self, result: ItemResult) -> DisplayContent:
+ 276:         task = self.current_task
+ 277:         # Enforce MOTION_DONE → ITEM_RESULT sequence: only accept in WAIT_ITEM_RESULT.
+ 278:         # WAIT_RENDER is allowed for idempotent re-sends of the same result.
+ 279:         if task is None or self.state not in (SchedulerState.WAIT_ITEM_RESULT, SchedulerState.WAIT_RENDER):
+ 280:             self._fault(f"result arrived in wrong state: {self.state}")
+ 281:         assert task is not None
+ 282:         expected = (task.round_id, task.task_id, task.frame_seq, task.payload.target_seq)
+ 283:         actual = (result.round_id, result.task_id, result.frame_seq, result.target_seq)
+ 284:         if actual != expected:
+ 285:             raise SchedulerFault("result does not match active item")
+ 286:         if self.display_model is not None:
+ 287:             if self.display_model.result_code != result.result_code:
+ 288:                 self._fault("same item identity has conflicting results")
+ 289:             return self.display_model
+ 290:         try:
+ 291:             self._counter.record_item_result(
+ 292:                 task_id=result.task_id,
+ 293:                 frame_seq=result.frame_seq,
+ 294:                 result_code=result.result_code,
+ 295:             )
+ 296:         except (ResultIdentityConflict, SuccessCountOverflow) as exc:
+ 297:             self._fault(str(exc))
+ 298:         self.display_model = build_display_content(
+ 299:             item_task=task.payload,
+ 300:             success_count=self._counter.value,
+ 301:             result_code=result.result_code,
+ 302:         )
+ 303:         self.state = SchedulerState.WAIT_RENDER
+ 304:         return self.display_model
+ 305: 
+ 306:     def accept_render_receipt(self, receipt: RenderReceipt) -> DisplayAckIntent:
+ 307:         if not _was_completed_by_pending(receipt):
+ 308:             raise SchedulerFault("receipt lacks PendingRender completion provenance")
+ 309:         if self.display_ack_intent is not None:
+ 310:             if receipt.content_crc32 == self.display_ack_intent.content_crc32:
+ 311:                 return self.display_ack_intent
+ 312:             raise SchedulerFault("duplicate receipt conflicts with cached intent")
+ 313:         task, model = self.current_task, self.display_model
+ 314:         if task is None or model is None or self.state is not SchedulerState.WAIT_RENDER:
+ 315:             raise SchedulerFault("receipt arrived without pending display")
+ 316:         expected = (task.round_id, task.task_id, task.payload.target_seq, model.crc32)
+ 317:         actual = (receipt.round_id, receipt.task_id, receipt.target_seq, receipt.content_crc32)
+ 318:         if actual != expected:
+ 319:             raise SchedulerFault("receipt does not match current display model")
+ 320:         self.display_ack_intent = DisplayAckIntent(
+ 321:             task=task,
+ 322:             target_seq=task.payload.target_seq,
+ 323:             render_result="RENDERED",
+ 324:             content_crc32=model.crc32,
+ 325:         )
+ 326:         self.current_task = None
+ 327:         self.display_model = None
+ 328:         self.state = SchedulerState.READY
+ 329:         return self.display_ack_intent
+ 330: 
+ 331:     def _fault(self, message: str) -> None:
+ 332:         self.state = SchedulerState.FAULT
+ 333:         raise SchedulerFault(message)
+ 334: 
+ 335:     def start_verified_new_round(self, context: VerifiedNewRound) -> None:
+ 336:         if not (
+ 337:             context.human_confirmed
+ 338:             and context.stm32_safe
+ 339:             and context.both_nodes_initialized
+ 340:         ):
+ 341:             raise PermissionError("verified new round requires all independent authorities")
+ 342:         self._counter.reset_round(new_round_verified=True)
+ 343:         self._round_id = context.round_id
+ 344:         self.current_task = None
+ 345:         self.display_model = None
+ 346:         self.display_ack_intent = None
+ 347:         self._seen_tasks.clear()
+ 348:         self._estop_active = False
+ 349:         self.state = SchedulerState.READY
+ 350: 
+ 351: 
+ 352: __all__ = [
+ 353:     "DisplayAckIntent",
+ 354:     "BatchTargets",
+ 355:     "FakeRenderer",
+ 356:     "FakeTaskSource",
+ 357:     "FakeVisionSource",
+ 358:     "ImageIdMap",
+ 359:     "ItemResult",
+ 360:     "ItemTaskContext",
+ 361:     "PendingRender",
+ 362:     "RenderReceipt",
+ 363:     "Scheduler",
+ 364:     "SchedulerFault",
+ 365:     "SchedulerState",
+ 366:     "TargetReacquireResponse",
+ 367:     "VerifiedNewRound",
+ 368:     "VisionTarget",
+ 369:     "build_item_task_queue",
+ 370: ]
+
+FILE: 电控/src/electrical_control/rpi/gateway.py MD5: 5c9e9c0b6bf700b80ac3c578ddcd1532
+   1: """Host-only Raspberry Pi protocol gateway.
+   2: 
+   3: This assembles STM32 -> Pi outer frames and dispatches the frozen commands to
+   4: the offline Scheduler. It never opens a serial port, renders a screen, or moves
+   5: an actuator. Display rendering remains an explicit, separately-owned step.
+   6: """
+   7: 
+   8: from __future__ import annotations
+   9: 
+  10: import time
+  11: from collections import OrderedDict
+  12: from dataclasses import dataclass
+  13: 
+  14: from electrical_control.protocol import (
+  15:     ACK_REASONS,
+  16:     CRC_LEN,
+  17:     HEADER_0,
+  18:     HEADER_1,
+  19:     HEADER_LEN,
+  20:     NACK_REASONS,
+  21:     Command,
+  22:     Device,
+  23:     PayloadError,
+  24:     decode_ack_nack_payload,
+  25:     decode_item_result_payload,
+  26:     decode_outer_frame,
+  27:     encode_display_ack_frame,
+  28: )
+  29: 
+  30: from . import DisplayAckIntent, ItemResult, SchedulerFault
+  31: from .log import STAGE, CentralLog
+  32: 
+  33: 
+  34: # Bounded inbound dedup history: a replayed frame within the window is
+  35: # answered with the cached outbound; older identities age out so the cache
+  36: # cannot grow without bound across a long demo run.
+  37: _INBOUND_CACHE_CAPACITY = 256
+  38: 
+  39: 
+  40: @dataclass(frozen=True)
+  41: class PiGatewayOutcome:
+  42:     event: str
+  43:     outbound: bytes | None = None
+  44:     fault: str | None = None
+  45: 
+  46: 
+  47: class PiProtocolGateway:
+  48:     """Wire-facing gateway around an offline Scheduler."""
+  49: 
+  50:     def __init__(self, scheduler, *, logger: CentralLog | None = None) -> None:
+  51:         self.scheduler = scheduler
+  52:         self.logger = logger
+  53:         self._rx = bytearray()
+  54:         self.tx_seq = 0
+  55:         self.estop_active = False
+  56:         self._inbound_cache: OrderedDict[tuple[int, int], bytes | None] = OrderedDict()
+  57:         self._last_outbound: bytes | None = None
+  58: 
+  59:     @property
+  60:     def last_outbound(self) -> bytes | None:
+  61:         return self._last_outbound
+  62: 
+  63:     def feed_frame(self, data: bytes) -> PiGatewayOutcome:
+  64:         """Dispatch one already-delimited frame."""
+  65: 
+  66:         try:
+  67:             frame = decode_outer_frame(data)
+  68:         except PayloadError as exc:
+  69:             return PiGatewayOutcome("FRAME_REJECTED", fault=str(exc))
+  70:         return self._dispatch(frame)
+  71: 
+  72:     def feed_byte(self, byte: int) -> PiGatewayOutcome | None:
+  73:         """Feed one RX byte; returns an outcome only when a frame completes."""
+  74: 
+  75:         self._rx.append(byte & 0xFF)
+  76:         while True:
+  77:             if len(self._rx) < 2:
+  78:                 return None
+  79:             if self._rx[0] != HEADER_0:
+  80:                 self._rx.pop(0)
+  81:                 continue
+  82:             if self._rx[1] != HEADER_1:
+  83:                 self._rx.pop(0)
+  84:                 continue
+  85:             if len(self._rx) < HEADER_LEN:
+  86:                 return None
+  87:             data_len = int.from_bytes(self._rx[10:12], "big")
+  88:             total = HEADER_LEN + data_len + CRC_LEN
+  89:             if len(self._rx) < total:
+  90:                 return None
+  91:             raw = bytes(self._rx[:total])
+  92:             del self._rx[:total]
+  93:             try:
+  94:                 frame = decode_outer_frame(raw)
+  95:             except PayloadError as exc:
+  96:                 return PiGatewayOutcome("FRAME_REJECTED", fault=str(exc))
+  97:             return self._dispatch(frame)
+  98: 
+  99:     def emit_display_ack(self, intent: DisplayAckIntent) -> bytes:
+ 100:         """Encode the first valid DISPLAY_ACK for a completed render receipt."""
+ 101: 
+ 102:         if intent.render_result != "RENDERED":
+ 103:             raise ValueError("DISPLAY_ACK requires render_result RENDERED")
+ 104:         self.tx_seq += 1
+ 105:         outbound = encode_display_ack_frame(
+ 106:             task_id=intent.task.task_id,
+ 107:             frame_seq=self.tx_seq,
+ 108:             target_seq=intent.target_seq,
+ 109:             render_result=0x00,
+ 110:             content_crc32=intent.content_crc32,
+ 111:         )
+ 112:         self._last_outbound = outbound
+ 113:         return outbound
+ 114: 
+ 115:     def _dispatch(self, frame) -> PiGatewayOutcome:
+ 116:         if frame.sender is not Device.STM32 or frame.receiver is not Device.RASPI:
+ 117:             return PiGatewayOutcome("DIRECTION_REJECTED", fault="illegal Scheme-B direction")
+ 118: 
+ 119:         identity = (frame.task_id, frame.frame_seq)
+ 120:         cached = self._inbound_cache.get(identity, _MISSING)
+ 121:         if cached is not _MISSING:
+ 122:             return PiGatewayOutcome("DUPLICATE", outbound=cached)
+ 123: 
+ 124:         try:
+ 125:             outcome = self._handle(frame)
+ 126:         except SchedulerFault as exc:  # defensive: never leak scheduler faults
+ 127:             outcome = PiGatewayOutcome("FAULT", fault=str(exc))
+ 128:         except Exception as exc:  # fail closed instead of crashing the loop
+ 129:             outcome = PiGatewayOutcome("CRASH", fault=f"{type(exc).__name__}: {exc}")
+ 130:         self._inbound_cache[identity] = outcome.outbound
+ 131:         if len(self._inbound_cache) > _INBOUND_CACHE_CAPACITY:
+ 132:             self._inbound_cache.popitem(last=False)
+ 133:         return outcome
+ 134: 
+ 135:     def _handle(self, frame) -> PiGatewayOutcome:
+ 136:         command = frame.command
+ 137:         if command == int(Command.BARRIER_READY):
+ 138:             if frame.payload:
+ 139:                 return PiGatewayOutcome("FRAME_REJECTED", fault="BARRIER_READY payload must be empty")
+ 140:             return PiGatewayOutcome("BARRIER_READY")
+ 141: 
+ 142:         if command == int(Command.MOTION_DONE):
+ 143:             if frame.payload:
+ 144:                 return PiGatewayOutcome("FRAME_REJECTED", fault="MOTION_DONE payload must be empty")
+ 145:             task = self.scheduler.current_task
+ 146:             if task is None:
+ 147:                 return PiGatewayOutcome("MOTION_DONE_IGNORED")
+ 148:             # The wire frame_seq belongs to the STM32's own tx counter, not the
+ 149:             # Pi-side task identity; the scheduler gate is entered with the
+ 150:             # active task's identity and the wire task_id is checked against it.
+ 151:             if frame.task_id != task.task_id:
+ 152:                 return PiGatewayOutcome(
+ 153:                     "FAULT", fault="MOTION_DONE task_id does not match active item"
+ 154:                 )
+ 155:             try:
+ 156:                 self.scheduler.accept_motion_done(
+ 157:                     round_id=task.round_id,
+ 158:                     task_id=task.task_id,
+ 159:                     frame_seq=task.frame_seq,
+ 160:                 )
+ 161:             except SchedulerFault as exc:
+ 162:                 return PiGatewayOutcome("FAULT", fault=str(exc))
+ 163:             return PiGatewayOutcome("MOTION_DONE")
+ 164: 
+ 165:         if command == int(Command.ITEM_RESULT):
+ 166:             try:
+ 167:                 payload = decode_item_result_payload(frame.payload)
+ 168:             except PayloadError as exc:
+ 169:                 return PiGatewayOutcome("FRAME_REJECTED", fault=str(exc))
+ 170:             task = self.scheduler.current_task
+ 171:             if task is None:
+ 172:                 return PiGatewayOutcome("ITEM_RESULT_IGNORED")
+ 173:             result = ItemResult(
+ 174:                 task.round_id,
+ 175:                 frame.task_id,
+ 176:                 task.frame_seq,
+ 177:                 payload.target_seq,
+ 178:                 payload.result_code,
+ 179:             )
+ 180:             try:
+ 181:                 self.scheduler.accept_item_result(result)
+ 182:             except SchedulerFault as exc:
+ 183:                 return PiGatewayOutcome("FAULT", fault=str(exc))
+ 184:             return PiGatewayOutcome("ITEM_RESULT")
+ 185: 
+ 186:         if command == int(Command.ESTOP):
+ 187:             self.estop_active = True
+ 188:             note_estop = getattr(self.scheduler, "note_estop", None)
+ 189:             if callable(note_estop):
+ 190:                 note_estop()
+ 191:             return PiGatewayOutcome("ESTOP")
+ 192: 
+ 193:         if command in (int(Command.ACK), int(Command.NACK)):
+ 194:             return self._handle_ack_nack(frame, command)
+ 195: 
+ 196:         return PiGatewayOutcome("IGNORED")
+ 197: 
+ 198:     def _handle_ack_nack(self, frame, command: int) -> PiGatewayOutcome:
+ 199:         """Parse an inbound ACK(0x05)/NACK(0x06) two-byte response payload.
+ 200: 
+ 201:         D-2: STM32 replies to our requests with reason(1) + target_seq(1).
+ 202:         The frozen reason code is mapped to its name (``ACK_ACCEPTED`` /
+ 203:         ``NACK_SINGLE_TASK_ONLY`` ...) for the outcome event; an as-yet
+ 204:         unknown code stays observable as ``UNKNOWN(0xNN)``. When a CentralLog
+ 205:         is injected, a STAGE entry is recorded so integration debugging can
+ 206:         see the STM32 rejection reason (STALE_OR_ORDER / SINGLE_TASK_ONLY /
+ 207:         ACK_NOT_APPLICABLE ...) without guessing from silence.
+ 208:         """
+ 209: 
+ 210:         try:
+ 211:             reason_code, target_seq = decode_ack_nack_payload(frame.payload)
+ 212:         except PayloadError as exc:
+ 213:             return PiGatewayOutcome("FRAME_REJECTED", fault=str(exc))
+ 214:         kind = "ACK" if command == int(Command.ACK) else "NACK"
+ 215:         reasons = ACK_REASONS if command == int(Command.ACK) else NACK_REASONS
+ 216:         reason_name = reasons.get(reason_code)
+ 217:         if reason_name is None:
+ 218:             reason_name = f"UNKNOWN(0x{reason_code:02X})"
+ 219:         if self.logger is not None:
+ 220:             self.logger.record(
+ 221:                 STAGE,
+ 222:                 now=time.monotonic(),
+ 223:                 task_id=frame.task_id,
+ 224:                 frame_seq=frame.frame_seq,
+ 225:                 target_seq=target_seq,
+ 226:                 detail=f"{kind}:{reason_name} seq={target_seq}",
+ 227:             )
+ 228:         return PiGatewayOutcome(f"{kind}_{reason_name}")
+ 229: 
+ 230: 
+ 231: _MISSING = object()
+ 232: 
+ 233: 
+ 234: __all__ = ["PiGatewayOutcome", "PiProtocolGateway"]
+
+FILE: 电控/src/electrical_control/rpi/outbound.py MD5: b0e8787eb9a8f4fadd48c923a2c1d751
+   1: """Host-only outbound sender: encodes ITEM_TASK / DISPLAY_ACK over a SerialLink.
+   2: 
+   3: The gateway validates every task identity fail-closed (unsigned 16-bit range
+   4: and equality with the verified round's task id) before anything reaches the
+   5: wire, and keeps its own monotonically increasing tx_seq (1-based) that is
+   6: independent of the PiProtocolGateway inbound-side counter. All wire encoding
+   7: reuses the frozen electrical_control.protocol helpers.
+   8: """
+   9: 
+  10: from __future__ import annotations
+  11: 
+  12: from collections.abc import Callable
+  13: from dataclasses import dataclass
+  14: 
+  15: from electrical_control.protocol import (
+  16:     PayloadError,
+  17:     encode_display_ack_frame,
+  18:     encode_item_task_frame,
+  19:     encode_item_task_payload,
+  20: )
+  21: 
+  22: from . import DisplayAckIntent, ItemTaskContext
+  23: from .serial_link import SerialLink
+  24: 
+  25: 
+  26: def _u16(name: str, value: int) -> int:
+  27:     if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFF:
+  28:         raise PayloadError(f"{name} must be an unsigned 16-bit integer")
+  29:     return value
+  30: 
+  31: 
+  32: @dataclass(frozen=True)
+  33: class OutboundConfig:
+  34:     round_task_id: int  # 本轮任务号（来自 VerifiedNewRound，u16 范围校验）
+  35: 
+  36:     def __post_init__(self) -> None:
+  37:         _u16("round_task_id", self.round_task_id)
+  38: 
+  39: 
+  40: class OutboundGateway:
+  41:     """Encodes and sends ITEM_TASK / DISPLAY_ACK outer frames over a SerialLink."""
+  42: 
+  43:     def __init__(
+  44:         self,
+  45:         link: SerialLink,
+  46:         *,
+  47:         config: OutboundConfig,
+  48:         on_retransmit: Callable[[], None] | None = None,
+  49:     ) -> None:
+  50:         self.link = link
+  51:         self.config = config
+  52:         self._tx_seq = 0
+  53:         # D-1: cache of the exact bytes of the most recently sent ITEM_TASK
+  54:         # frame plus the (task_id, frame_seq) identity it was sent for, so a
+  55:         # timeout resend can replay the same wire bytes (same frame_seq) and
+  56:         # hit the STM32 dedup -> RESEND path.
+  57:         self._last_item_task_frame: bytes | None = None
+  58:         self._last_item_task_key: tuple[int, int] | None = None
+  59:         self._on_retransmit = on_retransmit
+  60: 
+  61:     @property
+  62:     def tx_seq(self) -> int:
+  63:         """Monotonically increasing outbound sequence (1-based); +1 per frame."""
+  64:         return self._tx_seq
+  65: 
+  66:     def send_item_task(self, task: ItemTaskContext) -> bytes:
+  67:         """Encode and send one ITEM_TASK; returns the raw frame bytes.
+  68: 
+  69:         Fail-closed: task.task_id must be an unsigned 16-bit integer equal to
+  70:         config.round_task_id, otherwise PayloadError is raised before anything
+  71:         is sent (tx_seq is not advanced either).
+  72:         """
+  73: 
+  74:         task_id = _u16("task_id", task.task_id)
+  75:         if task_id != self.config.round_task_id:
+  76:             raise PayloadError(
+  77:                 f"task_id {task_id} does not match round_task_id "
+  78:                 f"{self.config.round_task_id}"
+  79:             )
+  80:         payload = encode_item_task_payload(task.payload)
+  81:         self._tx_seq += 1
+  82:         frame = encode_item_task_frame(
+  83:             task_id=task_id,
+  84:             frame_seq=self._tx_seq,
+  85:             payload=payload,
+  86:         )
+  87:         # D-1: cache the exact frame bytes for resend_item_task. The key is the
+  88:         # task's own (task_id, frame_seq) identity (scheduler side), not the
+  89:         # wire frame_seq (the outbound tx counter), so a resend of the same
+  90:         # task is recognized even though the wire frame_seq differs.
+  91:         self._last_item_task_frame = frame
+  92:         self._last_item_task_key = (task_id, task.frame_seq)
+  93:         self.link.send(frame)
+  94:         return frame
+  95: 
+  96:     def resend_item_task(self, task: ItemTaskContext) -> bytes:
+  97:         """原样重放上次 send_item_task 的帧字节（不递增 tx_seq）。
+  98: 
+  99:         与 STM32 的 RESEND 路径配对：超时重传复用同一 (task_id, frame_seq)，
+ 100:         STM32 按 dedup 判定为重复帧 → 重发缓存应答，不会重复执行。
+ 101:         """
+ 102: 
+ 103:         cached = self._last_item_task_frame
+ 104:         cached_key = self._last_item_task_key
+ 105:         if cached is None or cached_key is None:
+ 106:             raise ValueError("no cached ITEM_TASK frame")
+ 107:         task_key = (task.task_id, task.frame_seq)
+ 108:         if task_key != cached_key:
+ 109:             raise ValueError(
+ 110:                 f"task ({task_key[0]}, {task_key[1]}) does not match cached "
+ 111:                 f"ITEM_TASK frame ({cached_key[0]}, {cached_key[1]})"
+ 112:             )
+ 113:         self.link.send(cached)
+ 114:         if self._on_retransmit is not None:
+ 115:             self._on_retransmit()
+ 116:         return cached
+ 117: 
+ 118:     def send_display_ack(self, intent: DisplayAckIntent) -> bytes:
+ 119:         """Encode and send one DISPLAY_ACK for a completed render receipt.
+ 120: 
+ 121:         Mirrors PiProtocolGateway.emit_display_ack semantics: only a RENDERED
+ 122:         intent may be acknowledged, and the wire render_result is always 0x00.
+ 123:         Returns the raw frame bytes.
+ 124:         """
+ 125: 
+ 126:         if intent.render_result != "RENDERED":
+ 127:             raise ValueError("DISPLAY_ACK requires render_result RENDERED")
+ 128:         self._tx_seq += 1
+ 129:         frame = encode_display_ack_frame(
+ 130:             task_id=intent.task.task_id,
+ 131:             frame_seq=self._tx_seq,
+ 132:             target_seq=intent.target_seq,
+ 133:             render_result=0x00,
+ 134:             content_crc32=intent.content_crc32,
+ 135:         )
+ 136:         self.link.send(frame)
+ 137:         return frame
+ 138: 
+ 139: 
+ 140: __all__ = ["OutboundConfig", "OutboundGateway"]
+
+FILE: 电控/src/electrical_control/rpi/serial_link_serial.py MD5: aaf8992ba4f971f71d8badbc029acaaf
+   1: """Real UART SerialLink over pyserial for the Raspberry Pi host side.
+   2: 
+   3: PySerialLink implements the SerialLink contract (one complete outer frame per
+   4: send/receive) on top of a pyserial Serial port. Baud 115200 8N1 is the frozen
+   5: STM32 USART2 configuration (firmware main.c huart2: PA2/PA3, 115200, 8N1); the
+   6: port name is a deployment configuration and must be injected.
+   7: 
+   8: Byte-level frame-boundary parsing mirrors PiProtocolGateway.feed_byte
+   9: (gateway.py): the receiver resynchronizes on the 0xA5 0x5A header, reads the
+  10: declared data_len, and validates version/CRC through decode_outer_frame before
+  11: returning a frame. Corrupt or over-limit frames are dropped and scanning
+  12: continues at the next boundary.
+  13: 
+  14: pyserial is imported lazily inside __init__ so this module stays importable
+  15: (and unit-testable with mocks) on hosts without the optional dependency;
+  16: constructing the link without pyserial raises ValueError with an install hint.
+  17: """
+  18: 
+  19: from __future__ import annotations
+  20: 
+  21: from electrical_control.protocol import (
+  22:     CRC_LEN,
+  23:     HEADER_0,
+  24:     HEADER_1,
+  25:     HEADER_LEN,
+  26:     PayloadError,
+  27:     decode_outer_frame,
+  28: )
+  29: 
+  30: # Defensive receive-side bound: a hostile or glitched data_len field (for
+  31: # example 0xFFFF) must never make the receiver wait for a frame that can never
+  32: # arrive. A declared payload length above this is treated as garbage and the
+  33: # scanner resynchronizes at the next header. The frozen wire format is
+  34: # unchanged; this is a local safety limit only.
+  35: MAX_PAYLOAD_LEN = 512
+  36: 
+  37: # Bytes requested per receive() poll. receive() never blocks longer than the
+  38: # configured timeout and returns at most one frame; a partial read simply stays
+  39: # in the internal buffer until a later poll completes it.
+  40: _READ_SIZE = 1024
+  41: 
+  42: 
+  43: class PySerialLink:
+  44:     """Real UART SerialLink over pyserial.
+  45: 
+  46:     Baud 115200 8N1 is the frozen STM32 USART2 configuration (firmware
+  47:     main.c huart2); the port name is a deployment configuration.
+  48:     """
+  49: 
+  50:     def __init__(self, port: str, *, baudrate: int = 115200, timeout: float = 0.05) -> None:
+  51:         try:
+  52:             import serial
+  53:         except ImportError as exc:
+  54:             raise ValueError(
+  55:                 "PySerialLink requires the optional 'pyserial' package; "
+  56:                 "install it in the target environment with: pip install pyserial"
+  57:             ) from exc
+  58:         self._ser = serial.Serial(
+  59:             port=port,
+  60:             baudrate=baudrate,
+  61:             bytesize=8,
+  62:             parity="N",
+  63:             stopbits=1,
+  64:             timeout=timeout,
+  65:         )
+  66:         self._rx: bytearray = bytearray()
+  67:         self._closed = False
+  68: 
+  69:     def send(self, frame: bytes) -> None:
+  70:         """Write one raw outer frame to the wire, unchanged."""
+  71:         self._ser.write(bytes(frame))
+  72: 
+  73:     def receive(self) -> bytes | None:
+  74:         """Return one complete validated outer frame, or None.
+  75: 
+  76:         Reads whatever the port currently has (bounded by the configured
+  77:         timeout), resynchronizes on the frame header, and returns the first
+  78:         frame that passes decode_outer_frame. Corrupt or over-limit frames are
+  79:         discarded and scanning continues at the next boundary; None is returned
+  80:         when no complete valid frame is buffered yet.
+  81:         """
+  82:         if self._closed:
+  83:             return None
+  84:         chunk = self._ser.read(_READ_SIZE)
+  85:         if chunk:
+  86:             self._rx.extend(chunk)
+  87:         return self._extract_frame()
+  88: 
+  89:     def close(self) -> None:
+  90:         """Release the serial port; idempotent."""
+  91:         if self._closed:
+  92:             return
+  93:         self._closed = True
+  94:         self._ser.close()
+  95: 
+  96:     def _set_serial_for_test(self, ser) -> None:
+  97:         """Test-only hook: replace the serial port with a mock object."""
+  98:         self._ser = ser
+  99: 
+ 100:     def _extract_frame(self) -> bytes | None:
+ 101:         """Scan the internal buffer for one valid frame (feed_byte semantics)."""
+ 102:         rx = self._rx
+ 103:         while True:
+ 104:             if len(rx) < 2:
+ 105:                 return None
+ 106:             if rx[0] != HEADER_0:
+ 107:                 rx.pop(0)
+ 108:                 continue
+ 109:             if rx[1] != HEADER_1:
+ 110:                 rx.pop(0)
+ 111:                 continue
+ 112:             if len(rx) < HEADER_LEN:
+ 113:                 return None
+ 114:             data_len = int.from_bytes(rx[10:12], "big")
+ 115:             if data_len > MAX_PAYLOAD_LEN:
+ 116:                 # Over-limit declared length: drop the header byte and resync.
+ 117:                 rx.pop(0)
+ 118:                 continue
+ 119:             total = HEADER_LEN + data_len + CRC_LEN
+ 120:             if len(rx) < total:
+ 121:                 return None
+ 122:             raw = bytes(rx[:total])
+ 123:             del rx[:total]
+ 124:             try:
+ 125:                 decode_outer_frame(raw)
+ 126:             except PayloadError:
+ 127:                 # Corrupt frame already consumed; keep scanning for the next
+ 128:                 # valid header/frame remaining in the buffer.
+ 129:                 continue
+ 130:             return raw
+ 131: 
+ 132: 
+ 133: __all__ = ["MAX_PAYLOAD_LEN", "PySerialLink"]
+
+FILE: 电控/src/electrical_control/protocol/item_context.py MD5: 0050c45a797e7fe3ce0341a36ce6e8f2
+   1: """Protocol V0.4 item context shared by Raspberry Pi and STM32."""
+   2: 
+   3: from __future__ import annotations
+   4: 
+   5: from dataclasses import dataclass
+   6: 
+   7: from .display_ack import DisplayContent, _u8
+   8: from .errors import (
+   9:     PayloadError,
+  10:     ProtocolError,
+  11:     ResultIdentityConflict,
+  12:     SuccessCountOverflow,
+  13: )
+  14: 
+  15: 
+  16: @dataclass(frozen=True)
+  17: class ItemTaskPayload:
+  18:     """Logical ITEM_TASK fields (wire: 12 bytes since V0.9, 2026-09-16).
+  19: 
+  20:     The competition needs a RANDOM grasp point and a FIXED drop point, so P3
+  21:     appended the grasp point at the wire tail instead of reusing the frozen
+  22:     drop-point offsets::
+  23: 
+  24:         x_position / y_position             drop point (basket), unchanged
+  25:         pick_x_position / pick_y_position   grasp point  <- new
+  26: 
+  27:     Both pairs are signed 0.1 mm, origin = device centre, big-endian on the
+  28:     wire, |value| <= 1450.
+  29: 
+  30:     pick_x_position / pick_y_position are REQUIRED and accept None for "no
+  31:     millimetre grasp point known yet". They deliberately have NO numeric
+  32:     default: a silent 0 would mean "grasp at the device centre" - the very
+  33:     E-18 empty-claw failure this change exists to kill, only harder to notice.
+  34:     encode_item_task_payload() refuses to serialise a payload whose grasp point
+  35:     is None, the same fail-closed pattern as grip_angle != 0xFF; such an item
+  36:     must simply not be sent."""
+  37: 
+  38:     target_seq: int
+  39:     class_id: int
+  40:     image_id: int
+  41:     x_position: int
+  42:     y_position: int
+  43:     grip_angle: int
+  44:     pick_x_position: int | None
+  45:     pick_y_position: int | None
+  46: 
+  47:     def __post_init__(self) -> None:
+  48:         _u8("target_seq", self.target_seq)
+  49:         _u8("class_id", self.class_id)
+  50:         _u8("image_id", self.image_id)
+  51: 
+  52:     @property
+  53:     def identity_prefix(self) -> bytes:
+  54:         return encode_item_task_identity_prefix(
+  55:             self.target_seq, self.class_id, self.image_id
+  56:         )
+  57: 
+  58: 
+  59: @dataclass(frozen=True)
+  60: class ItemTaskIdentity:
+  61:     """Frozen ITEM_TASK identity prefix; X/Y/angle are not included here."""
+  62: 
+  63:     target_seq: int
+  64:     class_id: int
+  65:     image_id: int
+  66: 
+  67:     def __post_init__(self) -> None:
+  68:         _u8("target_seq", self.target_seq)
+  69:         _u8("class_id", self.class_id)
+  70:         _u8("image_id", self.image_id)
+  71: 
+  72:     @property
+  73:     def prefix(self) -> bytes:
+  74:         return bytes((self.target_seq, self.class_id, self.image_id))
+  75: 
+  76: 
+  77: def encode_item_task_identity_prefix(
+  78:     target_seq: int, class_id: int, image_id: int
+  79: ) -> bytes:
+  80:     """Encode only the three frozen identity bytes of an ITEM_TASK payload."""
+  81: 
+  82:     return ItemTaskIdentity(target_seq, class_id, image_id).prefix
+  83: 
+  84: 
+  85: def decode_item_task_identity_prefix(payload: bytes) -> tuple[ItemTaskIdentity, bytes]:
+  86:     """Decode the frozen identity prefix and return the opaque remainder."""
+  87: 
+  88:     if not isinstance(payload, (bytes, bytearray, memoryview)):
+  89:         raise PayloadError("ITEM_TASK payload must be bytes-like")
+  90:     payload = bytes(payload)
+  91:     if len(payload) < 3:
+  92:         raise PayloadError("ITEM_TASK payload is shorter than its identity prefix")
+  93:     identity = ItemTaskIdentity(payload[0], payload[1], payload[2])
+  94:     return identity, payload[3:]
+  95: 
+  96: 
+  97: # ITEM_TASK wire constraints (interface-contract V0.9 sec. 5.2): drop and grasp
+  98: # X/Y share one frame, origin = device center, units 0.1 mm, |value| > 1450
+  99: # (+-145.0 mm) is out of range; grip_angle is always 0xFF (claw does not
+ 100: # rotate; 0..180 unused this round).
+ 101: _ITEM_TASK_X_LIMIT = 1450
+ 102: _ITEM_TASK_ANGLE_NONE = 0xFF
+ 103: # V0.9 (2026-09-16, P3): 8 -> 12 bytes; the grasp point is appended at the tail.
+ 104: _ITEM_TASK_PAYLOAD_LEN = 12
+ 105: 
+ 106: 
+ 107: def _coord(name: str, value: int) -> int:
+ 108:     if not isinstance(value, int) or isinstance(value, bool):
+ 109:         raise PayloadError(f"{name} must be a signed integer")
+ 110:     if not -_ITEM_TASK_X_LIMIT <= value <= _ITEM_TASK_X_LIMIT:
+ 111:         raise PayloadError(f"{name} out of range (+-{_ITEM_TASK_X_LIMIT})")
+ 112:     return value
+ 113: 
+ 114: 
+ 115: def encode_item_task_payload(item: ItemTaskPayload) -> bytes:
+ 116:     """Encode the 12-byte ITEM_TASK payload (interface-contract V0.9 sec. 5.2).
+ 117: 
+ 118:     Coordinate/angle validity is enforced here at the wire boundary, not in
+ 119:     ``ItemTaskPayload.__post_init__``: the payload class stays a loose logical
+ 120:     carrier (placeholder 0/0/0 is a valid intermediate state until the drop
+ 121:     table lands).
+ 122: 
+ 123:     A missing grasp point (None) is NOT a valid wire value: the 12-byte format
+ 124:     has no "absent pick" encoding, so this raises instead of shipping a frame
+ 125:     the firmware would read as "grasp at (0,0)"."""
+ 126: 
+ 127:     if not isinstance(item, ItemTaskPayload):
+ 128:         raise TypeError("item must be ItemTaskPayload")
+ 129:     x = _coord("x_position", item.x_position)
+ 130:     y = _coord("y_position", item.y_position)
+ 131:     if item.pick_x_position is None or item.pick_y_position is None:
+ 132:         raise PayloadError(
+ 133:             "grasp point missing (pick_x_position/pick_y_position is None): "
+ 134:             "refusing to serialise an ITEM_TASK without a measured grasp point "
+ 135:             "- a default would command a grasp at the device centre (E-18)"
+ 136:         )
+ 137:     pick_x = _coord("pick_x_position", item.pick_x_position)
+ 138:     pick_y = _coord("pick_y_position", item.pick_y_position)
+ 139:     _u8("grip_angle", item.grip_angle)
+ 140:     if item.grip_angle != _ITEM_TASK_ANGLE_NONE:
+ 141:         raise PayloadError("grip_angle must be 0xFF (claw does not rotate)")
+ 142:     if item.image_id != item.class_id:
+ 143:         raise PayloadError("image_id must equal class_id (frozen 1:1 invariant)")
+ 144:     if not 1 <= item.target_seq <= 255:
+ 145:         raise PayloadError("target_seq must be within [1, 255]")
+ 146:     return (
+ 147:         bytes((item.target_seq, item.class_id, item.image_id))
+ 148:         + x.to_bytes(2, "big", signed=True)
+ 149:         + y.to_bytes(2, "big", signed=True)
+ 150:         + bytes((item.grip_angle,))
+ 151:         + pick_x.to_bytes(2, "big", signed=True)
+ 152:         + pick_y.to_bytes(2, "big", signed=True)
+ 153:     )
+ 154: 
+ 155: 
+ 156: def decode_item_task_payload(payload: bytes) -> ItemTaskPayload:
+ 157:     """Decode the 12-byte ITEM_TASK payload, rejecting any violation.
+ 158: 
+ 159:     The exact-length rule is what makes a pre-P3 8-byte payload fail closed
+ 160:     instead of being silently reinterpreted."""
+ 161: 
+ 162:     if not isinstance(payload, (bytes, bytearray, memoryview)):
+ 163:         raise PayloadError("ITEM_TASK payload must be bytes-like")
+ 164:     payload = bytes(payload)
+ 165:     if len(payload) != _ITEM_TASK_PAYLOAD_LEN:
+ 166:         raise PayloadError(
+ 167:             f"ITEM_TASK payload must be exactly {_ITEM_TASK_PAYLOAD_LEN} bytes"
+ 168:         )
+ 169:     if payload[7] != _ITEM_TASK_ANGLE_NONE:
+ 170:         raise PayloadError("grip_angle must be 0xFF (claw does not rotate)")
+ 171:     x = int.from_bytes(payload[3:5], "big", signed=True)
+ 172:     y = int.from_bytes(payload[5:7], "big", signed=True)
+ 173:     pick_x = int.from_bytes(payload[8:10], "big", signed=True)
+ 174:     pick_y = int.from_bytes(payload[10:12], "big", signed=True)
+ 175:     if not -_ITEM_TASK_X_LIMIT <= x <= _ITEM_TASK_X_LIMIT:
+ 176:         raise PayloadError(f"x_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+ 177:     if not -_ITEM_TASK_X_LIMIT <= y <= _ITEM_TASK_X_LIMIT:
+ 178:         raise PayloadError(f"y_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+ 179:     if not -_ITEM_TASK_X_LIMIT <= pick_x <= _ITEM_TASK_X_LIMIT:
+ 180:         raise PayloadError(f"pick_x_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+ 181:     if not -_ITEM_TASK_X_LIMIT <= pick_y <= _ITEM_TASK_X_LIMIT:
+ 182:         raise PayloadError(f"pick_y_position out of range (+-{_ITEM_TASK_X_LIMIT})")
+ 183:     if payload[2] != payload[1]:
+ 184:         raise PayloadError("image_id must equal class_id (frozen 1:1 invariant)")
+ 185:     return ItemTaskPayload(
+ 186:         target_seq=payload[0],
+ 187:         class_id=payload[1],
+ 188:         image_id=payload[2],
+ 189:         x_position=x,
+ 190:         y_position=y,
+ 191:         grip_angle=payload[7],
+ 192:         pick_x_position=pick_x,
+ 193:         pick_y_position=pick_y,
+ 194:     )
+ 195: 
+ 196: 
+ 197: class RoundSuccessCounter:
+ 198:     """One-byte per-round counter with identical deterministic node behavior."""
+ 199: 
+ 200:     SUCCESS = 0x00
+ 201: 
+ 202:     def __init__(self, *, initial_value: int = 0) -> None:
+ 203:         self._value = _u8("initial_value", initial_value)
+ 204:         self._recorded_results: dict[tuple[int, int], int] = {}
+ 205: 
+ 206:     @property
+ 207:     def value(self) -> int:
+ 208:         return self._value
+ 209: 
+ 210:     @property
+ 211:     def can_accept_new_item(self) -> bool:
+ 212:         return self._value < 0xFF
+ 213: 
+ 214:     def record_item_result(
+ 215:         self,
+ 216:         *,
+ 217:         result_code: int,
+ 218:         task_id: int | None = None,
+ 219:         frame_seq: int | None = None,
+ 220:     ) -> bool:
+ 221:         code = _u8("result_code", result_code)
+ 222:         if task_id is None or frame_seq is None:
+ 223:             raise ProtocolError("result counting requires task_id and frame_seq")
+ 224:         identity = (task_id, frame_seq)
+ 225:         if identity in self._recorded_results:
+ 226:             if self._recorded_results[identity] != code:
+ 227:                 raise ResultIdentityConflict(
+ 228:                     "same result identity has conflicting result codes"
+ 229:                 )
+ 230:             return False
+ 231:         if code != self.SUCCESS:
+ 232:             self._recorded_results[identity] = code
+ 233:             return True
+ 234:         if self._value == 0xFF:
+ 235:             raise SuccessCountOverflow("round success count cannot exceed 255")
+ 236:         self._value += 1
+ 237:         self._recorded_results[identity] = code
+ 238:         return True
+ 239: 
+ 240:     def reset_round(self, *, new_round_verified: bool) -> None:
+ 241:         if not new_round_verified:
+ 242:             raise ProtocolError("success count reset requires a verified new round")
+ 243:         self._value = 0
+ 244:         self._recorded_results.clear()
+ 245: 
+ 246: 
+ 247: def build_display_content(
+ 248:     *,
+ 249:     item_task: ItemTaskPayload,
+ 250:     success_count: int,
+ 251:     result_code: int,
+ 252: ) -> DisplayContent:
+ 253:     return DisplayContent(
+ 254:         target_seq=item_task.target_seq,
+ 255:         class_id=item_task.class_id,
+ 256:         image_id=item_task.image_id,
+ 257:         success_count=_u8("success_count", success_count),
+ 258:         result_code=_u8("result_code", result_code),
+ 259:     )
+ 260: 
+ 261: 
+ 262: def verify_counter_context(
+ 263:     *,
+ 264:     local_task_id: int,
+ 265:     local_success_count: int,
+ 266:     local_item: tuple[int, int, int, int],
+ 267:     peer_task_id: int,
+ 268:     peer_success_count: int,
+ 269:     peer_item: tuple[int, int, int, int],
+ 270: ) -> None:
+ 271:     if (
+ 272:         local_task_id != peer_task_id
+ 273:         or local_success_count != peer_success_count
+ 274:         or local_item != peer_item
+ 275:     ):
+ 276:         raise ProtocolError("round success counter context is not synchronized")
+
+FILE: 视觉/src/maixcam_deploy/stage1_color_v6_send.py MD5: 2442f02626210ca4e25b4f9a4b440167
+   1: """MaixCAM / MaixVision 单文件：V6 颜色分离稳定版 **+ 树莓派发送桥**。
+   2: 
+   3: 【这个文件是什么】
+   4: 朋友的 V6 原文（`stage1_color_v6_stable.py`）**一个字都没改**，
+   5: 只在最上面加了发送桥、在 main() 里插了 2 行。
+   6: → 打开这个文件、点运行，就会一边在屏幕上画框、一边把结果发给树莓派。
+   7: 
+   8: 【和原版 V6 的差异，只有 3 处（用 <<<V6-BRIDGE>>> 标出）】
+   9:   1. 顶部多了一段「发送桥」代码
+  10:   2. main() 里 tracker 之后：  sender = BatchSender()
+  11:   3. 循环里 update 之后：      sender.send(results)
+  12:   （外加 finally 里 sender.close()）
+  13: 
+  14: 【识别逻辑完全没动】颜色阈值、形状映射、稳定/平滑/HOLD 全部照旧。
+  15: 
+  16: 【线上格式（已冻结，不要改）】
+  17: BATCH_TARGETS：target_count(1) + task_id(2,BE) + target[N]，每 target 7 字节：
+  18:     id_byte(1) + confidence(1,0-100) + X(2,BE) + Y(2,BE) + angle(1,0xFF)
+  19: 校赛模式下 id_byte 填 box_id(1..6)（用户 2026-09-17 批准，台账 §2.1）。
+  20: V6 的 `bin` 字段就是货格号，直接当 id_byte。
+  21: 
+  22: 【出问题先看这三条】
+  23:   · 树莓派要先在 8765 监听，否则这里会打 connect failed（不致命，会一直重试）
+  24:   · bin=None（HOLD 灰框）不会发出去 —— 这是对的
+  25:   · 像素坐标原样透传（320 系），换算口径由树莓派侧负责
+  26: """
+  27: import time
+  28: 
+  29: import cv2
+  30: import numpy as np
+  31: 
+  32: # <<<V6-BRIDGE>>> 发送桥所需的额外 import
+  33: import socket
+  34: import struct
+  35: 
+  36: # <<<V6-BRIDGE>>> ================= 发送桥开始 =================
+  37: GATEWAY_HOST = "172.20.10.8"   # 树莓派
+  38: GATEWAY_PORT = 8765
+  39: TASK_ID = 1                    # ⚠️ 绝不能是 0（树莓派 task_id 对不上会整批丢）
+  40: ENABLE_NETWORK = True          # 先设 False 可以只打印不发，用于单独调视觉
+  41: MIN_SEND_INTERVAL_S = 0.10     # 发送节流；V6 最高 6 FPS，不必每帧都发
+  42: 
+  43: _ANGLE_NONE = 0xFF
+  44: _TARGET_BYTES = 7
+  45: 
+  46: 
+  47: def encode_target(row):
+  48:     """把一个 V6 result 编成 7 字节。认不出货格（bin=None）返回 None。"""
+  49:     bin_id = row.get("bin")
+  50:     if bin_id is None:
+  51:         return None          # HOLD 灰框 / 未知颜色 —— 不发货格，也不发这一件
+  52:     if not isinstance(bin_id, int) or not (1 <= bin_id <= 6):
+  53:         return None
+  54:     left, top, w, h = row["bbox"]
+  55:     cx = int(left + w / 2)
+  56:     cy = int(top + h / 2)
+  57:     if not (0 <= cx <= 0xFFFF and 0 <= cy <= 0xFFFF):
+  58:         return None
+  59:     # confidence：V6 没有 score，只有 color_fraction。这是【合成值】，不是模型置信度。
+  60:     frac = row.get("color_fraction") or 0.0
+  61:     conf = max(0, min(100, int(round(frac * 100))))
+  62:     return struct.pack(">BBHHB", bin_id, conf, cx, cy, _ANGLE_NONE)
+  63: 
+  64: 
+  65: def encode_batch_targets(rows, task_id):
+  66:     """把若干 V6 result 编成完整的 BATCH_TARGETS 数据区。bin=None 的会被丢掉。"""
+  67:     if not isinstance(task_id, int) or not (0 <= task_id <= 0xFFFF):
+  68:         raise ValueError("task_id 必须落在 0..65535")
+  69:     if task_id == 0:
+  70:         print("[V6-BRIDGE] WARNING: task_id=0，树莓派可能整批丢弃")
+  71:     payload = bytearray()
+  72:     for row in rows:
+  73:         packed = encode_target(row)
+  74:         if packed is not None:
+  75:             payload += packed
+  76:     count = len(payload) // _TARGET_BYTES
+  77:     if count > 255:
+  78:         raise ValueError("target_count 是 1 字节，不能超过 255")
+  79:     return bytes([count]) + struct.pack(">H", task_id) + bytes(payload)
+  80: 
+  81: 
+  82: class BatchSender:
+  83:     """带重连的 TCP 发送器。一帧一件都没认出来时不发（不占树莓派的槽）。"""
+  84: 
+  85:     def __init__(self, host=GATEWAY_HOST, port=GATEWAY_PORT, task_id=TASK_ID,
+  86:                  enable=ENABLE_NETWORK, interval=MIN_SEND_INTERVAL_S):
+  87:         self._host = host
+  88:         self._port = port
+  89:         self._task_id = task_id
+  90:         self._enable = enable
+  91:         self._interval = interval
+  92:         self._sock = None
+  93:         self._last = 0.0
+  94:         self.sent_frames = 0
+  95:         self.sent_items = 0
+  96:         self.skipped_frames = 0
+  97: 
+  98:     def _ensure(self):
+  99:         if self._sock is not None:
+ 100:             return True
+ 101:         try:
+ 102:             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+ 103:             s.settimeout(2.0)
+ 104:             s.connect((self._host, self._port))
+ 105:             s.settimeout(None)
+ 106:             self._sock = s
+ 107:             print("[V6-BRIDGE] connected %s:%d" % (self._host, self._port))
+ 108:             return True
+ 109:         except Exception as exc:  # 桥不能因为网络挂掉就崩视觉
+ 110:             print("[V6-BRIDGE] connect failed: %s（下次再试）" % exc)
+ 111:             self._sock = None
+ 112:             return False
+ 113: 
+ 114:     def _drop(self):
+ 115:         if self._sock is not None:
+ 116:             try:
+ 117:                 self._sock.close()
+ 118:             except Exception:
+ 119:                 pass
+ 120:             self._sock = None
+ 121: 
+ 122:     def send(self, rows, task_id=None, now=None):
+ 123:         """把这一帧的 results 发出去。返回实际发出的件数。"""
+ 124:         now = now if now is not None else time.monotonic()
+ 125:         if now - self._last < self._interval:
+ 126:             return 0
+ 127:         self._last = now
+ 128:         try:
+ 129:             data = encode_batch_targets(
+ 130:                 rows, self._task_id if task_id is None else task_id)
+ 131:         except Exception as exc:
+ 132:             print("[V6-BRIDGE] encode failed: %s" % exc)
+ 133:             return 0
+ 134:         n = data[0]
+ 135:         if n == 0:
+ 136:             self.skipped_frames += 1
+ 137:             return 0
+ 138:         if not self._enable:
+ 139:             print("[V6-BRIDGE] (disabled) would send %d item(s), %d bytes"
+ 140:                   % (n, len(data)))
+ 141:             self.sent_frames += 1
+ 142:             self.sent_items += n
+ 143:             return n
+ 144:         if not self._ensure():
+ 145:             return 0
+ 146:         try:
+ 147:             self._sock.sendall(data)
+ 148:         except Exception as exc:
+ 149:             print("[V6-BRIDGE] send failed: %s -> 重连" % exc)
+ 150:             self._drop()
+ 151:             return 0
+ 152:         self.sent_frames += 1
+ 153:         self.sent_items += n
+ 154:         return n
+ 155: 
+ 156:     def close(self):
+ 157:         self._drop()
+ 158: 
+ 159:     def summary(self):
+ 160:         return ("[V6-BRIDGE] 累计发出 %d 帧 / %d 件（跳过空帧 %d 次）"
+ 161:                 % (self.sent_frames, self.sent_items, self.skipped_frames))
+ 162: # <<<V6-BRIDGE>>> ================= 发送桥结束 =================
+ 163: 
+ 164: 
+ 165: # ============ 以下为 V6 原文，未作任何修改 ============
+ 166: FRAME_SIZE = 320
+ 167: DETECT_SIZE = 224  # 160 更快；320 更精细。
+ 168: TARGET_FPS = 6.0  # 最高显示节奏；计算较慢时不会强行达到该帧率。
+ 169: CONFIRM_FRAMES = 2
+ 170: SMOOTH_TIME = 0.22  # 秒，越大越平稳，但移动时跟随更慢。
+ 171: HOLD_SECONDS = 0.30  # 短时漏检仅保留灰色 HOLD 框，不输出货格。
+ 172: MAX_TRACK_GAP = 0.65
+ 173: PERF_INTERVAL = 5.0
+ 174: PREVIEW_JPEG_QUALITY = 70  # 仅电脑预览 JPEG 质量，原始检测图与设备屏幕不降质。
+ 175: LOG_RESULTS = False  # True 时每 5 秒额外输出一行物料结果。
+ 176: ROI_MARGIN = 0.03
+ 177: MIN_AREA_FRACTION = 0.0015
+ 178: MAX_AREA_FRACTION = 0.22
+ 179: MIN_COLOR_FRACTION = 0.70
+ 180: KERNEL = np.ones((3, 3), np.uint8)
+ 181: 
+ 182: # 彩色阈值沿用 V4；黑色收紧亮度并要求深色核心，以降低托盘阴影误检。
+ 183: # HSV: H=0..179，S/V=0..255；这些初始阈值仍需现场核对。
+ 184: COLOR_RANGES = {
+ 185:     "red": [((0, 95, 35), (2, 255, 255)), ((173, 95, 35), (179, 255, 255))],
+ 186:     "orange": [((3, 95, 45), (23, 255, 255))],
+ 187:     "yellow": [((24, 95, 45), (35, 255, 255))],
+ 188:     "green": [((36, 95, 35), (84, 255, 255))],
+ 189:     "cyan": [((85, 95, 35), (104, 255, 255))],
+ 190:     "blue": [((105, 95, 30), (137, 255, 255))],
+ 191:     "black": [((0, 0, 0), (179, 150, 50))],
+ 192: }
+ 193: COLOR_TO_MATERIAL = {
+ 194:     "cyan": ("cube", 1), "green": ("cube", 2),
+ 195:     "red": ("triangular_prism", 3), "blue": ("triangular_prism", 4),
+ 196:     "black": ("cylinder", 5), "orange": ("cylinder", 6),
+ 197: }
+ 198: DISPLAY_SHAPE = {"cube": "cube", "cylinder": "cylinder",
+ 199:                  "triangular_prism": "tri-prism", "unknown": "unknown"}
+ 200: 
+ 201: 
+ 202: def analyze(pixels, input_rgb=False, detect_size=None):
+ 203:     """六色分别找区域，避免阴影将异色物料连成一个目标。只读输入。"""
+ 204:     original_h, original_w = pixels.shape[:2]
+ 205:     limit = DETECT_SIZE if detect_size is None else detect_size
+ 206:     if limit < 32:
+ 207:         raise ValueError("detect_size must be at least 32")
+ 208:     scale = min(1.0, float(limit) / max(original_w, original_h))
+ 209:     if scale < 1.0:
+ 210:         # 最近邻不混合红橙边缘色相；没有使用跳帧或复用上一帧结果。
+ 211:         pixels = cv2.resize(pixels, (max(1, round(original_w * scale)),
+ 212:                                      max(1, round(original_h * scale))),
+ 213:                             interpolation=cv2.INTER_NEAREST)
+ 214:     height, width = pixels.shape[:2]
+ 215:     sx, sy = original_w / width, original_h / height
+ 216:     x0, y0 = int(width * ROI_MARGIN), int(height * ROI_MARGIN)
+ 217:     x1, y1 = width - x0, height - y0
+ 218:     hsv = cv2.cvtColor(pixels[y0:y1, x0:x1],
+ 219:                        cv2.COLOR_RGB2HSV if input_rgb else cv2.COLOR_BGR2HSV)
+ 220:     min_area = MIN_AREA_FRACTION * width * height
+ 221:     max_area = MAX_AREA_FRACTION * width * height
+ 222:     results = []
+ 223:     for color in COLOR_TO_MATERIAL:
+ 224:         ranges = COLOR_RANGES[color]
+ 225:         mask = cv2.inRange(hsv, ranges[0][0], ranges[0][1])
+ 226:         for low, high in ranges[1:]:
+ 227:             mask = cv2.bitwise_or(mask, cv2.inRange(hsv, low, high))
+ 228:         # 每种颜色独立去噪和补小洞，不再把所有暗色和彩色区域连在一起。
+ 229:         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, KERNEL)
+ 230:         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, KERNEL)
+ 231:         contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+ 232:         candidates = []
+ 233:         for contour in contours:
+ 234:             area = float(cv2.contourArea(contour))
+ 235:             if not min_area <= area <= max_area:
+ 236:                 continue
+ 237:             x, y, w, h = cv2.boundingRect(contour)
+ 238:             # 接触 ROI 的区域往往是托盘外背景；不画满屏 CHECK 大框。
+ 239:             if x <= 1 or y <= 1 or x+w >= hsv.shape[1]-1 or y+h >= hsv.shape[0]-1:
+ 240:                 continue
+ 241:             if min(w, h) / max(w, h) < 0.28 or area / (w*h) < 0.35:
+ 242:                 continue  # 排除细长背景条和极稀疏噪声，不据此确定物料形状。
+ 243:             inside = np.zeros((h, w), np.uint8)
+ 244:             local = contour - np.array([[[x, y]]], dtype=contour.dtype)
+ 245:             cv2.drawContours(inside, [local], -1, 255, -1)
+ 246:             inside = cv2.erode(inside, KERNEL, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+ 247:             count = cv2.countNonZero(inside)
+ 248:             crop = hsv[y:y+h, x:x+w]
+ 249:             matching = cv2.inRange(crop, ranges[0][0], ranges[0][1])
+ 250:             for low, high in ranges[1:]:
+ 251:                 matching = cv2.bitwise_or(matching, cv2.inRange(crop, low, high))
+ 252:             votes = cv2.countNonZero(cv2.bitwise_and(matching, inside))
+ 253:             fraction = votes/count if count else 0.0
+ 254:             if fraction < MIN_COLOR_FRACTION:
+ 255:                 continue
+ 256:             if color == "black":
+ 257:                 # 真黑物料应有足够深色核心，浅灰投影不应变成黑色圆柱。
+ 258:                 core = cv2.inRange(crop, (0, 0, 0), (179, 150, 38))
+ 259:                 if not count or cv2.countNonZero(cv2.bitwise_and(core, inside))/count < 0.30:
+ 260:                     continue
+ 261:             left, top = round((x+x0)*sx), round((y+y0)*sy)
+ 262:             right = min(original_w, round((x+x0+w)*sx))
+ 263:             bottom = min(original_h, round((y+y0+h)*sy))
+ 264:             shape, bin_id = COLOR_TO_MATERIAL[color]
+ 265:             candidates.append({"color": color, "shape": shape, "bin": bin_id,
+ 266:                                "classification_source": "color", "reason": "color_mapping",
+ 267:                                "color_fraction": fraction, "area": area*sx*sy,
+ 268:                                "bbox": (left, top, right-left, bottom-top), "clipped": False})
+ 269:         # 本场景每种颜色只有一个物料：小碎片不与主物料抢同一个编号。
+ 270:         if candidates:
+ 271:             results.append(max(candidates, key=lambda r: r["area"]))
+ 272:     results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
+ 273:     return results, (round(x0*sx), round(y0*sy), round(x1*sx), round(y1*sy))
+ 274: 
+ 275: 
+ 276: class StableTargets:
+ 277:     """每色一件：连续确认、时间平滑、短时漏检保留灰框；缓存不输出货格。"""
+ 278:     def __init__(self):
+ 279:         self.tracks = {}
+ 280: 
+ 281:     def update(self, detections, now):
+ 282:         seen = set()
+ 283:         for row in detections:
+ 284:             color = row["color"]
+ 285:             seen.add(color)
+ 286:             box = np.array(row["bbox"], dtype=float)
+ 287:             previous = self.tracks.get(color)
+ 288:             new_target = previous is None or now-previous["last_seen"] > MAX_TRACK_GAP
+ 289:             if not new_target:
+ 290:                 old = previous["box"]
+ 291:                 distance = float(np.linalg.norm((box[:2]+box[2:]/2)-(old[:2]+old[2:]/2)))
+ 292:                 new_target = distance > max(30.0, 0.9*max(old[2], old[3]))
+ 293:             if new_target:
+ 294:                 previous = {"box": box, "hits": 0, "confirmed": False,
+ 295:                             "last_seen": now, "row": row}
+ 296:                 self.tracks[color] = previous
+ 297:             else:
+ 298:                 dt = max(0.0, now-previous["last_seen"])
+ 299:                 alpha = 1.0 - np.exp(-dt / SMOOTH_TIME)
+ 300:                 previous["box"] += alpha*(box-previous["box"])
+ 301:             previous["hits"] += 1
+ 302:             previous["confirmed"] = previous["confirmed"] or previous["hits"] >= CONFIRM_FRAMES
+ 303:             previous["last_seen"], previous["row"] = now, row
+ 304:         results = []
+ 305:         for color, track in list(self.tracks.items()):
+ 306:             age = now-track["last_seen"]
+ 307:             if color not in seen:
+ 308:                 track["hits"] = 0
+ 309:                 if age > HOLD_SECONDS or not track["confirmed"]:
+ 310:                     del self.tracks[color]
+ 311:                     continue
+ 312:             if not track["confirmed"]:
+ 313:                 continue
+ 314:             row = dict(track["row"])
+ 315:             row["bbox"] = tuple(int(round(v)) for v in track["box"])
+ 316:             row["stale"] = color not in seen
+ 317:             if row["stale"]:
+ 318:                 row["bin"], row["classification_source"], row["reason"] = None, "none", "short_hold"
+ 319:             results.append(row)
+ 320:         results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
+ 321:         return results
+ 322: 
+ 323: 
+ 324: def render_rgb(rgb, results, roi, fps=0.0):
+ 325:     """小标签置于物料框内；顶部一行图例，避免长文字互相穿插。"""
+ 326:     x0, y0, x1, y1 = roi
+ 327:     cv2.rectangle(rgb, (x0, y0), (x1-1, y1-1), (220, 220, 0), 1)
+ 328:     for r in results:
+ 329:         held = r.get("stale", False)
+ 330:         ink = (150, 150, 150) if held else (0, 220, 0)
+ 331:         x, y, w, h = r["bbox"]
+ 332:         cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), ink, 1)
+ 333:         label = "HOLD" if held else "%d %s" % (r["bin"], r["color"])
+ 334:         tx = max(2, min(x+2, rgb.shape[1]-75))
+ 335:         ty = max(48, min(y+12, rgb.shape[0]-3))
+ 336:         cv2.putText(rgb, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 2)
+ 337:         cv2.putText(rgb, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.35, ink, 1)
+ 338:     cv2.rectangle(rgb, (0, 0), (rgb.shape[1]-1, 34), (0, 0, 0), -1)
+ 339:     cv2.putText(rgb, "V6 STABLE  FPS %.1f" % fps, (8, 14),
+ 340:                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (220, 220, 0), 1)
+ 341:     cv2.putText(rgb, "1/2 cube  3/4 prism  5/6 cylinder", (8, 28),
+ 342:                 cv2.FONT_HERSHEY_SIMPLEX, 0.32, (220, 220, 220), 1)
+ 343: 
+ 344: 
+ 345: def main():
+ 346:     from maix import app, camera, display, image
+ 347: 
+ 348:     cv2.setNumThreads(1)
+ 349:     print("V6 STABLE + BRIDGE: 颜色定形状；显示=%d，检测=%d；物料分开放且完整位于黄框内。"
+ 350:           % (FRAME_SIZE, DETECT_SIZE))
+ 351:     if hasattr(display, "set_trans_image_quality"):
+ 352:         display.set_trans_image_quality(PREVIEW_JPEG_QUALITY)
+ 353:     cam = camera.Camera(FRAME_SIZE, FRAME_SIZE, image.Format.FMT_RGB888)
+ 354:     try:
+ 355:         disp = display.Display()
+ 356:         tracker = StableTargets()
+ 357:         sender = BatchSender()          # <<<V6-BRIDGE>>> 新增
+ 358:         print("[V6-BRIDGE] 目标 %s:%d  enable=%s" % (GATEWAY_HOST, GATEWAY_PORT, ENABLE_NETWORK))
+ 359:         started = time.monotonic()
+ 360:         frames, fps = 0, 0.0
+ 361:         totals = [0.0] * 6
+ 362:         work_max = 0.0
+ 363:         while not app.need_exit():
+ 364:             t0 = time.monotonic()
+ 365:             frame = cam.read()
+ 366:             if frame is None:
+ 367:                 continue
+ 368:             t1 = time.monotonic()
+ 369:             # RGB 共享视图：frame 必须保持存活到绘制和 disp.show 完成。
+ 370:             rgb = image.image2cv(frame, ensure_bgr=False, copy=False)
+ 371:             t2 = time.monotonic()
+ 372:             detections, roi = analyze(rgb, input_rgb=True)
+ 373:             results = tracker.update(detections, time.monotonic())
+ 374:             sender.send(results)        # <<<V6-BRIDGE>>> 新增
+ 375:             t3 = time.monotonic()
+ 376:             render_rgb(rgb, results, roi, fps)
+ 377:             t4 = time.monotonic()
+ 378:             # rgb 的原地绘制已写入 frame，直接显示，无需 cv2image 回转换。
+ 379:             disp.show(frame)
+ 380:             del rgb  # 在下一次读取/释放原帧前释放借用视图。
+ 381:             work_done = time.monotonic()
+ 382:             # 限制最高帧率，不通过积累旧帧/旧框来制造“稳定”。
+ 383:             wait = 1.0/TARGET_FPS - (work_done-t0)
+ 384:             if wait > 0:
+ 385:                 time.sleep(wait)
+ 386:             now = time.monotonic()
+ 387:             frames += 1
+ 388:             for i, elapsed in enumerate((t1-t0, t2-t1, t3-t2, t4-t3, work_done-t4, now-work_done)):
+ 389:                 totals[i] += elapsed
+ 390:             work_max = max(work_max, work_done-t0)
+ 391:             if now-started >= PERF_INTERVAL:
+ 392:                 fps = frames / (now-started)
+ 393:                 print("V6 PERF FPS=%.1f read=%.1fms view=%.1fms detect=%.1fms draw=%.1fms display=%.1fms pace=%.1fms work_max=%.1fms" %
+ 394:                       ((fps,) + tuple(v*1000.0/frames for v in totals) + (work_max*1000.0,)))
+ 395:                 print(sender.summary())   # <<<V6-BRIDGE>>> 新增：跟着性能行一起报发送量
+ 396:                 if LOG_RESULTS:
+ 397:                     print("RESULT " + (" | ".join("%s %s BIN=%s" % (r["color"], r["shape"], r["bin"])
+ 398:                                                 for r in results) or "empty"))
+ 399:                 started, frames, work_max = now, 0, 0.0
+ 400:                 totals = [0.0] * 6
+ 401:     finally:
+ 402:         sender.close()                  # <<<V6-BRIDGE>>> 新增
+ 403:         cam.close()
+ 404: 
+ 405: 
+ 406: if __name__ == "__main__":
+ 407:     main()

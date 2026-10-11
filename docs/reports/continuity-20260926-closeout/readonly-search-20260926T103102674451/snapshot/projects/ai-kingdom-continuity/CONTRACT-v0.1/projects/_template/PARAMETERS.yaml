@@ -1,0 +1,3 @@
+parameters: []
+# 每项包含 key, value, unit, scope, source, verified_status, updated_at。
+# 凭据仅保存安全引用，不能粘贴密钥。

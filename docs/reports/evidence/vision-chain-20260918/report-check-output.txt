@@ -1,0 +1,9 @@
+command=py -3 docs/reports/evidence/vision-chain-20260918/verify_report.py
+{
+  "timestamp": "2026-09-18T12:40:45.901757+08:00",
+  "citations_checked": 183,
+  "files": 50,
+  "errors": [],
+  "note": "Range/existence/hash check only; semantic review is in independent-review.md"
+}
+exit_code=0

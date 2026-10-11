@@ -1,0 +1,671 @@
+{
+  "observed_at": "2026-09-26T10:27:15.651307+08:00",
+  "task_state": "WAITING_FOR_AUDIT4_SOURCE",
+  "baseline_sha256": "30C4B44026442F438FF296A16E5957A6D23402491BE88FAFC4ADD2899422A054",
+  "shared_root_mutations": 0,
+  "concurrent_changes": [],
+  "files": {
+    ".codex-access.lock": {
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "bytes": 0
+    },
+    "DECISIONS.md": {
+      "sha256": "457ECABF098B74EA1C0F1C4F29375A268701C3731D87F93B8F78C1F7D5610254",
+      "bytes": 6374
+    },
+    "events.jsonl": {
+      "sha256": "AA9EF717B5C249D311AAA6B46A41BDE798C52EC5C8D6408CEB3D59179D3E6D22",
+      "bytes": 18557
+    },
+    "EVIDENCE-TEST-20260925-AUDIT3.md": {
+      "sha256": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "bytes": 7450
+    },
+    "EVIDENCE-TEST-20260925-RETEST.md": {
+      "sha256": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "bytes": 8514
+    },
+    "EVIDENCE-TEST-20260925.md": {
+      "sha256": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "bytes": 6185
+    },
+    "EVIDENCE.md": {
+      "sha256": "AE8FCD6017D7A558CA57BFDDEC9C2D076389B41900EEA9C2687DE50A442E86B9",
+      "bytes": 11241
+    },
+    "INDEX.md": {
+      "sha256": "7D2846031A410C9C775C1C00B98CF00CDA013FD78152E0FEB3090EF6776C9E9B",
+      "bytes": 6786
+    },
+    "MANIFEST-SHA256.txt": {
+      "sha256": "367B55DD98D62DF90E8E54B69923559C0034B7C5A6D051D22933F58F7D5396D3",
+      "bytes": 5273
+    },
+    "PARAMETERS.yaml": {
+      "sha256": "D7F7A04686965F9B0A05D9D27F5800E17D7E29D28799727C7BD9AC983338922D",
+      "bytes": 8163
+    },
+    "SHARED-UNDERSTANDING.md": {
+      "sha256": "1C2F8FD7A160B79C25EDA9CBC22B430FC5A89767DC84313386D852E1A3DC0D18",
+      "bytes": 14788
+    },
+    "STATE.md": {
+      "sha256": "A60C206D91EE995F8BE83D542EF9C9309503467F2FFA295AEE3FCB93556BBEE0",
+      "bytes": 7239
+    },
+    "WORKING-NOTES.md": {
+      "sha256": "19D47076D359D488AE089C987B8EF5950570CE7C468AAF7E14F23B8760B9401A",
+      "bytes": 5552
+    },
+    "CONTRACT-v0.1\\00-SEND-TO-ALL-AI.md": {
+      "sha256": "7A3EC666A6E1520E2D4DFCBAB94F42F18E92AC84B4C983B8F9CED4C9C2A69CD5",
+      "bytes": 1933
+    },
+    "CONTRACT-v0.1\\AUTHORITY-STATUS.md": {
+      "sha256": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "bytes": 2042
+    },
+    "CONTRACT-v0.1\\MANIFEST-SHA256.txt": {
+      "sha256": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "bytes": 1642
+    },
+    "CONTRACT-v0.1\\README.md": {
+      "sha256": "F264FA519581A826072A4104B7B13DC4D437F9F0EB209FDB287B48B01C05A0AE",
+      "bytes": 977
+    },
+    "CONTRACT-v0.1\\adapters\\ACCEPTANCE.md": {
+      "sha256": "7BD90B7366FF6E4E8849396DD956B75ECA1FAE1974E7859A989C82B76179B659",
+      "bytes": 5039
+    },
+    "CONTRACT-v0.1\\core\\COLLABORATION.md": {
+      "sha256": "5FCE7B9D02D21F0F7574FFB8F6F4783CFAAA3A18FA5C96A9BA4D156A3F0A9E4E",
+      "bytes": 5572
+    },
+    "CONTRACT-v0.1\\core\\HANDOFF-CONTRACT.md": {
+      "sha256": "E87976C9DB97AE169C5C28A2D1E8E3719E4ADD54A99342C1D3C5E439D3A50D15",
+      "bytes": 4340
+    },
+    "CONTRACT-v0.1\\core\\RUNTIME-RULES.md": {
+      "sha256": "2FE1B600D89D2B01B3BC2EC237407FA31A8D425430B1057B28131E54678E6D54",
+      "bytes": 3837
+    },
+    "CONTRACT-v0.1\\nodes\\NODE-START-template.md": {
+      "sha256": "0FB658F82DB38890D16504207DEA7A25AE87753187C1E9418C03932D7FCC1258",
+      "bytes": 343
+    },
+    "CONTRACT-v0.1\\projects\\_template\\DECISIONS.md": {
+      "sha256": "F578F57C0EBBF81E0E21E886B22741F9107234011D6003E2A75656374B6B50DE",
+      "bytes": 177
+    },
+    "CONTRACT-v0.1\\projects\\_template\\EVIDENCE.md": {
+      "sha256": "511695C6AE29418F786DF62BC5DBE6547FEC94C00FEBEE50361C5AF6BD714961",
+      "bytes": 170
+    },
+    "CONTRACT-v0.1\\projects\\_template\\INDEX.md": {
+      "sha256": "C85889206E9D8164BC0284123B6D6B3FFD60AF97725CE297D587D65658FE486C",
+      "bytes": 261
+    },
+    "CONTRACT-v0.1\\projects\\_template\\PARAMETERS.yaml": {
+      "sha256": "1E07AF7DE6D3A2E0897C7815F8CA458CB766A71E0372DAF4ABF15813BC7C17F2",
+      "bytes": 148
+    },
+    "CONTRACT-v0.1\\projects\\_template\\SHARED-UNDERSTANDING.md": {
+      "sha256": "FB73FD728165CEEF831AA62C19C93C30E09163782046650CD6634CA09A98C054",
+      "bytes": 649
+    },
+    "CONTRACT-v0.1\\projects\\_template\\STATE.md": {
+      "sha256": "2F1A8E2F0A063A95220D6C7E9B127CF14E7F06BCC76F341C1F3404ED27B57A43",
+      "bytes": 244
+    },
+    "CONTRACT-v0.1\\projects\\_template\\WORKING-NOTES.md": {
+      "sha256": "73CDEAE6FF785B2E4793D3D49DBAFC471989A5C371CA245B0DF79B861EC795CC",
+      "bytes": 194
+    },
+    "CONTRACT-v0.1\\projects\\_template\\handoffs\\HANDOFF-template.md": {
+      "sha256": "4F258B4E70BAA29CED40992494C0961C906729CB51845F32A921CEC11EE12309",
+      "bytes": 1096
+    },
+    "CONTRACT-v0.1\\projects\\_template\\handoffs\\RECEIPT-template.md": {
+      "sha256": "AF34329EF0AFD800A13115679B73085D810FF7ED9E6E9976ABA8BD75804E9763",
+      "bytes": 524
+    },
+    "handoffs\\H-20260925-DSH-001.md": {
+      "sha256": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "bytes": 17133
+    },
+    "handoffs\\RECEIPT-20260925-DSH-001.md": {
+      "sha256": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "bytes": 6279
+    },
+    "handoffs\\H-20260925-CODEX-001\\READSET.json": {
+      "sha256": "731EDBD73FE11D1FA1CAC74D075205163E74C8C77B57E943470F7A268C2E2B92",
+      "bytes": 4466
+    },
+    "handoffs\\H-20260925-CODEX-001\\REQUEST.md": {
+      "sha256": "3FF00FE46CBE762BDC5D2D71C3BD6DF558ACD78790257BF93F5113C997B0B976",
+      "bytes": 5663
+    },
+    "tasks\\codex-access\\REQUEST.md": {
+      "sha256": "BB40FEDE1DEF29EE8874EA7EDE2CE3BC7237FE3E31B479264182C647880D9F38",
+      "bytes": 1881
+    }
+  },
+  "events": {
+    "lines": 36,
+    "unique_ids": 25,
+    "duplicates": {
+      "EV-20260925-DSH-0014": [
+        {
+          "line": 14,
+          "line_sha256": "006F5E9E5C97B9558E59BAF5ADD68B02E33E35CFC8029ED0B58DA42AB540029F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0014",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_RULING",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-008",
+            "note": "Q1 裁决：按现有共享根对齐 —— 项目根确认为 C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity；PENDING_USER_RULING 解除"
+          }
+        },
+        {
+          "line": 25,
+          "line_sha256": "006F5E9E5C97B9558E59BAF5ADD68B02E33E35CFC8029ED0B58DA42AB540029F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0014",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_RULING",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-008",
+            "note": "Q1 裁决：按现有共享根对齐 —— 项目根确认为 C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity；PENDING_USER_RULING 解除"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0015": [
+        {
+          "line": 15,
+          "line_sha256": "19D40790A6A37D5C0F9C98CA1F93F4CFB5D5655C465521A09CDC4D70CAB3720F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0015",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_RULING",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-013",
+            "note": "Q9 裁决：版本冲突先登记，不直接改索引 —— AUTHORITATIVE-SOURCES.yaml 未改动，双记于 PARAMETERS.yaml 并以文件自身 v0.4 为准"
+          }
+        },
+        {
+          "line": 26,
+          "line_sha256": "19D40790A6A37D5C0F9C98CA1F93F4CFB5D5655C465521A09CDC4D70CAB3720F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0015",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_RULING",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-013",
+            "note": "Q9 裁决：版本冲突先登记，不直接改索引 —— AUTHORITATIVE-SOURCES.yaml 未改动，双记于 PARAMETERS.yaml 并以文件自身 v0.4 为准"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0016": [
+        {
+          "line": 16,
+          "line_sha256": "36928166ABB0C2AB7D45E86938673B775D91AF8A0C27D4C772C04E431F4FA40B",
+          "event": {
+            "event_id": "EV-20260925-DSH-0016",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_DIRECTIVE",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-014",
+            "note": "Q2/Q3 裁决方式：涉及本节点规则与入口修改，要求先给出具体差异及影响，暂不执行修改 —— 约束本节点不得自行改 ~/.dsh/AGENTS.md"
+          }
+        },
+        {
+          "line": 27,
+          "line_sha256": "36928166ABB0C2AB7D45E86938673B775D91AF8A0C27D4C772C04E431F4FA40B",
+          "event": {
+            "event_id": "EV-20260925-DSH-0016",
+            "actor": "user",
+            "time": "2026-09-25T22:00:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "USER_DIRECTIVE",
+            "source": "user_message",
+            "payload_ref": "DECISIONS.md#D-014",
+            "note": "Q2/Q3 裁决方式：涉及本节点规则与入口修改，要求先给出具体差异及影响，暂不执行修改 —— 约束本节点不得自行改 ~/.dsh/AGENTS.md"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0017": [
+        {
+          "line": 17,
+          "line_sha256": "013807D02768CE05A5F5F4A7445ECDA744C9383242D104B35F2F7CDA14429F86",
+          "event": {
+            "event_id": "EV-20260925-DSH-0017",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T22:07:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "PROPOSAL_CREATED",
+            "source": "node_proposal",
+            "payload_ref": "nodes/deepseek/proposals/DSH-ENTRY-DIFF-Q2-Q3.md",
+            "note": "Q2/Q3 差异提案落盘：Q3 三条差异（L62 入口路径不存在、L63 Skill 路径不存在、L60/L61 活动发现区树在本机不存在且两候选根均不完全吻合 -> 建议标 UNRESOLVED 不猜）；Q2 三选项 A 常设窄例外 / B 不改规则 / C 只修事实不动权限，本节点建议 C。未应用，AGENTS.md mtime 与哈希未变"
+          }
+        },
+        {
+          "line": 28,
+          "line_sha256": "013807D02768CE05A5F5F4A7445ECDA744C9383242D104B35F2F7CDA14429F86",
+          "event": {
+            "event_id": "EV-20260925-DSH-0017",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T22:07:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "PROPOSAL_CREATED",
+            "source": "node_proposal",
+            "payload_ref": "nodes/deepseek/proposals/DSH-ENTRY-DIFF-Q2-Q3.md",
+            "note": "Q2/Q3 差异提案落盘：Q3 三条差异（L62 入口路径不存在、L63 Skill 路径不存在、L60/L61 活动发现区树在本机不存在且两候选根均不完全吻合 -> 建议标 UNRESOLVED 不猜）；Q2 三选项 A 常设窄例外 / B 不改规则 / C 只修事实不动权限，本节点建议 C。未应用，AGENTS.md mtime 与哈希未变"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0018": [
+        {
+          "line": 18,
+          "line_sha256": "BF3DEFDD37B4CF03919DFCF3ED88A7D98BDB5C23476E8136BF8853A6C4EF92DE",
+          "event": {
+            "event_id": "EV-20260925-DSH-0018",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:12:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "RETEST_STARTED",
+            "source": "independent_context_subagent",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md",
+            "note": "按用户要求从实际共享根（非镜像）重做独立阅读测试：核对共同理解、5条用户纠正 C1-C5、待固化共识 P1-P4、带单位参数 17 项、must_read 双列表交叉核对、MANIFEST-SHA256 逐条复算；子会话 afffaea2-adfa-4f53-966e-e6199791c7f8"
+          }
+        },
+        {
+          "line": 29,
+          "line_sha256": "BF3DEFDD37B4CF03919DFCF3ED88A7D98BDB5C23476E8136BF8853A6C4EF92DE",
+          "event": {
+            "event_id": "EV-20260925-DSH-0018",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:12:00+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "RETEST_STARTED",
+            "source": "independent_context_subagent",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md",
+            "note": "按用户要求从实际共享根（非镜像）重做独立阅读测试：核对共同理解、5条用户纠正 C1-C5、待固化共识 P1-P4、带单位参数 17 项、must_read 双列表交叉核对、MANIFEST-SHA256 逐条复算；子会话 afffaea2-adfa-4f53-966e-e6199791c7f8"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0019": [
+        {
+          "line": 19,
+          "line_sha256": "56E70FD97B265B4B10D4502F071654130AF75FF8A752CE1D78E36B75DE97E819",
+          "event": {
+            "event_id": "EV-20260925-DSH-0019",
+            "actor": "independent_reader",
+            "time": "2026-09-25T21:13:59+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "RETEST_RECEIVED",
+            "source": "shared_root_only",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md",
+            "note": "第二轮复测 RECEIVED：13+2 文件从共享根无一缺失；must_read 17 唯一路径 0 MISSING（第一轮曾 17 MISSING）；哈希清单 A+B 15/15 MATCH、C 8/8 MATCH、字节 23/23；C1-C5 恰好 5 条且两文件一致；Q1-Q9 编号跨文件一致（R4 消除）。第一轮缺口『从共享权威根恢复』已闭合 → PASS"
+          }
+        },
+        {
+          "line": 30,
+          "line_sha256": "56E70FD97B265B4B10D4502F071654130AF75FF8A752CE1D78E36B75DE97E819",
+          "event": {
+            "event_id": "EV-20260925-DSH-0019",
+            "actor": "independent_reader",
+            "time": "2026-09-25T21:13:59+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "RETEST_RECEIVED",
+            "source": "shared_root_only",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md",
+            "note": "第二轮复测 RECEIVED：13+2 文件从共享根无一缺失；must_read 17 唯一路径 0 MISSING（第一轮曾 17 MISSING）；哈希清单 A+B 15/15 MATCH、C 8/8 MATCH、字节 23/23；C1-C5 恰好 5 条且两文件一致；Q1-Q9 编号跨文件一致（R4 消除）。第一轮缺口『从共享权威根恢复』已闭合 → PASS"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0020": [
+        {
+          "line": 20,
+          "line_sha256": "09EE0D46F98FA27F4D671BB417D02BD961E80D681A5067320E17264626054271",
+          "event": {
+            "event_id": "EV-20260925-DSH-0020",
+            "actor": "independent_reader",
+            "time": "2026-09-25T21:13:59+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "DEFECTS_FOUND_BY_READER",
+            "source": "shared_root_only",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md#4",
+            "note": "阅读者发现 9 项文件中未登记的不一致：N1 state_revision 1/2 冲突、N2 handoff 内容滞后（execution_gate 仍记 v0.2、缺 2 参数、E1-E13、B1 仍称拒写）、N3 正文时间戳晚于 mtime 与真实时钟、N4 P3 与 D-010 同命题双状态、N5 R8 残留在 START.md、N6 AUTHORITY-STATUS.md 无哈希覆盖、N7 同名嵌套目录、N8 STATE 版本标签冲突、N9 E11/E14 文件数口径"
+          }
+        },
+        {
+          "line": 31,
+          "line_sha256": "09EE0D46F98FA27F4D671BB417D02BD961E80D681A5067320E17264626054271",
+          "event": {
+            "event_id": "EV-20260925-DSH-0020",
+            "actor": "independent_reader",
+            "time": "2026-09-25T21:13:59+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "DEFECTS_FOUND_BY_READER",
+            "source": "shared_root_only",
+            "payload_ref": "EVIDENCE-TEST-20260925-RETEST.md#4",
+            "note": "阅读者发现 9 项文件中未登记的不一致：N1 state_revision 1/2 冲突、N2 handoff 内容滞后（execution_gate 仍记 v0.2、缺 2 参数、E1-E13、B1 仍称拒写）、N3 正文时间戳晚于 mtime 与真实时钟、N4 P3 与 D-010 同命题双状态、N5 R8 残留在 START.md、N6 AUTHORITY-STATUS.md 无哈希覆盖、N7 同名嵌套目录、N8 STATE 版本标签冲突、N9 E11/E14 文件数口径"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0021": [
+        {
+          "line": 21,
+          "line_sha256": "E0CAF33B8E476E5DE2D9BB52DB32429C8B794F1A49976B04F034CCB7C5A8BFC8",
+          "event": {
+            "event_id": "EV-20260925-DSH-0021",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:15:36+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "SELF_DEFECT_CONFIRMED",
+            "source": "Get-Date_measurement",
+            "payload_ref": "EVIDENCE.md#E17",
+            "note": "R12 确认：真实时钟实测 21:15:36.581+08:00。本节点全程只在 20:30:12 / 20:58:26 / 21:15:36 三次实测过 Get-Date，此后写入的 21:03~22:12 等时间戳均为估计值而非实测值，导致正文时间晚于文件 mtime。已登记 R12/E17，各文件加入时间戳口径声明，权威时间改以 mtime 为准"
+          }
+        },
+        {
+          "line": 32,
+          "line_sha256": "E0CAF33B8E476E5DE2D9BB52DB32429C8B794F1A49976B04F034CCB7C5A8BFC8",
+          "event": {
+            "event_id": "EV-20260925-DSH-0021",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:15:36+08:00",
+            "project": "ai-kingdom-continuity",
+            "type": "SELF_DEFECT_CONFIRMED",
+            "source": "Get-Date_measurement",
+            "payload_ref": "EVIDENCE.md#E17",
+            "note": "R12 确认：真实时钟实测 21:15:36.581+08:00。本节点全程只在 20:30:12 / 20:58:26 / 21:15:36 三次实测过 Get-Date，此后写入的 21:03~22:12 等时间戳均为估计值而非实测值，导致正文时间晚于文件 mtime。已登记 R12/E17，各文件加入时间戳口径声明，权威时间改以 mtime 为准"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0023": [
+        {
+          "line": 22,
+          "line_sha256": "FD5C8125C6514EE79A0CF19B51410E25610BF412CDFD5686A4ADB1388358006F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0023",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "LEDGER_TIME_CORRECTION",
+            "source": "third_round_audit",
+            "payload_ref": "EVIDENCE-TEST-20260925-AUDIT3.md#U3",
+            "note": "⚠ 时间更正声明（R3-3）。本账本以下条目的 time 字段为**作者估计值，未经测量，不可信**：EV-0011(21:35)、EV-0013(21:40)、EV-0014/0015/0016(均 22:00:00)、EV-0017(22:07)、EV-0018(22:05)。其中 EV-0014/0015/0016 的 actor=user 且 time=22:00:00 **晚于当时真实时钟（第三轮审计实测 21:18:33）**，属**时间错误**。事实澄清：用户裁决 Q1/Q9 与 Q2-Q3 指令**确实真实发生**（源为真实用户消息），但**发生时刻未测量**，正确区间为 21:15–21:18 之间、具体未知。**本条不是改写历史，而是就地更正声明**；按 append-only 约定，原条目保留原文不改。自本条起，新增事件均带 time_source: MEASURED。第三方不应据 EV-0011~0018/0020/0021 的 time 做时序推断"
+          }
+        },
+        {
+          "line": 33,
+          "line_sha256": "FD5C8125C6514EE79A0CF19B51410E25610BF412CDFD5686A4ADB1388358006F",
+          "event": {
+            "event_id": "EV-20260925-DSH-0023",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "LEDGER_TIME_CORRECTION",
+            "source": "third_round_audit",
+            "payload_ref": "EVIDENCE-TEST-20260925-AUDIT3.md#U3",
+            "note": "⚠ 时间更正声明（R3-3）。本账本以下条目的 time 字段为**作者估计值，未经测量，不可信**：EV-0011(21:35)、EV-0013(21:40)、EV-0014/0015/0016(均 22:00:00)、EV-0017(22:07)、EV-0018(22:05)。其中 EV-0014/0015/0016 的 actor=user 且 time=22:00:00 **晚于当时真实时钟（第三轮审计实测 21:18:33）**，属**时间错误**。事实澄清：用户裁决 Q1/Q9 与 Q2-Q3 指令**确实真实发生**（源为真实用户消息），但**发生时刻未测量**，正确区间为 21:15–21:18 之间、具体未知。**本条不是改写历史，而是就地更正声明**；按 append-only 约定，原条目保留原文不改。自本条起，新增事件均带 time_source: MEASURED。第三方不应据 EV-0011~0018/0020/0021 的 time 做时序推断"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0024": [
+        {
+          "line": 23,
+          "line_sha256": "BB5D093C4234EF214235E1C9132F8411D705CF927ABE5BA75BC168A20639612D",
+          "event": {
+            "event_id": "EV-20260925-DSH-0024",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "STATE_REVISION_BUMP",
+            "source": "recorder",
+            "payload_ref": "STATE.md",
+            "note": "STATE revision 2 -> 3（补记：此前缺此事件，导致 EV-0013 后无 2->3 记录，第三轮审计发现 → R3-13）。同时 rev 3 归并：Q1 裁决、Q2/Q3 改为先给差异、Q9 只登记、第二轮共享根复测完成、第三轮审计（N1-N9 判定 + U1-U14 新发现）"
+          }
+        },
+        {
+          "line": 34,
+          "line_sha256": "BB5D093C4234EF214235E1C9132F8411D705CF927ABE5BA75BC168A20639612D",
+          "event": {
+            "event_id": "EV-20260925-DSH-0024",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "STATE_REVISION_BUMP",
+            "source": "recorder",
+            "payload_ref": "STATE.md",
+            "note": "STATE revision 2 -> 3（补记：此前缺此事件，导致 EV-0013 后无 2->3 记录，第三轮审计发现 → R3-13）。同时 rev 3 归并：Q1 裁决、Q2/Q3 改为先给差异、Q9 只登记、第二轮共享根复测完成、第三轮审计（N1-N9 判定 + U1-U14 新发现）"
+          }
+        }
+      ],
+      "EV-20260925-DSH-0025": [
+        {
+          "line": 24,
+          "line_sha256": "BB87D05CB310050651DF616AB5AB5E87373BCD63BE58014CD4B269134595E720",
+          "event": {
+            "event_id": "EV-20260925-DSH-0025",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "SELF_REPORT_RETRACTED",
+            "source": "third_round_audit",
+            "payload_ref": "EVIDENCE-TEST-20260925-AUDIT3.md",
+            "note": "⚠ 撤回 EV-0022 的完成声明。第三轮审计逐项核验后判定 EV-0022『N1-N6/N8/N9 已修』为 overclaim：真正修好的只有 N5、N6 与 N9 的一半（E11）；N1(DECISIONS 无该字段)、N2(§E 仍自相矛盾)、N4(handoff/RECEIPT 仍把 D-010 列为提议)、N8(INDEX 仍 rev 2)、N9 的另一半(E14 计数 30/4 实为 31/5) 均**未修或仅部分修**。教训：作者自报的『已修』必须逐项指向实际文件与行号，否则不得作为完成依据"
+          }
+        },
+        {
+          "line": 35,
+          "line_sha256": "BB87D05CB310050651DF616AB5AB5E87373BCD63BE58014CD4B269134595E720",
+          "event": {
+            "event_id": "EV-20260925-DSH-0025",
+            "actor": "deepseek_harness",
+            "time": "2026-09-25T21:18:33+08:00",
+            "time_source": "MEASURED",
+            "project": "ai-kingdom-continuity",
+            "type": "SELF_REPORT_RETRACTED",
+            "source": "third_round_audit",
+            "payload_ref": "EVIDENCE-TEST-20260925-AUDIT3.md",
+            "note": "⚠ 撤回 EV-0022 的完成声明。第三轮审计逐项核验后判定 EV-0022『N1-N6/N8/N9 已修』为 overclaim：真正修好的只有 N5、N6 与 N9 的一半（E11）；N1(DECISIONS 无该字段)、N2(§E 仍自相矛盾)、N4(handoff/RECEIPT 仍把 D-010 列为提议)、N8(INDEX 仍 rev 2)、N9 的另一半(E14 计数 30/4 实为 31/5) 均**未修或仅部分修**。教训：作者自报的『已修』必须逐项指向实际文件与行号，否则不得作为完成依据"
+          }
+        }
+      ]
+    },
+    "ev0022_present": false
+  },
+  "manifest": [
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\DECISIONS.md",
+      "expected": "34098B2A8B9BC1F47D911208B4E1040D976AD384A2E03456C2895D2E7B02A66A",
+      "actual": "457ECABF098B74EA1C0F1C4F29375A268701C3731D87F93B8F78C1F7D5610254",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\events.jsonl",
+      "expected": "A49513A7661D1FB896FAFDDF0DCC420A8EFB6A635A50831C04364C99A9EED521",
+      "actual": "AA9EF717B5C249D311AAA6B46A41BDE798C52EC5C8D6408CEB3D59179D3E6D22",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE.md",
+      "expected": "F86F71CAF37AAFFB0AD680F05E6C6770FC536B4A1D36070E66578A6E15806B27",
+      "actual": "AE8FCD6017D7A558CA57BFDDEC9C2D076389B41900EEA9C2687DE50A442E86B9",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925.md",
+      "expected": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "actual": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md",
+      "expected": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "actual": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-RETEST.md",
+      "expected": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "actual": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\H-20260925-DSH-001.md",
+      "expected": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "actual": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\RECEIPT-20260925-DSH-001.md",
+      "expected": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "actual": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\INDEX.md",
+      "expected": "55F55C6F8B387E059C4CBDE18FBEB72F57D4C7766F9701652245822ED0898B5A",
+      "actual": "7D2846031A410C9C775C1C00B98CF00CDA013FD78152E0FEB3090EF6776C9E9B",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\PARAMETERS.yaml",
+      "expected": "7C68603F5BC70B038EC234589D8B84EDDAFB26D78332B0B9FC9C43158F4FEDF1",
+      "actual": "D7F7A04686965F9B0A05D9D27F5800E17D7E29D28799727C7BD9AC983338922D",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\SHARED-UNDERSTANDING.md",
+      "expected": "F40FE4DE25F789701FB2F91099656E3A8B4B369178DE4CC19C1E5395AE11401B",
+      "actual": "1C2F8FD7A160B79C25EDA9CBC22B430FC5A89767DC84313386D852E1A3DC0D18",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\STATE.md",
+      "expected": "3818F46D420F3CB90841700D530F68596B33FD1FD6B2FD61E72F567BDFE9C968",
+      "actual": "A60C206D91EE995F8BE83D542EF9C9309503467F2FFA295AEE3FCB93556BBEE0",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\WORKING-NOTES.md",
+      "expected": "A420F2B7FFFFF0607B0DC5DC6FC7336ACC1AF38E4EE346D3267B11FDBD22849A",
+      "actual": "19D47076D359D488AE089C987B8EF5950570CE7C468AAF7E14F23B8760B9401A",
+      "match": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\ADAPTER.md",
+      "expected": "81CA772AE62A5A434918BA1DD5FEC03281E512FD0AAAD638960861EB1A1396F9",
+      "actual": "81CA772AE62A5A434918BA1DD5FEC03281E512FD0AAAD638960861EB1A1396F9",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\outbox\\AI-KINGDOM-CONTINUITY-v0.1-DEEPSEEK-REPLY.md",
+      "expected": "1ED1EB22300BD7A02FABB8D1FD89243AAEA4FE881AC7029D637651B405AD6F51",
+      "actual": "1ED1EB22300BD7A02FABB8D1FD89243AAEA4FE881AC7029D637651B405AD6F51",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\proposals\\DSH-ENTRY-DIFF-Q2-Q3.md",
+      "expected": "FE9F2DDE29AEF1A1A59D02848A804A103DF81B6F807C04369694F4637CA4ED3B",
+      "actual": "FE9F2DDE29AEF1A1A59D02848A804A103DF81B6F807C04369694F4637CA4ED3B",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\receipts\\RECEIPT-H-20260925-DSH-001.md",
+      "expected": "77FA81CB7D3DFEDEE517CAD2C9F097EC2014597A4B0C46F474707FB136BC06A9",
+      "actual": "77FA81CB7D3DFEDEE517CAD2C9F097EC2014597A4B0C46F474707FB136BC06A9",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\START.md",
+      "expected": "BE7F335F13550F94D807A430C205C698B2B2E51276DDC5069828D367DF5A5CB3",
+      "actual": "BE7F335F13550F94D807A430C205C698B2B2E51276DDC5069828D367DF5A5CB3",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\BINDING-MANIFEST.yaml",
+      "expected": "FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5",
+      "actual": "FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\governance\\AUTHORITATIVE-SOURCES.yaml",
+      "expected": "EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB",
+      "actual": "EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\workflow\\CONTINUITY-CONTRACT.md",
+      "expected": "D638C460941D1F574CF4A6F94AED01A27FA482554002AA62A8CE506E03B08C9B",
+      "actual": "D638C460941D1F574CF4A6F94AED01A27FA482554002AA62A8CE506E03B08C9B",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\workflow\\EXECUTION-GATE-CONTRACT.md",
+      "expected": "15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44",
+      "actual": "15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\adapters\\deepseek\\adapter.yaml",
+      "expected": "9C0A8C1980CED5FB5FCD6CD8B1E457BB6A8B32377E0764D79EA3FE446D861886",
+      "actual": "9C0A8C1980CED5FB5FCD6CD8B1E457BB6A8B32377E0764D79EA3FE446D861886",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\00-ENTRY\\README.md",
+      "expected": "F8A40FA77FC6DCBE6B852C699894D53ACEF4A5034868295062D88E8A2E7A8B7B",
+      "actual": "F8A40FA77FC6DCBE6B852C699894D53ACEF4A5034868295062D88E8A2E7A8B7B",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\.dsh\\AGENTS.md",
+      "expected": "C78D21A6FF8778A79E503691D980BAACFF2CB7DFE67CE35622640D8F3D2950E3",
+      "actual": "C78D21A6FF8778A79E503691D980BAACFF2CB7DFE67CE35622640D8F3D2950E3",
+      "match": true
+    },
+    {
+      "path": "E:\\deepseek-harness\\empire\\system-root.yaml",
+      "expected": "6C5FEC976FF9022169ADFFDF71C25611AD32DEA1170333E7E7FA433B9A80644F",
+      "actual": "6C5FEC976FF9022169ADFFDF71C25611AD32DEA1170333E7E7FA433B9A80644F",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\AUTHORITY-STATUS.md",
+      "expected": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "actual": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\MANIFEST-SHA256.txt",
+      "expected": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "actual": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "match": true
+    }
+  ],
+  "manifest_matches": 20,
+  "manifest_total": 28,
+  "acceptance": "NOT_ASSESSED",
+  "real_compaction_recovery": "PARTIAL",
+  "H-20260925-DSH-001_cross_node_receipt": "PARTIAL"
+}

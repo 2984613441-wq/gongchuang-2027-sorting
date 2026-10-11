@@ -1,0 +1,79 @@
+started=2026-09-18T12:25:39.737736+08:00
+cwd=C:\Users\29845\Desktop\工创赛\电控
+command=py -3 -m pytest -q -p no:cacheprovider tests/rpi/test_vision_ingest.py tests/rpi/test_socket_vision_source.py tests/rpi/test_pixel_to_device.py tests/rpi/test_two_stage_display.py tests/protocol/test_item_task_identity.py tests/rpi/test_display.py --basetemp C:\Users\29845\Desktop\工创赛\docs\reports\evidence\vision-chain-20260918\pytest-tmp-268b2a0b965e470a84e13d9ae79dcf23 --tb=short -rs
+PYTHONPATH=C:\Users\29845\Desktop\工创赛\电控\src
+PYTHONUTF8=1 PYTHONDONTWRITEBYTECODE=1
+--- RAW OUTPUT ---
+...................EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.EEEE............. [ 69%]
+.........ss....................                                          [100%]Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(_console_main())
+                     ~~~~~~~~~~~~~^^
+  File "D:\Lib\site-packages\_pytest\config\__init__.py", line 253, in _console_main
+    code = _main(prog=_get_prog_name(sys.argv))
+  File "D:\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "D:\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "D:\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "D:\Lib\site-packages\_pytest\main.py", line 365, in wrap_session
+    config.hook.pytest_sessionfinish(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        session=session, exitstatus=session.exitstatus
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "D:\Lib\site-packages\_pytest\logging.py", line 888, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "D:\Lib\site-packages\_pytest\terminal.py", line 961, in pytest_sessionfinish
+    result = yield
+             ^^^^^
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "D:\Lib\site-packages\_pytest\warnings.py", line 119, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "D:\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "D:\Lib\site-packages\_pytest\tmpdir.py", line 337, in pytest_sessionfinish
+    cleanup_dead_symlinks(basetemp)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "D:\Lib\site-packages\_pytest\pathlib.py", line 354, in cleanup_dead_symlinks
+    for left_dir in root.iterdir():
+                    ~~~~~~~~~~~~^^
+  File "D:\Lib\pathlib\__init__.py", line 836, in iterdir
+    with os.scandir(root_dir) as scandir_it:
+         ~~~~~~~~~~^^^^^^^^^^
+PermissionError: [WinError 5] 拒绝访问。: 'C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\evidence\\vision-chain-20260918\\pytest-tmp-268b2a0b965e470a84e13d9ae79dcf23'
+
+--- END RAW OUTPUT ---
+exit_code=1
+finished=2026-09-18T12:25:52.876267+08:00

@@ -1,0 +1,124 @@
+BUILD profile-tests (gcc C11 O2 Wall Wextra Werror pedantic)
+RUN C-STEP-001
+RUN C-STEP-002
+RUN C-STEP-003
+RUN C-STEP-004
+RUN C-STEP-005
+RUN C-STEP-006
+RUN C-STEP-007
+RUN C-STEP-008
+RUN C-STEP-009
+RUN C-STEP-010
+RUN C-STEP-011
+RUN C-STEP-012
+PROFILE cases=12 failures=0
+EXIT profile-tests = 0
+BUILD ec_motion_plan_tests (gcc C11 O2 Wall Wextra Werror pedantic)
+ALL MOTION PLAN HOST TESTS PASSED
+EXIT ec_motion_plan_tests = 0
+BUILD ec_axis_driver_tests (gcc C11 O2 Wall Wextra Werror pedantic)
+ALL AXIS DRIVER HOST TESTS PASSED
+EXIT ec_axis_driver_tests = 0
+BUILD ec_firmware_host_tests (gcc C11 O2 Wall Wextra Werror pedantic)
+ALL FIRMWARE HOST TESTS PASSED
+EXIT ec_firmware_host_tests = 0
+BUILD app-probe (gcc C11 O2 Wall Wextra Werror pedantic)
+reset state=0 tx=0 ACK=0 barrier=0 moving=0 watchdog=0
+idle9263 state=0 tx=0 ACK=0 barrier=0 moving=0 watchdog=0
+idle25637 state=0 tx=0 ACK=0 barrier=0 moving=0 watchdog=0
+first_ITEM state=1 tx=0 ACK=0 barrier=0 moving=0 watchdog=0
+startup_done state=6 tx=1 ACK=0 barrier=1 moving=0 watchdog=0
+resend_after_barrier state=8 tx=2 ACK=1 barrier=1 moving=1 watchdog=1
+retry_5s state=8 tx=3 ACK=2 barrier=1 moving=1 watchdog=1
+retry_10s state=8 tx=4 ACK=3 barrier=1 moving=1 watchdog=1
+APP_PROBE PASS; board/axis are host doubles
+EXIT app-probe = 0
+BUILD ec_progress_source_disabled_tests (gcc C11 O2 Wall Wextra Werror pedantic)
+COMPILE-TIME PROGRESS SOURCE DISABLED: HARD NO-OP
+EXIT ec_progress_source_disabled_tests = 0
+BUILD motion-wait200-original-tests (gcc C11 O2 Wall Wextra Werror pedantic)
+docs/reports/evidence/T1-T2-Codex-20260919/test_motion_baseline.c:84 assertion failed: prog->step[index].servo_pulse_us == ms
+EXPECTED WAIT200 BASELINE TEST FAILURE: run motion-wait200-original-tests exit=1
+BUILD motion-wait200-adapted-tests (gcc C11 O2 Wall Wextra Werror pedantic)
+ALL MOTION PLAN HOST TESTS PASSED
+EXIT motion-wait200-adapted-tests = 0
+BUILD logic-tests (gcc C11 O2 Wall Wextra Werror pedantic)
+RUN C-CRC-001
+RUN C-CRC-002
+RUN C-DEDUP-005
+RUN C-DEDUP-001
+RUN C-DEDUP-002
+RUN C-DEDUP-003
+RUN C-DEDUP-004
+RUN C-DEDUP-006
+RUN C-DEDUP-007
+RUN C-DEDUP-008
+RUN C-SM-BOOT-001
+RUN C-SM-BOOT-002
+RUN C-SM-RESET-001
+RUN C-SM-RESET-002
+RUN C-SM-RESET-003
+RUN C-SM-RESET-004
+RUN C-SM-GATE-001
+RUN C-SM-ONCE-001
+RUN C-SM-GATE-002
+RUN C-SM-EVENT-001
+RUN C-SM-EVENT-002
+RUN C-SM-ACK-001
+RUN C-SM-ACK-002
+RUN C-SM-ACK-003
+RUN C-SM-ONCE-002
+RUN C-SM-CAP-001
+RUN C-SM-REVIEW-INVALID-DEDUP-001
+RUN C-SM-REVIEW-OLD-ROUND-001
+RUN C-SM-REVIEW-SAFETY-CONTEXT-001
+RUN C-SM-REVIEW-PROGRESS-CONTEXT-001
+RUN C-SM-REVIEW-NONWAIT-DEDUP-001
+RUN C-SM-ESTOP-001
+RUN C-SM-POWER-001
+RUN C-SM-TIME-001
+RUN C-SM-LOCK-001
+RUN P-CRC16-001
+RUN P-FRAME-001
+RUN P-FRAME-002
+RUN P-FRAME-003
+RUN P-DACK-001
+RUN P-DACK-002
+RUN P-ITEM-001
+RUN P-ITEM-002
+RUN P-ITEM-003
+RUN P-ITEM-004
+RUN P-ACK-001
+RUN P-NACK-001
+RUN C-GW-BOOT-001
+RUN C-GW-FRAME-001
+RUN C-GW-FRAME-002
+RUN C-GW-CYCLE-001
+RUN C-GW-CYCLE-002
+RUN C-GW-CYCLE-003
+RUN C-GW-ACK-REJ-001
+RUN C-GW-ACK-REJ-002
+RUN C-GW-ACK-REJ-003
+RUN C-GW-CRC-001
+RUN C-GW-ROUND-001
+RUN C-GW-RESULT-ONCE-001
+RUN C-GW-RESULT-ONCE-002
+RUN C-GW-ROUND-002
+RUN C-GW-ROUND-003
+RUN C-GW-ROUND-004
+RUN C-GW-RESP-001
+RUN C-GW-RESP-002
+RUN C-GW-ORDER-001
+RUN C-GW-ORDER-002
+RUN C-GW-DACK-REPLAY-001
+RUN C-GW-DACK-REPLAY-002
+RUN C-GW-CONFLICT-001
+RUN C-GW-CACHE-CLEAR-001
+RUN C-GW-CACHE-CLEAR-002
+RUN C-GW-CACHE-CLEAR-003
+RUN C-GW-PICK-001
+RUN C-GW-PICK-002
+RUN C-GW-PICK-003
+RUN C-GW-PICK-004
+ALL 77 STM32 LOGIC TESTS PASSED
+EXIT logic-tests = 0

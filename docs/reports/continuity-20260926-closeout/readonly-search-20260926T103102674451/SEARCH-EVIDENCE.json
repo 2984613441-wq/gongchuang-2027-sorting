@@ -1,0 +1,692 @@
+{
+  "observed_at": "2026-09-26T10:31:02.835313+08:00",
+  "audit4_evidence_status": "MISSING_SOURCE",
+  "searched_roots": [
+    "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity",
+    "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek"
+  ],
+  "terms": [
+    "AUDIT4",
+    "CHECK 1",
+    "R3-14",
+    "6 PASS / 5 PARTIAL / 3 NOT FIXED"
+  ],
+  "files": [
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\.codex-access.lock",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\.codex-access.lock",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "bytes": 0,
+      "mtime_utc": "2026-09-25T13:24:51.544127+00:00",
+      "ctime_utc": "2026-09-25T13:24:51.544127+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\00-SEND-TO-ALL-AI.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\00-SEND-TO-ALL-AI.md",
+      "sha256": "7A3EC666A6E1520E2D4DFCBAB94F42F18E92AC84B4C983B8F9CED4C9C2A69CD5",
+      "bytes": 1933,
+      "mtime_utc": "2026-09-25T04:24:48+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.807493+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\adapters\\ACCEPTANCE.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\adapters\\ACCEPTANCE.md",
+      "sha256": "7BD90B7366FF6E4E8849396DD956B75ECA1FAE1974E7859A989C82B76179B659",
+      "bytes": 5039,
+      "mtime_utc": "2026-09-25T04:25:04+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.813936+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\AUTHORITY-STATUS.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\AUTHORITY-STATUS.md",
+      "sha256": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "bytes": 2042,
+      "mtime_utc": "2026-09-25T13:20:26.340822+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.808552+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\COLLABORATION.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\COLLABORATION.md",
+      "sha256": "5FCE7B9D02D21F0F7574FFB8F6F4783CFAAA3A18FA5C96A9BA4D156A3F0A9E4E",
+      "bytes": 5572,
+      "mtime_utc": "2026-09-25T04:25:04+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.815938+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\HANDOFF-CONTRACT.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\HANDOFF-CONTRACT.md",
+      "sha256": "E87976C9DB97AE169C5C28A2D1E8E3719E4ADD54A99342C1D3C5E439D3A50D15",
+      "bytes": 4340,
+      "mtime_utc": "2026-09-25T04:25:04+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.816940+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\RUNTIME-RULES.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\core\\RUNTIME-RULES.md",
+      "sha256": "2FE1B600D89D2B01B3BC2EC237407FA31A8D425430B1057B28131E54678E6D54",
+      "bytes": 3837,
+      "mtime_utc": "2026-09-25T04:25:04+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.816940+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\MANIFEST-SHA256.txt",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\MANIFEST-SHA256.txt",
+      "sha256": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "bytes": 1642,
+      "mtime_utc": "2026-09-25T13:00:11.333324+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.809574+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\nodes\\NODE-START-template.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\nodes\\NODE-START-template.md",
+      "sha256": "0FB658F82DB38890D16504207DEA7A25AE87753187C1E9418C03932D7FCC1258",
+      "bytes": 343,
+      "mtime_utc": "2026-09-25T04:24:52+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.819648+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\DECISIONS.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\DECISIONS.md",
+      "sha256": "F578F57C0EBBF81E0E21E886B22741F9107234011D6003E2A75656374B6B50DE",
+      "bytes": 177,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.822075+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\EVIDENCE.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\EVIDENCE.md",
+      "sha256": "511695C6AE29418F786DF62BC5DBE6547FEC94C00FEBEE50361C5AF6BD714961",
+      "bytes": 170,
+      "mtime_utc": "2026-09-25T04:24:52+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.823075+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\handoffs\\HANDOFF-template.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\handoffs\\HANDOFF-template.md",
+      "sha256": "4F258B4E70BAA29CED40992494C0961C906729CB51845F32A921CEC11EE12309",
+      "bytes": 1096,
+      "mtime_utc": "2026-09-25T04:24:52+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.830054+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\handoffs\\RECEIPT-template.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\handoffs\\RECEIPT-template.md",
+      "sha256": "AF34329EF0AFD800A13115679B73085D810FF7ED9E6E9976ABA8BD75804E9763",
+      "bytes": 524,
+      "mtime_utc": "2026-09-25T04:24:52+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.831053+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\INDEX.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\INDEX.md",
+      "sha256": "C85889206E9D8164BC0284123B6D6B3FFD60AF97725CE297D587D65658FE486C",
+      "bytes": 261,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.824074+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\PARAMETERS.yaml",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\PARAMETERS.yaml",
+      "sha256": "1E07AF7DE6D3A2E0897C7815F8CA458CB766A71E0372DAF4ABF15813BC7C17F2",
+      "bytes": 148,
+      "mtime_utc": "2026-09-25T04:24:52+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.824074+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\SHARED-UNDERSTANDING.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\SHARED-UNDERSTANDING.md",
+      "sha256": "FB73FD728165CEEF831AA62C19C93C30E09163782046650CD6634CA09A98C054",
+      "bytes": 649,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.825578+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\STATE.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\STATE.md",
+      "sha256": "2F1A8E2F0A063A95220D6C7E9B127CF14E7F06BCC76F341C1F3404ED27B57A43",
+      "bytes": 244,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.827053+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\WORKING-NOTES.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\projects\\_template\\WORKING-NOTES.md",
+      "sha256": "73CDEAE6FF785B2E4793D3D49DBAFC471989A5C371CA245B0DF79B861EC795CC",
+      "bytes": 194,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.828053+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\README.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\README.md",
+      "sha256": "F264FA519581A826072A4104B7B13DC4D437F9F0EB209FDB287B48B01C05A0AE",
+      "bytes": 977,
+      "mtime_utc": "2026-09-25T04:24:50+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.811938+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\DECISIONS.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\DECISIONS.md",
+      "sha256": "457ECABF098B74EA1C0F1C4F29375A268701C3731D87F93B8F78C1F7D5610254",
+      "bytes": 6374,
+      "mtime_utc": "2026-09-25T13:24:04.025615+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.799306+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\events.jsonl",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\events.jsonl",
+      "sha256": "AA9EF717B5C249D311AAA6B46A41BDE798C52EC5C8D6408CEB3D59179D3E6D22",
+      "bytes": 18557,
+      "mtime_utc": "2026-09-25T13:24:04.029242+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.800802+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md",
+      "sha256": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "bytes": 7450,
+      "mtime_utc": "2026-09-25T13:20:45.866627+00:00",
+      "ctime_utc": "2026-09-25T13:22:29.845297+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": [
+        {
+          "term": "R3-14",
+          "line": 60,
+          "text": "| **R3-14** | 低 | 缺陷计数自相矛盾（\"6 条\"vs\"R4–R10 七条\"）；`R7` 仅在 RECEIPT 定义、无处引用（孤例） | 已修（见下 §5 计数更正） |"
+        },
+        {
+          "term": "R3-14",
+          "line": 72,
+          "text": "## 5. 计数更正（R3-14）"
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-RETEST.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-RETEST.md",
+      "sha256": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "bytes": 8514,
+      "mtime_utc": "2026-09-25T13:21:00.704790+00:00",
+      "ctime_utc": "2026-09-25T13:16:49.265771+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": [
+        {
+          "term": "R3-14",
+          "line": 91,
+          "text": "> 另发现 **14 项作者未承认的缺陷（R3-1–R3-14）**。"
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925.md",
+      "sha256": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "bytes": 6185,
+      "mtime_utc": "2026-09-25T13:02:26.842621+00:00",
+      "ctime_utc": "2026-09-25T13:04:31.836743+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\EVIDENCE.md",
+      "sha256": "AE8FCD6017D7A558CA57BFDDEC9C2D076389B41900EEA9C2687DE50A442E86B9",
+      "bytes": 11241,
+      "mtime_utc": "2026-09-25T13:24:04.036111+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.800802+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\H-20260925-CODEX-001\\READSET.json",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\handoffs\\H-20260925-CODEX-001\\READSET.json",
+      "sha256": "731EDBD73FE11D1FA1CAC74D075205163E74C8C77B57E943470F7A268C2E2B92",
+      "bytes": 4466,
+      "mtime_utc": "2026-09-25T13:24:39.472169+00:00",
+      "ctime_utc": "2026-09-25T13:25:40.595965+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\H-20260925-CODEX-001\\REQUEST.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\handoffs\\H-20260925-CODEX-001\\REQUEST.md",
+      "sha256": "3FF00FE46CBE762BDC5D2D71C3BD6DF558ACD78790257BF93F5113C997B0B976",
+      "bytes": 5663,
+      "mtime_utc": "2026-09-25T13:24:38.277976+00:00",
+      "ctime_utc": "2026-09-25T13:25:40.605236+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\H-20260925-DSH-001.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\handoffs\\H-20260925-DSH-001.md",
+      "sha256": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "bytes": 17133,
+      "mtime_utc": "2026-09-25T13:20:15.118850+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.832144+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\RECEIPT-20260925-DSH-001.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\handoffs\\RECEIPT-20260925-DSH-001.md",
+      "sha256": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "bytes": 6279,
+      "mtime_utc": "2026-09-25T13:16:38.621059+00:00",
+      "ctime_utc": "2026-09-25T13:04:31.833518+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\INDEX.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\INDEX.md",
+      "sha256": "7D2846031A410C9C775C1C00B98CF00CDA013FD78152E0FEB3090EF6776C9E9B",
+      "bytes": 6786,
+      "mtime_utc": "2026-09-25T13:24:04.040107+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.802857+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": [
+        {
+          "term": "R3-14",
+          "line": 73,
+          "text": "| **`R3-1–R3-14`** | **第三轮审计的判定与未承认缺陷（原审计书的 `N*`/`U*`，已重编）** | `EVIDENCE-TEST-20260925-AUDIT3.md` |"
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\MANIFEST-SHA256.txt",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\MANIFEST-SHA256.txt",
+      "sha256": "367B55DD98D62DF90E8E54B69923559C0034B7C5A6D051D22933F58F7D5396D3",
+      "bytes": 5273,
+      "mtime_utc": "2026-09-25T13:23:01.105561+00:00",
+      "ctime_utc": "2026-09-25T13:04:31.839863+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\PARAMETERS.yaml",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\PARAMETERS.yaml",
+      "sha256": "D7F7A04686965F9B0A05D9D27F5800E17D7E29D28799727C7BD9AC983338922D",
+      "bytes": 8163,
+      "mtime_utc": "2026-09-25T13:24:04.045551+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.802857+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\SHARED-UNDERSTANDING.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\SHARED-UNDERSTANDING.md",
+      "sha256": "1C2F8FD7A160B79C25EDA9CBC22B430FC5A89767DC84313386D852E1A3DC0D18",
+      "bytes": 14788,
+      "mtime_utc": "2026-09-25T13:24:04.048136+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.804027+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\STATE.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\STATE.md",
+      "sha256": "A60C206D91EE995F8BE83D542EF9C9309503467F2FFA295AEE3FCB93556BBEE0",
+      "bytes": 7239,
+      "mtime_utc": "2026-09-25T13:24:37.574580+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.805038+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": [
+        {
+          "term": "R3-14",
+          "line": 45,
+          "text": "| **S16** | **第三轮独立审计完成**：逐项核验作者的修复声明 | `EVIDENCE-TEST-20260925-AUDIT3.md` | ✅ 判定：作者 `EV-0022` 的\"已修\"为 **overclaim**；真正修好 3 项，6 项未修/部分修；另发现 **14 项**未承认缺陷（R3-1–R3-14） |"
+        },
+        {
+          "term": "R3-14",
+          "line": 46,
+          "text": "| **S17** | R3-1–R3-14 已逐条修复 | `EVIDENCE-TEST-20260925-AUDIT3.md` §3 处置列 | `IMPLEMENTED_UNVERIFIED` —— **修复后尚未经第四轮独立验证** |"
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\tasks\\codex-access\\REQUEST.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\tasks\\codex-access\\REQUEST.md",
+      "sha256": "BB40FEDE1DEF29EE8874EA7EDE2CE3BC7237FE3E31B479264182C647880D9F38",
+      "bytes": 1881,
+      "mtime_utc": "2026-09-25T13:17:30.127977+00:00",
+      "ctime_utc": "2026-09-25T13:25:40.612122+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\WORKING-NOTES.md",
+      "relative_to_core": "projects\\ai-kingdom-continuity\\WORKING-NOTES.md",
+      "sha256": "19D47076D359D488AE089C987B8EF5950570CE7C468AAF7E14F23B8760B9401A",
+      "bytes": 5552,
+      "mtime_utc": "2026-09-25T13:24:04.055723+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.806495+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\ADAPTER.md",
+      "relative_to_core": "nodes\\deepseek\\ADAPTER.md",
+      "sha256": "81CA772AE62A5A434918BA1DD5FEC03281E512FD0AAAD638960861EB1A1396F9",
+      "bytes": 4958,
+      "mtime_utc": "2026-09-25T13:20:26.379245+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.835145+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\outbox\\AI-KINGDOM-CONTINUITY-v0.1-DEEPSEEK-REPLY.md",
+      "relative_to_core": "nodes\\deepseek\\outbox\\AI-KINGDOM-CONTINUITY-v0.1-DEEPSEEK-REPLY.md",
+      "sha256": "1ED1EB22300BD7A02FABB8D1FD89243AAEA4FE881AC7029D637651B405AD6F51",
+      "bytes": 12399,
+      "mtime_utc": "2026-09-25T13:04:43.781686+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.838702+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\proposals\\DSH-ENTRY-DIFF-Q2-Q3.md",
+      "relative_to_core": "nodes\\deepseek\\proposals\\DSH-ENTRY-DIFF-Q2-Q3.md",
+      "sha256": "FE9F2DDE29AEF1A1A59D02848A804A103DF81B6F807C04369694F4637CA4ED3B",
+      "bytes": 10744,
+      "mtime_utc": "2026-09-25T13:13:36.767857+00:00",
+      "ctime_utc": "2026-09-25T13:16:49.280493+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\receipts\\RECEIPT-H-20260925-DSH-001.md",
+      "relative_to_core": "nodes\\deepseek\\receipts\\RECEIPT-H-20260925-DSH-001.md",
+      "sha256": "77FA81CB7D3DFEDEE517CAD2C9F097EC2014597A4B0C46F474707FB136BC06A9",
+      "bytes": 31022,
+      "mtime_utc": "2026-09-25T13:01:17.713548+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.839701+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\START.md",
+      "relative_to_core": "nodes\\deepseek\\START.md",
+      "sha256": "BE7F335F13550F94D807A430C205C698B2B2E51276DDC5069828D367DF5A5CB3",
+      "bytes": 2594,
+      "mtime_utc": "2026-09-25T13:16:25.369550+00:00",
+      "ctime_utc": "2026-09-25T13:01:51.836201+00:00",
+      "stable_during_read": true,
+      "filename_matches": [],
+      "content_matches": []
+    }
+  ],
+  "errors": [],
+  "baseline_sha256": "30C4B44026442F438FF296A16E5957A6D23402491BE88FAFC4ADD2899422A054",
+  "baseline_changes": [],
+  "changes_during_search": [],
+  "shared_files_written_by_this_script": 0,
+  "events_count": 36,
+  "unique_ids": 25,
+  "duplicate_ids": {
+    "EV-20260925-DSH-0014": 2,
+    "EV-20260925-DSH-0015": 2,
+    "EV-20260925-DSH-0016": 2,
+    "EV-20260925-DSH-0017": 2,
+    "EV-20260925-DSH-0018": 2,
+    "EV-20260925-DSH-0019": 2,
+    "EV-20260925-DSH-0020": 2,
+    "EV-20260925-DSH-0021": 2,
+    "EV-20260925-DSH-0023": 2,
+    "EV-20260925-DSH-0024": 2,
+    "EV-20260925-DSH-0025": 2
+  },
+  "ev0022_present": false,
+  "manifest": [
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\DECISIONS.md",
+      "expected": "34098B2A8B9BC1F47D911208B4E1040D976AD384A2E03456C2895D2E7B02A66A",
+      "current": "457ECABF098B74EA1C0F1C4F29375A268701C3731D87F93B8F78C1F7D5610254",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\events.jsonl",
+      "expected": "A49513A7661D1FB896FAFDDF0DCC420A8EFB6A635A50831C04364C99A9EED521",
+      "current": "AA9EF717B5C249D311AAA6B46A41BDE798C52EC5C8D6408CEB3D59179D3E6D22",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE.md",
+      "expected": "F86F71CAF37AAFFB0AD680F05E6C6770FC536B4A1D36070E66578A6E15806B27",
+      "current": "AE8FCD6017D7A558CA57BFDDEC9C2D076389B41900EEA9C2687DE50A442E86B9",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925.md",
+      "expected": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "current": "21312C2F0C9AE4585DF95D35EE29481ADE1DF31CA8D1622A56B428FAF74C4930",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-AUDIT3.md",
+      "expected": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "current": "2156F8F04C52F41079FEB633A5F3E683E87CF22FC61F90F4EFA9670107F0E5B9",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\EVIDENCE-TEST-20260925-RETEST.md",
+      "expected": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "current": "FADE3C6D5D63BC6C2CB6E678D98D554AFDE6CE562BAC34085F47A65A2D0046C5",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\H-20260925-DSH-001.md",
+      "expected": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "current": "92870E44239FD21710313EE750384F777F18333F17256F2143CF3426E0FA7C6B",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\handoffs\\RECEIPT-20260925-DSH-001.md",
+      "expected": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "current": "59B0F8EDB2669113D8250BD80F3926C0BEDF006414741EBAD97816D80DD7405D",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\INDEX.md",
+      "expected": "55F55C6F8B387E059C4CBDE18FBEB72F57D4C7766F9701652245822ED0898B5A",
+      "current": "7D2846031A410C9C775C1C00B98CF00CDA013FD78152E0FEB3090EF6776C9E9B",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\PARAMETERS.yaml",
+      "expected": "7C68603F5BC70B038EC234589D8B84EDDAFB26D78332B0B9FC9C43158F4FEDF1",
+      "current": "D7F7A04686965F9B0A05D9D27F5800E17D7E29D28799727C7BD9AC983338922D",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\SHARED-UNDERSTANDING.md",
+      "expected": "F40FE4DE25F789701FB2F91099656E3A8B4B369178DE4CC19C1E5395AE11401B",
+      "current": "1C2F8FD7A160B79C25EDA9CBC22B430FC5A89767DC84313386D852E1A3DC0D18",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\STATE.md",
+      "expected": "3818F46D420F3CB90841700D530F68596B33FD1FD6B2FD61E72F567BDFE9C968",
+      "current": "A60C206D91EE995F8BE83D542EF9C9309503467F2FFA295AEE3FCB93556BBEE0",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\WORKING-NOTES.md",
+      "expected": "A420F2B7FFFFF0607B0DC5DC6FC7336ACC1AF38E4EE346D3267B11FDBD22849A",
+      "current": "19D47076D359D488AE089C987B8EF5950570CE7C468AAF7E14F23B8760B9401A",
+      "matches": false
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\ADAPTER.md",
+      "expected": "81CA772AE62A5A434918BA1DD5FEC03281E512FD0AAAD638960861EB1A1396F9",
+      "current": "81CA772AE62A5A434918BA1DD5FEC03281E512FD0AAAD638960861EB1A1396F9",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\outbox\\AI-KINGDOM-CONTINUITY-v0.1-DEEPSEEK-REPLY.md",
+      "expected": "1ED1EB22300BD7A02FABB8D1FD89243AAEA4FE881AC7029D637651B405AD6F51",
+      "current": "1ED1EB22300BD7A02FABB8D1FD89243AAEA4FE881AC7029D637651B405AD6F51",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\proposals\\DSH-ENTRY-DIFF-Q2-Q3.md",
+      "expected": "FE9F2DDE29AEF1A1A59D02848A804A103DF81B6F807C04369694F4637CA4ED3B",
+      "current": "FE9F2DDE29AEF1A1A59D02848A804A103DF81B6F807C04369694F4637CA4ED3B",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\receipts\\RECEIPT-H-20260925-DSH-001.md",
+      "expected": "77FA81CB7D3DFEDEE517CAD2C9F097EC2014597A4B0C46F474707FB136BC06A9",
+      "current": "77FA81CB7D3DFEDEE517CAD2C9F097EC2014597A4B0C46F474707FB136BC06A9",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\nodes\\deepseek\\START.md",
+      "expected": "BE7F335F13550F94D807A430C205C698B2B2E51276DDC5069828D367DF5A5CB3",
+      "current": "BE7F335F13550F94D807A430C205C698B2B2E51276DDC5069828D367DF5A5CB3",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\BINDING-MANIFEST.yaml",
+      "expected": "FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5",
+      "current": "FE5E2AD42F291146C07BCCF7506AEEA9D41182362DFE14AFAF1A9E41D90DC0A5",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\governance\\AUTHORITATIVE-SOURCES.yaml",
+      "expected": "EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB",
+      "current": "EAC3614C80A842A5F44BD18D82B5EC1668DF53A0A0E228867152B91B2D0131DB",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\workflow\\CONTINUITY-CONTRACT.md",
+      "expected": "D638C460941D1F574CF4A6F94AED01A27FA482554002AA62A8CE506E03B08C9B",
+      "current": "D638C460941D1F574CF4A6F94AED01A27FA482554002AA62A8CE506E03B08C9B",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\workflow\\EXECUTION-GATE-CONTRACT.md",
+      "expected": "15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44",
+      "current": "15EF8AB6287D15928C6C84E69438FD5CE5F9AC252BFAAE80E590EC07FE3A0D44",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\adapters\\deepseek\\adapter.yaml",
+      "expected": "9C0A8C1980CED5FB5FCD6CD8B1E457BB6A8B32377E0764D79EA3FE446D861886",
+      "current": "9C0A8C1980CED5FB5FCD6CD8B1E457BB6A8B32377E0764D79EA3FE446D861886",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\00-ENTRY\\README.md",
+      "expected": "F8A40FA77FC6DCBE6B852C699894D53ACEF4A5034868295062D88E8A2E7A8B7B",
+      "current": "F8A40FA77FC6DCBE6B852C699894D53ACEF4A5034868295062D88E8A2E7A8B7B",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\.dsh\\AGENTS.md",
+      "expected": "C78D21A6FF8778A79E503691D980BAACFF2CB7DFE67CE35622640D8F3D2950E3",
+      "current": "C78D21A6FF8778A79E503691D980BAACFF2CB7DFE67CE35622640D8F3D2950E3",
+      "matches": true
+    },
+    {
+      "path": "E:\\deepseek-harness\\empire\\system-root.yaml",
+      "expected": "6C5FEC976FF9022169ADFFDF71C25611AD32DEA1170333E7E7FA433B9A80644F",
+      "current": "6C5FEC976FF9022169ADFFDF71C25611AD32DEA1170333E7E7FA433B9A80644F",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\AUTHORITY-STATUS.md",
+      "expected": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "current": "9B532D0122CC052D7F2CDD24C5476F51074C56FC42CFDBAB6655C3A62FE7BDBD",
+      "matches": true
+    },
+    {
+      "path": "C:\\Users\\29845\\AI-KINGDOM-PORTABLE-CORE\\projects\\ai-kingdom-continuity\\CONTRACT-v0.1\\MANIFEST-SHA256.txt",
+      "expected": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "current": "51F5ADBACE78B03E92B30CFEAE2BF8E442544A31D460BCF7C0D8D2F3F874C1E2",
+      "matches": true
+    }
+  ]
+}

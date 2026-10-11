@@ -1,0 +1,32 @@
+[
+  {
+    "command": [
+      "C:\\Users\\29845\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-pedantic",
+      "-I../App/Inc",
+      "-I../../../stm32_logic/include",
+      "test_motion_plan.c",
+      "../App/Src/ec_motion_plan.c",
+      "../App/Src/ec_axis_driver.c",
+      "-o",
+      "build-point6-codex-20260918/motion-red.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "S:\\firmware\\stm32f407_m144z\\tests\\build-point6-codex-20260918\\motion-red.exe"
+    ],
+    "cwd": "S:\\firmware\\stm32f407_m144z\\tests",
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "test_motion_plan.c:63 assertion failed: step->kind == EC_AXIS_STEP_MOVE\r\n"
+  }
+]

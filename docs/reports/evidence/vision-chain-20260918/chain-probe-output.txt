@@ -1,0 +1,52 @@
+started=2026-09-18T12:30:50.906644+08:00
+cwd=C:\Users\29845\Desktop\工创赛
+command=py -3 C:\Users\29845\Desktop\工创赛\docs\reports\evidence\vision-chain-20260918\chain_probe.py
+PYTHONPATH=C:\Users\29845\Desktop\工创赛\电控\src
+PYTHONUTF8=1 PYTHONDONTWRITEBYTECODE=1
+--- RAW OUTPUT ---
+id 字节 0 不在 box_id 1..6（校赛模式）：拒识该件，其余照常
+box_id 缺失（class_id=0, target_seq=1）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=2, target_seq=2）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=3, target_seq=3）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=4, target_seq=4）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=5, target_seq=5）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=6, target_seq=6）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=0, target_seq=1）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=2, target_seq=2）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=3, target_seq=3）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=4, target_seq=4）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=5, target_seq=5）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+box_id 缺失（class_id=6, target_seq=6）：拒识该件，链路继续；不用 class_id 顶替（那是送错盒）
+python: "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]"
+scope: "host only; source functions extracted by AST; no camera, serial or network connection"
+extracted_source: {"definitions": {"encode_batch_targets": [342, 368]}, "path": "视觉/src/maixcam_deploy/main.py", "sha256": "8f1a4bce0e40f699345e66b266f1ebcf937686336945c9444bd4cbbec9355e81"}
+extracted_source: {"definitions": {"BatchSender": [82, 161], "StableTargets": [276, 321], "encode_batch_targets": [65, 79], "encode_target": [47, 62]}, "path": "视觉/src/maixcam_deploy/stage1_color_v6_send.py", "sha256": "d750bd2672062b081f21c3e85c5a300062ed4c7cea84076aad17330123deae41"}
+extracted_source: {"definitions": {"encode_batch_targets": [80, 102], "encode_target": [53, 77]}, "path": "视觉/src/maixcam_deploy/v6_bridge.py", "sha256": "fa83e64bcca7dad9ee2f9b1eb7ff2050edf0d8fb9d9db9843e7c9930ef922cb5"}
+v6_golden_wire_hex: "0200070153001e0028ff035300730087ff"
+v6_parsed: {"targets": [{"box_id": 1, "class_id": 1, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 1}, {"box_id": 3, "class_id": 3, "confidence": 83, "pixel_x": 115, "pixel_y": 135, "target_seq": 2}], "task_id": 7}
+empty_wire: {"hex": "000007", "targets": 0}
+fragmented_and_coalesced_stream: "PASS (in-memory recv, no socket)"
+rejected_truncated: {"message": "BATCH_TARGETS data length 16 != expected 17 for 2 target(s)", "type": "PayloadError"}
+rejected_confidence101: {"message": "confidence 101 out of range (0-100)", "type": "PayloadError"}
+rejected_angle0: {"message": "grip angle must be 0xFF (claw does not rotate)", "type": "PayloadError"}
+old_main_in_school_mode: {"hex": "0600070053001e0028ff0253001e0028ff0353001e0028ff0453001e0028ff0553001e0028ff0653001e0028ff", "parsed": [{"box_id": 2, "class_id": 2, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 2}, {"box_id": 3, "class_id": 3, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 3}, {"box_id": 4, "class_id": 4, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 4}, {"box_id": 5, "class_id": 5, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 5}, {"box_id": 6, "class_id": 6, "confidence": 83, "pixel_x": 30, "pixel_y": 40, "target_seq": 6}], "sent_ids": [0, 2, 3, 4, 5, 6]}
+tracker_confirm_hold_expire: {"expired": 0, "first": 0, "held_bins": [null], "held_wire_count": 0, "second_bins": [1]}
+same_color_tracker: {"input_rows": 2, "output_rows": 1, "tracks": 1}
+local_config: {"box_map": {}, "converter_is_calibrated": true, "drop_points_mm10": {"1": [50, 50], "2": [50, 50], "3": [50, 50], "4": [50, 50], "5": [50, 50], "6": [50, 50]}, "fixed_pick_mm10": [0, -450], "frame_size": [320.0, 320.0], "heights": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.0, "6": 0.0}, "names": {"1": "青色正方体", "2": "绿色正方体", "3": "红色三棱柱", "4": "蓝色三棱柱", "5": "黑色圆柱", "6": "橙色圆柱"}}
+school_item: {"name": "青色正方体", "payload": {"class_id": 1, "grip_angle": 255, "image_id": 1, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 1, "x_position": 50, "y_position": 50}, "wire_hex": "01010100320032fffffbfe39"}
+school_item: {"name": "绿色正方体", "payload": {"class_id": 2, "grip_angle": 255, "image_id": 2, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 2, "x_position": 50, "y_position": 50}, "wire_hex": "02020200320032fffffbfe39"}
+school_item: {"name": "红色三棱柱", "payload": {"class_id": 3, "grip_angle": 255, "image_id": 3, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 3, "x_position": 50, "y_position": 50}, "wire_hex": "03030300320032fffffbfe39"}
+school_item: {"name": "蓝色三棱柱", "payload": {"class_id": 4, "grip_angle": 255, "image_id": 4, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 4, "x_position": 50, "y_position": 50}, "wire_hex": "04040400320032fffffbfe39"}
+school_item: {"name": "黑色圆柱", "payload": {"class_id": 5, "grip_angle": 255, "image_id": 5, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 5, "x_position": 50, "y_position": 50}, "wire_hex": "05050500320032fffffbfe39"}
+school_item: {"name": "橙色圆柱", "payload": {"class_id": 6, "grip_angle": 255, "image_id": 6, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 6, "x_position": 50, "y_position": 50}, "wire_hex": "06060600320032fffffbfe39"}
+one_item_per_batch: {"payload": {"class_id": 1, "grip_angle": 255, "image_id": 1, "pick_x_position": -5, "pick_y_position": -455, "target_seq": 1, "x_position": 50, "y_position": 50}, "two_stage": {"box_id": 1, "color": "青色", "name": "青色正方体", "shape": "正方体", "target_seq": 1}}
+[V6-BRIDGE] WARNING: task_id=0，树莓派可能整批丢弃
+foreign_task_id: {"emitted": 0, "task_id": 0}
+foreign_task_id: {"emitted": 0, "task_id": 2}
+empty_frame_does_not_clear_latest: {"empty_sent": 0, "previous_box_emitted_after_permit": 3, "skipped_frames": 1}
+shape_mode: {"boxes": [null, null, null, null, null, null], "expanded": 0, "ids": [0, 2, 3, 4, 5, 6]}
+audit_result: "PASS: observations reproduced; does not certify field recognition or physical sorting"
+
+--- END RAW OUTPUT ---
+exit_code=0
+finished=2026-09-18T12:30:51.646474+08:00

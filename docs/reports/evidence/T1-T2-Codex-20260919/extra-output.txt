@@ -1,0 +1,57 @@
+ALL MOTION PLAN HOST TESTS PASSED
+Y_FIRST WAIT=2000 exit=0
+ALL MOTION PLAN HOST TESTS PASSED
+Y_FIRST WAIT=200 exit=0
+WAIT_PROBE PASS: 199ms pending; 200ms done; progress=1; no servo start; zero rejected; ESTOP faults
+first_ACK event=ACK_ACCEPTED outbound=None state=WAIT_MOTION_DONE
+replayed_ACK event=DUPLICATE outbound=None state=WAIT_MOTION_DONE
+second_replay event=DUPLICATE outbound=None state=WAIT_MOTION_DONE
+PI_PROBE PASS: DUPLICATE is inbound identity dedup, not proof of a lost first ACK
+test_ack_accepted_is_parsed (test_gateway.AckNackTests.test_ack_accepted_is_parsed) ... ok
+test_ack_consumed_is_parsed (test_gateway.AckNackTests.test_ack_consumed_is_parsed) ... ok
+test_ack_logs_stage_entry_when_logger_provided (test_gateway.AckNackTests.test_ack_logs_stage_entry_when_logger_provided) ... ok
+test_ack_nack_does_not_disturb_the_scheduler (test_gateway.AckNackTests.test_ack_nack_does_not_disturb_the_scheduler) ... ok
+test_duplicate_ack_is_deduped_like_other_frames (test_gateway.AckNackTests.test_duplicate_ack_is_deduped_like_other_frames) ... ok
+test_every_nack_reason_is_named (test_gateway.AckNackTests.test_every_nack_reason_is_named) ... ok
+test_malformed_ack_nack_payload_is_rejected (test_gateway.AckNackTests.test_malformed_ack_nack_payload_is_rejected) ... ok
+test_nack_logs_stage_entry_when_logger_provided (test_gateway.AckNackTests.test_nack_logs_stage_entry_when_logger_provided) ... ok
+test_no_log_entry_without_logger (test_gateway.AckNackTests.test_no_log_entry_without_logger) ... ok
+test_unknown_reason_code_stays_observable (test_gateway.AckNackTests.test_unknown_reason_code_stays_observable) ... ok
+test_barrier_ready_and_motion_done_are_dispatched (test_gateway.PiProtocolGatewayTests.test_barrier_ready_and_motion_done_are_dispatched) ... ok
+test_estop_blocks_new_tasks_until_verified_new_round (test_gateway.PiProtocolGatewayTests.test_estop_blocks_new_tasks_until_verified_new_round) ... ok
+test_estop_is_recorded (test_gateway.PiProtocolGatewayTests.test_estop_is_recorded) ... ok
+test_feed_byte_assembles_and_resyncs_after_noise (test_gateway.PiProtocolGatewayTests.test_feed_byte_assembles_and_resyncs_after_noise) ... ok
+test_item_result_builds_display_model_and_counts_once (test_gateway.PiProtocolGatewayTests.test_item_result_builds_display_model_and_counts_once) ... ok
+test_item_result_out_of_context_is_ignored (test_gateway.PiProtocolGatewayTests.test_item_result_out_of_context_is_ignored) ... ok
+test_render_receipt_emits_valid_display_ack_frame (test_gateway.PiProtocolGatewayTests.test_render_receipt_emits_valid_display_ack_frame) ... ok
+test_reverse_direction_is_rejected (test_gateway.PiProtocolGatewayTests.test_reverse_direction_is_rejected) ... ok
+test_unexpected_scheduler_exception_becomes_crash_outcome (test_gateway.PiProtocolGatewayTests.test_unexpected_scheduler_exception_becomes_crash_outcome) ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.002s
+
+OK
+test_no_resend_without_an_in_flight_task (test_barrier_ready_resend.BarrierReadyResendTests.test_no_resend_without_an_in_flight_task) ... ok
+test_resend_fires_while_an_item_is_in_flight (test_barrier_ready_resend.BarrierReadyResendTests.test_resend_fires_while_an_item_is_in_flight) ... ok
+test_resend_replays_exact_bytes_without_bumping_tx_seq (test_barrier_ready_resend.BarrierReadyResendTests.test_resend_replays_exact_bytes_without_bumping_tx_seq) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK
+test_close_releases_port_and_is_idempotent (test_serial_link_serial.PySerialLinkTests.test_close_releases_port_and_is_idempotent) ... ok
+test_constructor_raises_clear_error_without_pyserial (test_serial_link_serial.PySerialLinkTests.test_constructor_raises_clear_error_without_pyserial) ... ok
+test_receive_continues_scanning_after_corrupt_frame (test_serial_link_serial.PySerialLinkTests.test_receive_continues_scanning_after_corrupt_frame) ... ok
+test_receive_discards_corrupt_frame (test_serial_link_serial.PySerialLinkTests.test_receive_discards_corrupt_frame) ... ok
+test_receive_discards_over_limit_data_len (test_serial_link_serial.PySerialLinkTests.test_receive_discards_over_limit_data_len) ... ok
+test_receive_resynchronizes_after_over_limit_frame (test_serial_link_serial.PySerialLinkTests.test_receive_resynchronizes_after_over_limit_frame) ... ok
+test_receive_returns_complete_valid_frame (test_serial_link_serial.PySerialLinkTests.test_receive_returns_complete_valid_frame) ... ok
+test_receive_returns_none_until_fragmented_frame_is_complete (test_serial_link_serial.PySerialLinkTests.test_receive_returns_none_until_fragmented_frame_is_complete) ... ok
+test_receive_returns_none_when_no_data_buffered (test_serial_link_serial.PySerialLinkTests.test_receive_returns_none_when_no_data_buffered) ... ok
+test_receive_skips_noise_and_resynchronizes_on_header (test_serial_link_serial.PySerialLinkTests.test_receive_skips_noise_and_resynchronizes_on_header) ... ok
+test_send_writes_raw_frame_to_serial_port (test_serial_link_serial.PySerialLinkTests.test_send_writes_raw_frame_to_serial_port) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.003s
+
+OK

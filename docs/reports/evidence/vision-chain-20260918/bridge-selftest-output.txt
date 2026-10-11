@@ -1,0 +1,13 @@
+started=2026-09-18T12:24:17.006295+08:00
+cwd=C:\Users\29845\Desktop\工创赛
+command=py -3 视觉/src/maixcam_deploy/v6_bridge.py
+PYTHONPATH=C:\Users\29845\Desktop\工创赛\电控\src
+PYTHONUTF8=1 PYTHONDONTWRITEBYTECODE=1
+--- RAW OUTPUT ---
+[V6-BRIDGE] (disabled) would send 1 item(s), 10 bytes
+========================================================
+自检：18 项全部通过 ✅
+
+--- END RAW OUTPUT ---
+exit_code=0
+finished=2026-09-18T12:24:19.918868+08:00

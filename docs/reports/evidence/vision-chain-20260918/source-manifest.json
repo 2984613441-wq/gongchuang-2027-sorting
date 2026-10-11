@@ -1,0 +1,252 @@
+{
+  "视觉/src/maixcam_deploy/stage1_color_v6_send.py": {
+    "sha256": "d750bd2672062b081f21c3e85c5a300062ed4c7cea84076aad17330123deae41",
+    "bytes": 18422,
+    "lines": 407
+  },
+  "视觉/src/maixcam_deploy/main.py": {
+    "sha256": "8f1a4bce0e40f699345e66b266f1ebcf937686336945c9444bd4cbbec9355e81",
+    "bytes": 17607,
+    "lines": 479
+  },
+  "视觉/src/maixcam_deploy/capture.py": {
+    "sha256": "9b1b415dc63c4676dabbbdc78e5ed3dbfbafa693a32739c022dc98ad1c181efe",
+    "bytes": 3624,
+    "lines": 105
+  },
+  "电控/src/electrical_control/rpi/pixel_to_device.py": {
+    "sha256": "dc3d6b7301af9aa15d952c81f4f1efc2d294e0c5382e21108a711e3d8bd97ce3",
+    "bytes": 27758,
+    "lines": 589
+  },
+  "docs/reports/evidence/vision-chain-20260918/chain-probe-output.txt": {
+    "sha256": "1418340520f4badaf081a053cfb75273b8e607771faa956f58251f3e0fb09de2",
+    "bytes": 7082,
+    "lines": 52
+  },
+  "电控/src/electrical_control/rpi/vision_ingest.py": {
+    "sha256": "1a48dfa3097608911fc5452a45317f1a1dabedad6cf90ffb2196856aa14d0356",
+    "bytes": 12399,
+    "lines": 272
+  },
+  "电控/deploy/run_chain.py": {
+    "sha256": "8ce88b12fe0801a64ecaa3d3a546941ec8db22d47fef9aad64d44f98f7f09cfd",
+    "bytes": 57511,
+    "lines": 1275
+  },
+  "docs/reports/evidence/vision-chain-20260918/dataset-models-output.txt": {
+    "sha256": "23fd77a499716ba0495e8d0f528f9b731d6ecf4d84f0dac6ff1b404fe8841c08",
+    "bytes": 44667,
+    "lines": 307
+  },
+  "电控/src/electrical_control/rpi/socket_vision_source.py": {
+    "sha256": "d7bc7a42a55fdc3d7786e89f060a700be48bc466d4f5a8ab25811efafeaa83bc",
+    "bytes": 12717,
+    "lines": 280
+  },
+  "视觉/src/maixcam_deploy/v6_bridge.py": {
+    "sha256": "fa83e64bcca7dad9ee2f9b1eb7ff2050edf0d8fb9d9db9843e7c9930ef922cb5",
+    "bytes": 10682,
+    "lines": 279
+  },
+  ".claude/tasks/task-20260918-vision-chain-audit.md": {
+    "sha256": "403b882575779819ec32e80a1021fe162c18541665b0fdd2e8cfb78cf8e74327",
+    "bytes": 2230,
+    "lines": 17
+  },
+  "交付-给朋友/给朋友的任务-2026-09-18.md": {
+    "sha256": "399979db3008c76e29836df485af5828e1cb578d9bf4d5a1a96d22ccbceeab3e",
+    "bytes": 5633,
+    "lines": 119
+  },
+  "电控/deploy/sorting_config.ini": {
+    "sha256": "a8844b20caf783ed26758179034a535b2c697d45cad5235905db04d8f100afe1",
+    "bytes": 8460,
+    "lines": 174
+  },
+  "视觉/现场标定清单.md": {
+    "sha256": "981a8de060cbb0ab77723b47f8db10fe69b14e4ce85a78863500a0541358238d",
+    "bytes": 2542,
+    "lines": 62
+  },
+  "电控/src/electrical_control/protocol/item_context.py": {
+    "sha256": "ddd6cd38d27e15c61d458784e06da3eb4516f8083e1e749c419f1e9dec00a83c",
+    "bytes": 10534,
+    "lines": 276
+  },
+  "docs/交付/2026-09-18/分工提示词-七点拆解.md": {
+    "sha256": "04f9e122bcfa678ba97c556afb0843f84355ca1896dc65ff50efca76b6a2b053",
+    "bytes": 28656,
+    "lines": 254
+  },
+  "视觉/src/sorting_vision/sort_plan.py": {
+    "sha256": "7b552dbd82c8a9551bd22ca904fe724236c3a7db8210b294d58ad9982abf15a4",
+    "bytes": 7777,
+    "lines": 229
+  },
+  "docs/design/interface-contract.md": {
+    "sha256": "e1a74ddb0a5b529839d77b2ef42acb7651661b5f6e9e997946b4856b245a1b30",
+    "bytes": 21589,
+    "lines": 311
+  },
+  "docs/交接台账-2026-09-17.md": {
+    "sha256": "4820021a69388888cde111374bdfa454729bf8fd280ce6a7353702fe2b7efd3a",
+    "bytes": 15573,
+    "lines": 235
+  },
+  "工具/generated_names.json": {
+    "sha256": "7d0398c951a49459c31f978d7f5566d7ec8b8caac3810abeff2161ca63091973",
+    "bytes": 153,
+    "lines": 8
+  },
+  "电控/src/electrical_control/rpi/drop_strategy.py": {
+    "sha256": "57c2c25035d13fa0c7af36875def090c73fa3e8dfec4de5d0cf0714f1bddae6c",
+    "bytes": 8682,
+    "lines": 239
+  },
+  "电控/stm32_logic/src/ec_protocol.c": {
+    "sha256": "0fea5ff9b869e54ed6d50474939fca130a50df6729ff4c41a74f34e369b9f761",
+    "bytes": 9401,
+    "lines": 272
+  },
+  "电控/stm32_logic/src/ec_protocol_gateway.c": {
+    "sha256": "e49c9e9226cab3ddf81dff62176fc802c58edd54331b288b10f2423632c66502",
+    "bytes": 22058,
+    "lines": 594
+  },
+  "电控/src/electrical_control/rpi/display.py": {
+    "sha256": "eb4a61aec473284b37b83cdd8f406c84d8f6f4708c81c61ae05bb58f964c12e1",
+    "bytes": 4347,
+    "lines": 119
+  },
+  "工具/pi_start_chain.sh": {
+    "sha256": "e099a173c02fbd54e85f28906073ea64d09860c7261236e938e671baf691ca98",
+    "bytes": 670,
+    "lines": 20
+  },
+  "docs/冲突与决策台账-2026-09-10.md": {
+    "sha256": "93aba804703a295ee86847a46db33bf9fbad2890d36625df0c1057ff03237d42",
+    "bytes": 79486,
+    "lines": 555
+  },
+  "视觉/training/remap_labels.py": {
+    "sha256": "54e9bf013680668d1f267bb951b496551716bbecabb3742a03e4f9dd5e02d0e8",
+    "bytes": 2763,
+    "lines": 81
+  },
+  "视觉/datasets/preliminary/auto_label.py": {
+    "sha256": "4ddf4a7a2f2bb262964ff64fd016d341ba298f22a669fcee4c12b033f48b85ec",
+    "bytes": 2405,
+    "lines": 72
+  },
+  "视觉/datasets/preliminary/审核稿.md": {
+    "sha256": "8fba1244728c3572b52412b0459e282cd134b638adb20a370f01147886586b11",
+    "bytes": 19387,
+    "lines": 393
+  },
+  "视觉/training/merge_workspace_dataset.py": {
+    "sha256": "e4a7181a66c6a42b296ac9e2075030b146f7902ab5db92c5613f52a38771bbbe",
+    "bytes": 3531,
+    "lines": 103
+  },
+  "视觉/datasets/preliminary/move_unused.py": {
+    "sha256": "1d0a64aeda2679155116ef6a8afc1c9560761696fbb33a00056ea01de48da064",
+    "bytes": 898,
+    "lines": 26
+  },
+  "视觉/training/train_yolo5s.py": {
+    "sha256": "ffcf91a1dce9a7c07c0a2ff01e5ae138af9e48b50644f388903057b28575e9be",
+    "bytes": 1061,
+    "lines": 41
+  },
+  "视觉/training/runs/yolo5s_geom7c/args.yaml": {
+    "sha256": "1bc501512e4c8b65f9ac4f3488a9623d120f4896db4cc6160fc7308b1b527b3e",
+    "bytes": 1692,
+    "lines": 105
+  },
+  "视觉/training/data.yaml": {
+    "sha256": "88dd4dc0e75ea1e147ee8fccd6743c97fb20ffd798c9f23e23c52b91b9b864f9",
+    "bytes": 265,
+    "lines": 14
+  },
+  "docs/reports/evidence/vision-chain-20260918/dataset_models.py": {
+    "sha256": "ea3deb86359df07fd5fce8479e0f9a4e5819030b8deb5e3443c3fc4fb2b11372",
+    "bytes": 12774,
+    "lines": 269
+  },
+  "视觉/src/sorting_vision/color_quant.py": {
+    "sha256": "911c82e837a167181b6726797b92c4edfbfa6f311fb9c4346a2c59566f635c51",
+    "bytes": 12261,
+    "lines": 402
+  },
+  "视觉/整合包-2026-09-16/智能分拣-代码整合包-2026-09-16/00_先看这里.md": {
+    "sha256": "0601f46af1036104f4f6c4e0fd8e486c35b6f74be5044debccd9c3353685f3fa",
+    "bytes": 4691,
+    "lines": 60
+  },
+  "电控/calibration-logs/step2-coordinates.txt": {
+    "sha256": "42b4f1200850f6a57f8b91f7171a025f037729fefafa836c466cee487efb2877",
+    "bytes": 4492,
+    "lines": 198
+  },
+  "视觉/src/sorting_vision/config.py": {
+    "sha256": "f4598335c12309fd736e1a98d830fc6b319a8e1ea08bb2278a7b21a74ec91809",
+    "bytes": 2244,
+    "lines": 49
+  },
+  "视觉/src/vision_loop_template.py": {
+    "sha256": "1559e039cc06a547d3a8ec65f9bf37c6b263d489a5049bc3f0aff8add9b61d92",
+    "bytes": 8130,
+    "lines": 249
+  },
+  "视觉/src/sorting_vision/single_target.py": {
+    "sha256": "89e3890a8932c6f1774ecbbb611719d3eb65f8642650fd523276bdb3b69b86bd",
+    "bytes": 12011,
+    "lines": 329
+  },
+  "电控/calibration_config.ini": {
+    "sha256": "3ccbde275752a83689b632eb6d28443c0152c079b8c47c899801a797d9d0c96b",
+    "bytes": 5633,
+    "lines": 126
+  },
+  "docs/reports/evidence/vision-chain-20260918/calibration-findings.md": {
+    "sha256": "44fade07125dee238adc76446b3c850b645b5633c168991d91a42fe08b566ad7",
+    "bytes": 11326,
+    "lines": 103
+  },
+  "docs/reports/evidence/vision-chain-20260918/bridge-selftest-output.txt": {
+    "sha256": "edcab490d433e6521d8de32335c69ade5b38c64a1bd158d93e1d310d28fba3e7",
+    "bytes": 478,
+    "lines": 13
+  },
+  "docs/reports/evidence/vision-chain-20260918/dataset-models-findings.md": {
+    "sha256": "57ed81a06d81d1d3cb83ebcb1a46f315b3025113c26567e445230f253b0d3aa3",
+    "bytes": 8508,
+    "lines": 74
+  },
+  "docs/reports/evidence/vision-chain-20260918/related-tests-verified-output.txt": {
+    "sha256": "a1a3311d26d58bd8dbc6ef2c6da0ce127ef829ae46222e12b63431f6ff4d355c",
+    "bytes": 872,
+    "lines": 13
+  },
+  "docs/reports/evidence/vision-chain-20260918/related-tests-output.txt": {
+    "sha256": "c43b9eb6687f7af97f9ba1f7022b0c53e79681f1308fd85032234ff32aee2877",
+    "bytes": 232704,
+    "lines": 4578
+  },
+  "docs/reports/evidence/vision-chain-20260918/related-tests-workspace-output.txt": {
+    "sha256": "a007e9274e90f9c9d8a4a7fb12478a46c08a09c4c4c18a192d36563c4d552fec",
+    "bytes": 4653,
+    "lines": 79
+  },
+  "docs/reports/evidence/vision-chain-20260918/report-check-output.txt": {
+    "sha256": "543b75f0506c495bf800df914948f8a96dcbe48a100a6523a72f389fb60f4368",
+    "bytes": 299,
+    "lines": 9
+  },
+  "docs/reports/视觉链路核对-2026-09-18.md": {
+    "sha256": "3502d99a0c4530f7aad95da22c06ad6a790da53317327a3532f1ada7a973fbcf",
+    "bytes": 27193,
+    "lines": 244
+  }
+}
