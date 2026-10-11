@@ -41,7 +41,7 @@ class ActionKind(Enum):
     EMIT_ITEM_RESULT = auto()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ActionIntent:
     kind: ActionKind
     task_id: int | None = None
@@ -62,20 +62,20 @@ class FakeHal:
         return sum(action.kind is kind for action in self.actions)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ItemTaskReceived(DomainEvent):
     task_id: int
     frame_seq: int
     target: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MotionDone(DomainEvent):
     task_id: int
     frame_seq: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class TaskSafetyValidated(DomainEvent):
     """Result of upstream validation against frozen safety configuration."""
 
@@ -84,53 +84,53 @@ class TaskSafetyValidated(DomainEvent):
     valid: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ItemResultReceived(DomainEvent):
     task_id: int
     frame_seq: int
     success: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class EmergencyStop(DomainEvent):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BarrierAvoidanceVerified(DomainEvent):
     """The barrier is physically verified at its avoidance position."""
 
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PowerPermissionLost(DomainEvent):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ObservableMotionProgress(DomainEvent):
     token: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class NoiseReceived(DomainEvent):
     kind: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class TimeObserved(DomainEvent):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ManualReset(DomainEvent):
     round_closed: bool
     danger_area_clear: bool
     estop_released: bool
 
 
-@dataclass(slots=True)
+@dataclass()
 class StateContext:
     state: State
     round_id: int

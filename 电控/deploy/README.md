@@ -121,7 +121,7 @@ scheduler.next_task()
 | `--names-file` / `NAMES_FILE` | `class_id → 名称` JSON（真实模式必填） | — |
 | `--round-id` / `ROUND_ID` | 本轮 ID（真实模式必填） | — |
 | `--round-task-id` / `ROUND_TASK_ID` | 本轮任务号 u16（真实模式必填） | — |
-| `--start-round` | 启动即自动开始一轮 verified round（示例简化） | 关 |
+| `--start-round` | 真实模式先要求输入 `HOME`，确认滑台在负向最里角后才开始 verified round；无交互终端会拒绝 | 关 |
 | `--frame-output` / `FRAME_OUTPUT` | `auto` / `fb0` / `file` / `none` | `auto` |
 | `--output-dir` / `OUTPUT_DIR` | `file` 模式的 PNG 保存目录 | `frames` |
 | `--fake-link` | 开发/冒烟：FakeSerialLink + 模拟 STM32，无需硬件 | 关 |
@@ -176,8 +176,8 @@ journalctl -u ec-chain -f    # 查看日志
 
 - `WorkingDirectory` / `Environment`（PORT / IMAGE_DIR / FONT / NAMES_FILE / ROUND_ID /
   ROUND_TASK_ID）均为**占位**，按实际路径/参数修改；
-- `ExecStart` 带 `--start-round`（开机自动开始一轮，示例简化）；去掉后链路保持
-  `RECOVERY_LOCK` 待命，等操作员确认再开始——实赛建议采用后者；
+- systemd 没有现场交互终端，`ExecStart` **不得**带 `--start-round`；服务保持
+  `RECOVERY_LOCK` 待命，必须由操作员在现场终端确认 HOME 后以前台命令开始；
 - `User=pi` 需在 `dialout` 组（默认）以访问串口。
 
 ---
@@ -190,14 +190,18 @@ journalctl -u ec-chain -f    # 查看日志
    链路即报告"任务源已耗尽"退出——接入视觉源后可持续供任务。
 2. **落料点表未注入**：`drop_point_for_box` 需实测后注入（注入后 ITEM_TASK payload 才
    可序列化，`grip_angle=0xFF`）；DEMO 用占位坐标。
-3. **`--start-round` 是示例简化**：`start_verified_new_round` 的三个独立权威
-   （操作员确认 / STM32 就绪 / 双节点初始化）在真实部署中应来自人工确认流程与
-   `BARRIER_READY`/`DEVICE_READY` 上报，示例直接置 True。
+3. **`--start-round` 已有最低限度人工 HOME 门禁**：真实模式在打开串口和视觉线程前
+   要求输入精确的 `HOME`。但板子无绝对位置，该输入只能确认操作员已检查，不能自动证明
+   机构确实在 HOME；STM32 就绪 / 双节点初始化仍需后续接真实上报，当前仍直接置 True。
 4. **ACK/NACK 入站未建模**：当前 gateway 对 ACK/NACK（Command 0x05/0x06）返回
    `IGNORED`，链路以 MOTION_DONE / ITEM_RESULT 驱动；STM32 级 ACK/NACK 建模属未来步骤。
-5. **`--frame-output fb0` 的 bpp 适配待真机验证**：当前直接写 RGB888 原始字节到
-   `/dev/fb0`；若 framebuffer 为 16bpp（RGB565）需按 `FBIOGET_VSCREENINFO` 适配，
-   真机验证后按屏文档冻结基线（见 `docs/design/2026-08-29-hdmi-screen-arrival-verification.md`）。
+5. **`--frame-output fb0` 已按 fb 真实 bpp 打包（2026-09-17 改）**：写屏前读
+   `/sys/class/graphics/fb0/bits_per_pixel` 与 `virtual_size`，16bpp 走 RGB565 小端、
+   24/32bpp 走 fbdev 的 `B,G,R[,X]` 内存序，并按 `line_length` 处理行填充；
+   **读不到 bpp 就拒绝启动**（以前按 32bpp 直写，在 16bpp 的屏上实测
+   `[Errno 28] No space left on device`）。实现见 `src/electrical_control/rpi/display_hdmi.py`，
+   实机自检 `python3 -m electrical_control.rpi.display_hdmi --info` / `--bars`。
+   **仍未在真机验证**：见 `docs/staging/2026-09-17-屏幕bpp适配-逐文件diff.md`。
 6. **UART 使能未自动配置**：`enable_uart=1` 等按树莓派型号/overlay 手动配置（§1.1）。
 
 ---

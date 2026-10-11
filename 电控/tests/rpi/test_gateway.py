@@ -28,7 +28,7 @@ def context(frame_seq: int = 11, target_seq: int = 1) -> ItemTaskContext:
         "round-new",
         7,
         frame_seq,
-        ItemTaskPayload(target_seq, 2, 3, 0, 0, 0),
+        ItemTaskPayload(target_seq, 2, 3, 0, 0, 0, None, None),
     )
 
 
@@ -191,6 +191,13 @@ class AckNackTests(unittest.TestCase):
         self.assertEqual("ACK_ACCEPTED", outcome.event)
         self.assertIsNone(outcome.outbound)
         self.assertIsNone(outcome.fault)
+        # 🔴 2026-09-22：**身份必须从 outcome 出来**（stm32_frame 默认 task_id=7）。
+        #   为什么钉这条：run_chain 的 A5 修复要按身份核对"这确实是在飞那件的 ACK"，
+        #   而事件名里不含身份。此前它两次取错来源 ——
+        #   ① `frame.task_id`（frame 是原始 bytes）⇒ AttributeError 把整条链带走；
+        #   ② `gateway._last_inbound_frame`（该属性不存在）⇒ 恒 None、静默失效。
+        #   本断言保证第三条路（outcome.task_id）是真的通的。
+        self.assertEqual(7, outcome.task_id)
 
     def test_ack_consumed_is_parsed(self) -> None:
         gateway = PiProtocolGateway(unlocked_scheduler())

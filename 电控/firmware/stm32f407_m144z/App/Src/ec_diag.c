@@ -1,4 +1,7 @@
 #include "ec_diag.h"
+#include "ec_app.h"
+#include "ec_axis_driver.h"
+#include "ec_board.h"
 #include "ec_barrier_test.h"
 #include "ec_group_test.h"
 #include "ec_servo_test.h"
@@ -50,6 +53,28 @@ typedef struct {
 static bool servo_pulse_from_command(const char *line, uint16_t *pulse_us)
 {
     static const ec_servo_command_t commands[] = {
+        /* 2026-09-19 新增 P900/P950：探 P1000 之上的"完全张开"端点。
+         * ⚠️ 必须与 ec_servo_test.c 的 is_allowed_pulse() 同步，否则命令能解析却被拒。 */
+        /* 2026-09-21 新增 P750/P800/P850/P870：用户要求把张开脉宽压到 750。
+         * 750 是未验证值，故同时开放 800/850/870 做"命中即回退"的扫描档。 */
+        /* 2026-09-21 三改：用户现场目视 P750 仍"不够开"，追加 650/675/700/725 四档。
+         * ⚠️ 必须与 ec_servo_test.c 的 is_allowed_pulse() 同步（见上）。 */
+        /* 2026-09-21 四改：用户继续要求更低（625）⇒ 追加 550/575/600/625 四档。
+         * ⚠️ 必须与 ec_servo_test.c 的 is_allowed_pulse() 同步。 */
+        { "SERVO PB10 P550",  UINT16_C(550) },
+        { "SERVO PB10 P575",  UINT16_C(575) },
+        { "SERVO PB10 P600",  UINT16_C(600) },
+        { "SERVO PB10 P625",  UINT16_C(625) },
+        { "SERVO PB10 P650",  UINT16_C(650) },
+        { "SERVO PB10 P675",  UINT16_C(675) },
+        { "SERVO PB10 P700",  UINT16_C(700) },
+        { "SERVO PB10 P725",  UINT16_C(725) },
+        { "SERVO PB10 P750",  UINT16_C(750) },
+        { "SERVO PB10 P800",  UINT16_C(800) },
+        { "SERVO PB10 P850",  UINT16_C(850) },
+        { "SERVO PB10 P870",  UINT16_C(870) },
+        { "SERVO PB10 P900",  UINT16_C(900) },
+        { "SERVO PB10 P950",  UINT16_C(950) },
         { "SERVO PB10 P1000", UINT16_C(1000) },
         { "SERVO PB10 P1100", UINT16_C(1100) },
         { "SERVO PB10 P1200", UINT16_C(1200) },
@@ -84,13 +109,13 @@ static bool group_values_from_command(const char *line,
                                       uint16_t *servo_pulse_us)
 {
     static const ec_group_command_t commands[] = {
-        { "GROUP START XDIR0 YDIR0 OPEN", EC_DIRECTION_0, EC_DIRECTION_0, UINT16_C(1000) },
+        { "GROUP START XDIR0 YDIR0 OPEN", EC_DIRECTION_0, EC_DIRECTION_0, UINT16_C(1100) },
         { "GROUP START XDIR0 YDIR0 CLOSE", EC_DIRECTION_0, EC_DIRECTION_0, UINT16_C(1900) },
-        { "GROUP START XDIR0 YDIR1 OPEN", EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1000) },
+        { "GROUP START XDIR0 YDIR1 OPEN", EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1100) },
         { "GROUP START XDIR0 YDIR1 CLOSE", EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1900) },
-        { "GROUP START XDIR1 YDIR0 OPEN", EC_DIRECTION_1, EC_DIRECTION_0, UINT16_C(1000) },
+        { "GROUP START XDIR1 YDIR0 OPEN", EC_DIRECTION_1, EC_DIRECTION_0, UINT16_C(1100) },
         { "GROUP START XDIR1 YDIR0 CLOSE", EC_DIRECTION_1, EC_DIRECTION_0, UINT16_C(1900) },
-        { "GROUP START XDIR1 YDIR1 OPEN", EC_DIRECTION_1, EC_DIRECTION_1, UINT16_C(1000) },
+        { "GROUP START XDIR1 YDIR1 OPEN", EC_DIRECTION_1, EC_DIRECTION_1, UINT16_C(1100) },
         { "GROUP START XDIR1 YDIR1 CLOSE", EC_DIRECTION_1, EC_DIRECTION_1, UINT16_C(1900) }
     };
     size_t i;
@@ -263,6 +288,26 @@ static void write_inputs(void)
     ec_diag_port_write(output);
 }
 
+/* Keep the STATUS value readable while retaining the enum mapping in one place. */
+static const char *ec_app_state_name(ec_state_t state)
+{
+    switch (state) {
+    case EC_STATE_FAULT_LOCK: return "FAULT_LOCK";
+    case EC_STATE_POWER_ON: return "POWER_ON";
+    case EC_STATE_POST: return "POST";
+    case EC_STATE_HOMING: return "HOMING";
+    case EC_STATE_READY: return "READY";
+    case EC_STATE_PREPARE_BARRIER: return "PREPARE_BARRIER";
+    case EC_STATE_WAIT_TASK: return "WAIT_TASK";
+    case EC_STATE_VALIDATE_TASK: return "VALIDATE_TASK";
+    case EC_STATE_EXECUTING: return "EXECUTING";
+    case EC_STATE_WAIT_ITEM_RESULT: return "WAIT_ITEM_RESULT";
+    case EC_STATE_WAIT_DISPLAY_ACK: return "WAIT_DISPLAY_ACK";
+    case EC_STATE_COMPLETE: return "COMPLETE";
+    default: return "UNKNOWN";
+    }
+}
+
 static void consume_rx_byte(uint8_t byte)
 {
     if ((byte == '\r') || (byte == '\n')) {
@@ -319,7 +364,8 @@ void ec_diag_process_line(const char *line)
 
     if (strcmp(line, "HELP") == 0) {
         ec_diag_port_write(
-            "HELP PING STATUS INPUTS STEP X|Y STEP STOP MOTION ARM "
+            "HELP PING STATUS INPUTS LIGHT ON|OFF GRIP n t "
+            "STEP X|Y STEP STOP MOTION ARM "
             "MOVE X|Y DIR0|DIR1 MOVE X|Y DIR0|DIR1 STEPS n HZ f "
             "SERVO ARM SERVO PB10 "
             "P1000|P1100|P1200|P1300|P1500|P1700|P1900 "
@@ -329,6 +375,30 @@ void ec_diag_process_line(const char *line)
             "BARRIER STOP STOP ALL\r\n");
     } else if (strcmp(line, "PING") == 0) {
         ec_diag_port_write("OK PONG\r\n");
+    } else if (strcmp(line, "LIGHT ON") == 0) {
+        /* 2026-09-18 新增：台架直控补光灯。PC0 拉高 = 开。 */
+        ec_board_light_set(true);
+        ec_diag_port_write("OK LIGHT ON\r\n");
+    } else if (strcmp(line, "LIGHT OFF") == 0) {
+        ec_board_light_set(false);
+        ec_diag_port_write("OK LIGHT OFF\r\n");
+    } else if (strncmp(line, "GRIP ", 5U) == 0) {
+        /* 2026-09-18 新增：台架直控自适应夹爪总线舵机（HX-06L，USART3/PB10）。
+         * 用法：GRIP <位置 0-1000> <时间 ms>
+         * 出厂参考值：400 = 张开最大(升) / 500 = 中位 / 640 = 闭合(降)。
+         * 机械为单自由度：开即升、闭即降。 */
+        unsigned pos = 0U;
+        unsigned tms = 0U;
+        if ((sscanf(line, "GRIP %u %u", &pos, &tms) == 2) &&
+            (pos <= EC_BUS_SERVO_POS_MAX) &&
+            (tms <= EC_BUS_SERVO_TIME_MAX_MS)) {
+            ec_diag_port_write(ec_grip_port_move((uint16_t)pos,
+                                                 (uint16_t)tms) ?
+                               "OK GRIP MOVING\r\n" :
+                               "ERR GRIP_SEND_FAILED\r\n");
+        } else {
+            ec_diag_port_write("ERR GRIP_USAGE GRIP <pos 0-1000> <time_ms>\r\n");
+        }
     } else if (strcmp(line, "STATUS") == 0) {
         char output[512];
         (void)snprintf(output, sizeof(output),
@@ -339,7 +409,7 @@ void ec_diag_process_line(const char *line)
                        "GROUP_ARMED=%u GROUP_ACTIVE=%u GROUP_XDIR=%u "
                        "GROUP_YDIR=%u GROUP_SERVO_US=%u BARRIER_TEST=%u "
                        "BARRIER_ARMED=%u BARRIER_ACTIVE=%u BARRIER_MASK=%u "
-                       "BARRIER_US=%u\r\n",
+                       "BARRIER_US=%u APP_STATE=%s\r\n",
                        (unsigned)EC_MOTION_TEST_BUILD,
                        (unsigned)EC_SERVO_TEST_BUILD,
                        ec_motion_test_is_armed() ? 1U : 0U,
@@ -366,11 +436,116 @@ void ec_diag_process_line(const char *line)
                        ec_barrier_test_is_armed() ? 1U : 0U,
                        ec_barrier_test_is_active() ? 1U : 0U,
                        (unsigned)ec_barrier_test_active_mask(),
-                       (unsigned)ec_barrier_test_pulse_us());
+                       (unsigned)ec_barrier_test_pulse_us(),
+                       ec_app_state_name(ec_app_state()));
 #else
-                       0U, 0U, 0U, 0U, 0U);
+                       0U, 0U, 0U, 0U, 0U,
+                       ec_app_state_name(ec_app_state()));
 #endif
         ec_diag_port_write(output);
+    } else if (strcmp(line, "AXIS") == 0) {
+        /* 2026-09-18 新增（**纯诊断**）：生产运动路径的锁存故障现场。
+         *
+         * 起因：STATUS 的 STEP_* 全部来自诊断模块 ec_motion_test_*（本文件 :383-397），
+         * 生产路径 ec_axis_driver 在线上此前**零可观测性**。实机现象是「板子受理
+         * ITEM_TASK 后 5 秒内进 FAULT_LOCK、且从不发 MOTION_DONE」，而这个故障原因
+         * 从板子外部无论如何都拿不到 —— 加了本命令才能定案。
+         *
+         * 读的是 fault() 锁存的快照（ec_axis_driver.c 的 latch_fault_diag），
+         * 该快照**不被 ec_axis_driver_init() 清除**，所以即使故障已被 ITEM_TASK
+         * 重传恢复，这里依然能读到当时的 result / 第几步 / 什么步 / 等了多久。 */
+        {
+            const ec_axis_driver_diag_t *dg = ec_axis_driver_diag();
+            char axis_out[384];
+            (void)snprintf(axis_out, sizeof(axis_out),
+                           "AXIS FAULTS=%lu TICK_MS=%lu STATE=%u RESULT=%u "
+                           "PROGRESS=%lu "
+                           "MOVES=%lu LAST_RESULT=%u LAST_STEP=%u LAST_LEN=%u "
+                           "LAST_KIND=%u LAST_AXIS=%u LAST_STEPS=%lu "
+                           "LAST_PULSE_US=%u LAST_ELAPSED_MS=%lu "
+                           "LAST_TIMEOUT_MS=%lu\r\n",
+                           (unsigned long)dg->fault_count,
+                           (unsigned long)ec_step_port_now_ms(),
+                           (unsigned)ec_axis_driver_state(),
+                           (unsigned)ec_axis_driver_result(),
+                           (unsigned long)ec_axis_driver_progress(),
+                           (unsigned long)ec_axis_driver_completed_move_count(),
+                           (unsigned)dg->last_result,
+                           (unsigned)dg->last_step_index,
+                           (unsigned)dg->last_program_length,
+                           (unsigned)dg->last_kind,
+                           (unsigned)dg->last_axis,
+                           (unsigned long)dg->last_steps,
+                           (unsigned)dg->last_pulse_us,
+                           (unsigned long)dg->last_elapsed_ms,
+                           (unsigned long)dg->last_timeout_ms);
+            ec_diag_port_write(axis_out);
+
+            /* 2026-09-22：补上【非 fault 路径】的停轴现场。
+             * 上面那行读的是 fault() 锁存；「轴被孤立」保护走 stop() 不写锁存
+             * ⇒ 此前这条最关键的失败路径在 AXIS 里完全不可见。
+             * 只在真的发生过时打第二行，避免常态下多占串口带宽。 */
+            {
+                ec_app_stop_snapshot_t snap;
+                if (ec_app_last_stop_snapshot(&snap)) {
+                    /* 128 = 定长部分约 78 字符 + 7 个数字域（最长 10 位）+ NUL，留足余量。
+                     * 本函数已是全项目最大栈帧（宿主实测 1216 B），缓冲区不再放大它。 */
+                    char stop_out[128];
+                    (void)snprintf(
+                        stop_out, sizeof(stop_out),
+                        "STOPCAUSE=ORPHAN APP_STATE=%u DRV_STATE=%u FAULT=%u "
+                        "STEP=%u MOVES=%lu INPUTS=%04X TICK_MS=%lu\r\n",
+                        (unsigned)snap.app_state,
+                        (unsigned)snap.driver_state,
+                        (unsigned)snap.fault_reason,
+                        (unsigned)snap.step_index,
+                        (unsigned long)snap.moves,
+                        (unsigned)snap.active_inputs,
+                        (unsigned long)snap.tick_ms);
+                    ec_diag_port_write(stop_out);
+                    /* 2026-09-22 第二批：窗口/续命现场，另起一行（复用同一缓冲，不增栈）。
+                     * 首战读数 = FAULT=6(DEADLINE_EXPIRED)，据此判定"为什么没被续命"：
+                     *   WD=0        ⇒ 窗口当时是关的（那就不该触发判据，说明另有蹊跷）
+                     *   SILENT_MS   ⇒ 静默了多久（≥15000 即触发判据）
+                     *   MOVES_AT_ARM 与 MOVES 之差 = 窗口期内完成了几次计数移动
+                     *     差 0 ⇒ 根本没有续命机会（腿没走完 / 计数没涨）
+                     *     差 >0 但 SILENT 仍 ≥15000 ⇒ 续命被门拒了（token 不涨或窗口未开） */
+                    (void)snprintf(
+                        stop_out, sizeof(stop_out),
+                        "WINDOW WD=%u SILENT_MS=%lu LAST_OBS=%lu MOVES_AT_ARM=%lu\r\n",
+                        (unsigned)snap.wd_active,
+                        (unsigned long)snap.silent_ms,
+                        (unsigned long)snap.last_obs_ms,
+                        (unsigned long)snap.moves_at_arm);
+                    ec_diag_port_write(stop_out);
+                    /* 2026-09-22 第三批：A0 位置门 + 「离开 EXECUTING」的去向/原因。
+                     * 次战读数 WD=0/SILENT_MS=0 证明第二次卡顿不是 15 秒窗，
+                     * 这两个字节直接指认是谁把它踢出 EXECUTING 的。 */
+                    (void)snprintf(
+                        stop_out, sizeof(stop_out),
+                        "EXIT POS_VALID=%u EXEC_EXIT_TO=%u EXEC_EXIT_REASON=%u\r\n",
+                        (unsigned)snap.position_valid,
+                        (unsigned)snap.exec_exit_to,
+                        (unsigned)snap.exec_exit_reason);
+                    ec_diag_port_write(stop_out);
+                    /* 复用同一缓冲取上一次现场（第二次卡顿会覆盖 last，实测丢过线索） */
+                    if (ec_app_stop_snapshot_at(1U, &snap)) {
+                        (void)snprintf(
+                            stop_out, sizeof(stop_out),
+                            "PREV_STOP APP_STATE=%u FAULT=%u STEP=%u MOVES=%lu "
+                            "WD=%u SILENT_MS=%lu EXIT_TO=%u\r\n",
+                            (unsigned)snap.app_state,
+                            (unsigned)snap.fault_reason,
+                            (unsigned)snap.step_index,
+                            (unsigned long)snap.moves,
+                            (unsigned)snap.wd_active,
+                            (unsigned long)snap.silent_ms,
+                            (unsigned)snap.exec_exit_to);
+                        ec_diag_port_write(stop_out);
+                    }
+                }
+            }
+        }
     } else if (strcmp(line, "INPUTS") == 0) {
         write_inputs();
     } else if (strcmp(line, "STEP X") == 0) {

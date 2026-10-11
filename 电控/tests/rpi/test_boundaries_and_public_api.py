@@ -8,7 +8,7 @@ from electrical_control.protocol import ItemTaskPayload
 
 def ctx(frame_seq: int, target_seq: int = 1, *, image_id: int = 3) -> rpi.ItemTaskContext:
     return rpi.ItemTaskContext(
-        "round-new", 7, frame_seq, ItemTaskPayload(target_seq, 2, image_id, 0, 0, 0)
+        "round-new", 7, frame_seq, ItemTaskPayload(target_seq, 2, image_id, 0, 0, 0, None, None)
     )
 
 

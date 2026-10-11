@@ -37,11 +37,19 @@ from .log import STAGE, CentralLog
 _INBOUND_CACHE_CAPACITY = 256
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PiGatewayOutcome:
     event: str
     outbound: bytes | None = None
     fault: str | None = None
+    # 🔴 2026-09-22 新增：**入站帧的身份**（wire 的 task_id 字段）。
+    #   为什么需要：run_chain 的 A5 修复要在收到 ACK_ACCEPTED 时核对"这确实是在飞那件的 ACK"，
+    #   而事件名（`ACK_ACCEPTED` / `NACK_*`）里**不含身份**。
+    #   此前 run_chain 试图读 `gateway._last_inbound_frame` —— 那个属性**根本不存在**
+    #   ⇒ hasattr 恒 False ⇒ 取到 None ⇒ 核对永远失败（fail-closed、静默失效）。
+    #   本字段是**唯一的**身份出口：由 _handle_ack_nack 填（它拿到的就是解析后的帧）。
+    #   ⚠️ 只有 ACK/NACK 分支填它；其它事件保持 None。
+    task_id: int | None = None
 
 
 class PiProtocolGateway:
@@ -225,7 +233,7 @@ class PiProtocolGateway:
                 target_seq=target_seq,
                 detail=f"{kind}:{reason_name} seq={target_seq}",
             )
-        return PiGatewayOutcome(f"{kind}_{reason_name}")
+        return PiGatewayOutcome(f"{kind}_{reason_name}", task_id=frame.task_id)
 
 
 _MISSING = object()

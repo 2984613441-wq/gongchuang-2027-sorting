@@ -1,0 +1,150 @@
+diff --git a/stm32_logic/src/ec_state_machine.c b/stm32_logic/src/ec_state_machine.c
+index 1234567..abcdef0 100644
+--- a/stm32_logic/src/ec_state_machine.c
++++ b/stm32_logic/src/ec_state_machine.c
+@@ -66,6 +66,25 @@ ec_transition_t ec_state_machine_step(ec_state_machine_t *machine,
+     }
+
+     if (machine->state == EC_STATE_FAULT_LOCK) {
++        /* BU-FIX 2026-09-18: Auto-start on ITEM_TASK when no physical START button.
++         * When Raspberry Pi sends ITEM_TASK while in FAULT_LOCK, treat it as an
++         * implicit new-round request. Learn the round_id from the task's task_id
++         * to ensure alignment (fixes task_id=0 vs local_round_id=1 mismatch).
++         * Safety checks MUST still pass (danger_area_clear, estop_released). */
++        if ((event->type == EC_EVENT_ITEM_TASK_ACCEPTED) &&
++            event->danger_area_clear && event->estop_released &&
++            (event->round_id != machine->round_id)) {
++            /* Learn round_id from Pi's task_id (not local counter increment).
++             * This syncs the two sides even if Pi starts from 0. */
++            ec_dedup_clear_for_verified_new_round(machine->dedup);
++            machine->round_id = event->round_id;
++            machine->last_accepted_frame_seq = 0U;
++            machine->state = EC_STATE_POWER_ON;
++            machine->fault_reason = EC_FAULT_NONE;
++            machine->actions = EC_ACTION_BEGIN_POST;
++            return snapshot(machine);
++        }
++
+         if ((event->type == EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED) &&
+             event->round_closed && event->danger_area_clear &&
+             event->estop_released && (event->round_id != machine->round_id)) {
+diff --git a/stm32_logic/src/ec_protocol_gateway.c b/stm32_logic/src/ec_protocol_gateway.c
+index 2345678..bcdef01 100644
+--- a/stm32_logic/src/ec_protocol_gateway.c
++++ b/stm32_logic/src/ec_protocol_gateway.c
+@@ -148,8 +148,13 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
+         ec_crc32_iso_hdlc(frame->payload, frame->payload_len);
+     event.round_id = (uint32_t)frame->task_id;
+     event.round_closed = false;
+-    event.danger_area_clear = false;
+-    event.estop_released = false;
++
++    /* BU-FIX 2026-09-18: Pass actual safety state to enable auto-start in FAULT_LOCK.
++     * Previously hardcoded false, which prevented state machine from evaluating
++     * safety conditions for auto-start. Now gateway must receive and forward
++     * real sensor state. */
++    event.danger_area_clear = g->last_danger_area_clear;
++    event.estop_released = g->last_estop_released;
+     event.content_validated = false;
+
+     /* Latch the item context BEFORE the event is consumed: the ACK(ACCEPTED)
+diff --git a/stm32_logic/include/ec_protocol_gateway.h b/stm32_logic/include/ec_protocol_gateway.h
+index 3456789..cdef012 100644
+--- a/stm32_logic/include/ec_protocol_gateway.h
++++ b/stm32_logic/include/ec_protocol_gateway.h
+@@ -45,6 +45,10 @@ typedef struct {
+     uint8_t tx_buf[EC_PROTO_MAX_FRAME_LEN];
+     uint8_t tx_len;
+
++    /* BU-FIX 2026-09-18: Cache safety state for forwarding to ITEM_TASK events */
++    bool last_danger_area_clear;
++    bool last_estop_released;
++
+     /* Cached STATUS payload (updated on every STATUS emission, reused when
+      * republishing). 19 bytes = ver(1) + state(1) + fault(1) + round(4) +
+      * last_seq(4) + queue(1) + step_xy(2) + step_z(2) + servo_pulse(2) + crc(1). */
+diff --git a/firmware/stm32f407_m144z/App/Src/ec_app.c b/firmware/stm32f407_m144z/App/Src/ec_app.c
+index 4567890..def0123 100644
+--- a/firmware/stm32f407_m144z/App/Src/ec_app.c
++++ b/firmware/stm32f407_m144z/App/Src/ec_app.c
+@@ -32,15 +32,6 @@
+
+ static ec_gateway_t gateway;
+ static uint32_t local_round_id;
+-/* 2026-09-18 BU-FIX: BEN JI START(MANUAL_RESET) JIAO CONG WEI JIE XIAN,
+- * ban zi shang dian ji suo si zai FAULT_LOCK, wu fa jian li lun ci.
+- * ci biao zhi you shu mei pai fa lai de ITEM_TASK zhi wei (jian dao 0xA5 bing chu yu
+- * FAULT_LOCK), yong lai chong dang deng jia de cao zuo yuan que ren xin yi lun.
+- * an quan jian cha zhao jiu: danger_area_clear / estop_released reng you zhen shi
+- * active_inputs ji suan, bu xie si. */
+-static bool pi_task_request_pending;
+-
+-static uint32_t last_input_sample_ms;
+
+ /* Rolling no-motion watchdog (docs/design/2026-08-30-motion-time-budget.md
+  * §3.3): last_observable_ms is a monotonically-rolling base that moves only
+@@ -339,14 +330,17 @@ static bool power_permission_check_lost(uint16_t active_inputs)
+ static void ec_app_poll_start_button(uint16_t active_inputs)
+ {
+     ec_gateway_event_t event;
+     ec_transition_t t;
+
+     if (ec_gateway_state(&gateway) != EC_STATE_FAULT_LOCK) {
+         return;
+     }
+-    if (((active_inputs & EC_INPUT_START) == 0U) && (!pi_task_request_pending)) {
++
++    /* BU-FIX 2026-09-18: START button never wired, removed pending flag logic.
++     * Auto-start now handled by state machine on ITEM_TASK reception. */
++    if ((active_inputs & EC_INPUT_START) == 0U) {
+         return;
+     }
+-    pi_task_request_pending = false;
+
+     ++local_round_id;
+
+@@ -608,6 +602,15 @@ static void ec_app_poll_motion(uint32_t now_ms, uint16_t active_inputs)
+ void ec_app_poll(uint32_t now_ms)
+ {
+     ec_input_snapshot_t inputs;
++    bool danger_area_clear;
++    bool estop_released;
+
+     if ((uint32_t)(now_ms - last_input_sample_ms) >=
+         EC_INPUT_SAMPLE_PERIOD_MS) {
+@@ -617,6 +620,15 @@ void ec_app_poll(uint32_t now_ms)
+
+     inputs = ec_board_read_inputs();
+
++    /* BU-FIX 2026-09-18: Compute safety state once per poll and forward to gateway.
++     * Enables state machine to evaluate safety on ITEM_TASK reception. */
++    danger_area_clear = ((inputs.active_mask & EC_INPUT_ESTOP_FB) == 0U) &&
++                        ((inputs.active_mask & EC_INPUT_MANUAL_RESET) == 0U);
++    estop_released = (inputs.active_mask & EC_INPUT_ESTOP_FB) == 0U;
++
++    ec_gateway_update_safety_state(&gateway, danger_area_clear, estop_released);
++
+     ec_app_poll_start_button(inputs.active_mask);
+     ec_app_poll_startup_sequence(now_ms, inputs.active_mask);
+     ec_app_poll_motion(now_ms, inputs.active_mask);
+@@ -625,17 +637,6 @@ void ec_app_poll(uint32_t now_ms)
+     while (ec_board_uart_rx_available()) {
+         ec_app_on_uart_rx_byte(ec_board_uart_rx_read());
+     }
+-
+-void ec_app_on_uart_rx_byte(uint8_t byte)
+-{
+-    /* Route: a 0xA5 starts (or continues) a binary frame; everything else is
+-     * ASCII diagnostics. ASCII command bytes are printable and never 0xA5. */
+-    /* 2026-09-18 BU-FIX: jian dao wai ceng zhen tou(0xA5) qie dang qian suo si zai
+-     * FAULT_LOCK shi, ji yi "shu mei pai zheng zai yao qiu kai shi yi lun".
+-     * zhi qu BIAO ZHI, bu zai ISR / RX lu jing li zhi jie jian li lun ci ——
+-     * jian li dong zuo reng you zhu xun huan de ec_app_poll_start_button wan cheng,
+-     * na li cai neng du dao zhen shi active_inputs bing ji suan an quan biao zhi. */
+-    if ((byte == EC_PROTO_HEADER_0) &&
+-        (ec_gateway_state(&gateway) == EC_STATE_FAULT_LOCK)) {
+-        pi_task_request_pending = true;
+-    }
++
+     if ((byte == EC_PROTO_HEADER_0) || ec_gateway_rx_active(&gateway)) {
+         ec_transition_t t = ec_gateway_feed_byte(&gateway, byte);

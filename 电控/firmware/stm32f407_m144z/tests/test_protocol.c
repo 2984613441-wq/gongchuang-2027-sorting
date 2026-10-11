@@ -121,12 +121,15 @@ void test_protocol(void)
                                                  &ack_out));
     }
 
-    /* ITEM_TASK: full 8-byte payload golden (interface-contract sec. 5.2).
+    /* ITEM_TASK: full 12-byte payload golden (interface-contract V0.9 sec. 5.2,
+     * P3 2026-09-16: the grasp point was appended at the tail).
      * target_seq=1, class_id=2, image_id=2, X=-100.0 mm, Y=+100.0 mm,
-     * grip_angle=0xFF -> 01 02 02 FC 18 03 E8 FF. */
+     * grip_angle=0xFF, pick X=+25.0 mm, pick Y=-25.0 mm
+     * -> 01 02 02 FC 18 03 E8 FF 00 FA FF 06. */
     {
         static const uint8_t golden[] = {
-            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU,
+            0x00U, 0xFAU, 0xFFU, 0x06U
         };
         ec_proto_item_task_t item;
         uint8_t enc[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
@@ -138,6 +141,8 @@ void test_protocol(void)
         TEST_ASSERT(item.x_mm10 == -1000);
         TEST_ASSERT(item.y_mm10 == 1000);
         TEST_ASSERT(item.grip_angle == 0xFFU);
+        TEST_ASSERT(item.pick_x_mm10 == 250);
+        TEST_ASSERT(item.pick_y_mm10 == -250);
 
         TEST_ASSERT(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
         TEST_ASSERT(memcmp(enc, golden, sizeof(golden)) == 0);
@@ -154,15 +159,23 @@ void test_protocol(void)
         item.x_mm10 = 1450;
         item.y_mm10 = -1450;
         item.grip_angle = 0xFFU;
+        item.pick_x_mm10 = -1450;
+        item.pick_y_mm10 = 1450;
         TEST_ASSERT(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
-        TEST_ASSERT(enc[3] == 0x05U); /* X high: +1450 */
-        TEST_ASSERT(enc[4] == 0xAAU); /* X low */
-        TEST_ASSERT(enc[5] == 0xFAU); /* Y high: -1450 */
-        TEST_ASSERT(enc[6] == 0x56U); /* Y low */
+        TEST_ASSERT(enc[3] == 0x05U); /* drop X high: +1450 */
+        TEST_ASSERT(enc[4] == 0xAAU); /* drop X low */
+        TEST_ASSERT(enc[5] == 0xFAU); /* drop Y high: -1450 */
+        TEST_ASSERT(enc[6] == 0x56U); /* drop Y low */
+        TEST_ASSERT(enc[8] == 0xFAU);  /* pick X high: -1450 */
+        TEST_ASSERT(enc[9] == 0x56U);  /* pick X low */
+        TEST_ASSERT(enc[10] == 0x05U); /* pick Y high: +1450 */
+        TEST_ASSERT(enc[11] == 0xAAU); /* pick Y low */
 
         TEST_ASSERT(ec_proto_decode_item_task(enc, sizeof(enc), &item));
         TEST_ASSERT(item.x_mm10 == 1450);
         TEST_ASSERT(item.y_mm10 == -1450);
+        TEST_ASSERT(item.pick_x_mm10 == -1450);
+        TEST_ASSERT(item.pick_y_mm10 == 1450);
     }
 
     /* ITEM_TASK: out-of-range X/Y, non-0xFF angle, and short payload reject. */
@@ -179,6 +192,18 @@ void test_protocol(void)
         static const uint8_t short_payload[] = {
             0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U
         }; /* 7 bytes: missing grip_angle */
+        /* P3: the pre-P3 8-byte payload must be refused (fail-closed). */
+        static const uint8_t old_8_byte_payload[] = {
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU
+        };
+        static const uint8_t bad_pick_x[] = { /* pick X = +1451 */
+            0x01U, 0x02U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U, 0xFFU,
+            0x05U, 0xABU, 0x00U, 0x00U
+        };
+        static const uint8_t bad_pick_y[] = { /* pick Y = -1451 */
+            0x01U, 0x02U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U, 0xFFU,
+            0x00U, 0x00U, 0xFAU, 0x55U
+        };
         ec_proto_item_task_t item;
 
         TEST_ASSERT(!ec_proto_decode_item_task(bad_x, sizeof(bad_x), &item));
@@ -187,6 +212,13 @@ void test_protocol(void)
                                                &item));
         TEST_ASSERT(!ec_proto_decode_item_task(short_payload,
                                                sizeof(short_payload), &item));
+        TEST_ASSERT(!ec_proto_decode_item_task(old_8_byte_payload,
+                                               sizeof(old_8_byte_payload),
+                                               &item));
+        TEST_ASSERT(!ec_proto_decode_item_task(bad_pick_x,
+                                               sizeof(bad_pick_x), &item));
+        TEST_ASSERT(!ec_proto_decode_item_task(bad_pick_y,
+                                               sizeof(bad_pick_y), &item));
     }
 
     /* ITEM_TASK: encode rejects out-of-range X/Y and non-0xFF angle. */
@@ -200,6 +232,8 @@ void test_protocol(void)
         item.x_mm10 = 1451;
         item.y_mm10 = 0;
         item.grip_angle = 0xFFU;
+        item.pick_x_mm10 = 0;
+        item.pick_y_mm10 = 0;
         TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.x_mm10 = 0;
@@ -207,6 +241,14 @@ void test_protocol(void)
         TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.y_mm10 = 0;
+        item.pick_x_mm10 = -1451;
+        TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
+
+        item.pick_x_mm10 = 0;
+        item.pick_y_mm10 = 1451;
+        TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
+
+        item.pick_y_mm10 = 0;
         item.grip_angle = 0x2DU;
         TEST_ASSERT(!ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 

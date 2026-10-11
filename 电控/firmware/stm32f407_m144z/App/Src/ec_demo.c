@@ -10,17 +10,14 @@
  * it caused the axis to jam. */
 #define EC_DEMO_STEP_HZ          UINT32_C(800)
 #define EC_DEMO_STEPS_PER_LEG    UINT32_C(13200)
-#define EC_DEMO_SERVO_OPEN_US    UINT16_C(1000)
+#define EC_DEMO_SERVO_OPEN_US    UINT16_C(1100)
 #define EC_DEMO_SERVO_CLOSE_US   UINT16_C(1900)
 #define EC_DEMO_SERVO_SETTLE_MS  UINT32_C(200)
 #define EC_DEMO_MOVE_TIMEOUT_MARGIN_MS UINT32_C(1000)
 
-/* Same 7-bit safety set as ec_axis_driver's EC_AXIS_SAFETY_MASK / the
- * diagnostic EC_MOTION_SAFETY_MASK: a set bit in active_inputs means the input
- * is triggered (active-low wiring) and the loop must stop. */
-#define EC_DEMO_SAFETY_MASK                                                  \
-    (EC_INPUT_X_HOME | EC_INPUT_X_END | EC_INPUT_Y_HOME | EC_INPUT_Y_END |    \
-     EC_INPUT_Z_UP | EC_INPUT_Z_DOWN | EC_INPUT_ESTOP_FB)
+/* 2026-09-15 用户裁决：X/Y 不装限位开关 → 遮罩收敛为仅 ESTOP。
+ * 与 ec_axis_driver.c / ec_servo_test.c / ec_step_test.c 的三处遮罩保持一致。 */
+#define EC_DEMO_SAFETY_MASK  (EC_INPUT_ESTOP_FB)
 
 typedef enum {
     EC_DEMO_PHASE_X_OUT = 0,

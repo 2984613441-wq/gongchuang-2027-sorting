@@ -1,5 +1,7 @@
 #include "ec_step_profile.h"
 
+#include <stddef.h>   /* NULL */
+
 /* Integer square root, floor(sqrt(n)). ~64 shift/compare iterations, well
  * under 1 us on the 168 MHz M4 - fast enough for the per-step ISR at this
  * project's max 10 kHz step rate. */

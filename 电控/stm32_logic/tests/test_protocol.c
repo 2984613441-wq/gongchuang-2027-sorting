@@ -139,17 +139,21 @@ void test_protocol(void)
         }
     }
 
-    /* ITEM_TASK: full 8-byte payload golden (interface-contract sec. 5.2).
-     * target_seq=1, class_id=2, image_id=2, X=-100.0 mm, Y=+100.0 mm,
-     * grip_angle=0xFF -> 01 02 02 FC 18 03 E8 FF. */
+    /* ITEM_TASK: full 12-byte payload golden (interface-contract sec. 5.2,
+     * P3 2026-09-16): target_seq=1, class_id=2, image_id=2, X=-100.0 mm,
+     * Y=+100.0 mm, grip_angle=0xFF, pick X=+25.0 mm, pick Y=-25.0 mm
+     * -> 01 02 02 FC 18 03 E8 FF 00 FA FF 06. */
     TEST_CASE_BEGIN("P-ITEM-001");
     {
         static const uint8_t golden[] = {
-            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU,
+            0x00U, 0xFAU, 0xFFU, 0x06U
         };
         ec_proto_item_task_t item;
         uint8_t enc[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
 
+        EXPECT_EQ_U32(12U, (uint32_t)EC_PROTO_ITEM_TASK_PAYLOAD_LEN);
+        EXPECT_EQ_U32(12U, (uint32_t)sizeof(golden));
         EXPECT_TRUE(ec_proto_decode_item_task(golden, sizeof(golden), &item));
         EXPECT_EQ_U8(0x01U, item.target_seq);
         EXPECT_EQ_U8(0x02U, item.class_id);
@@ -157,12 +161,14 @@ void test_protocol(void)
         EXPECT_EQ_I16(-1000, item.x_mm10);
         EXPECT_EQ_I16(1000, item.y_mm10);
         EXPECT_EQ_U8(0xFFU, item.grip_angle);
+        EXPECT_EQ_I16(250, item.pick_x_mm10);
+        EXPECT_EQ_I16(-250, item.pick_y_mm10);
 
         EXPECT_TRUE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
         EXPECT_TRUE(memcmp(enc, golden, sizeof(golden)) == 0);
     }
 
-    /* ITEM_TASK: +-135.0 mm boundaries accepted and encoded big-endian. */
+    /* ITEM_TASK: +-145.0 mm boundaries accepted for BOTH pairs, big-endian. */
     TEST_CASE_BEGIN("P-ITEM-002");
     {
         ec_proto_item_task_t item;
@@ -174,15 +180,23 @@ void test_protocol(void)
         item.x_mm10 = 1450;
         item.y_mm10 = -1450;
         item.grip_angle = 0xFFU;
+        item.pick_x_mm10 = -1450;
+        item.pick_y_mm10 = 1450;
         EXPECT_TRUE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
-        EXPECT_EQ_U8(0x05U, enc[3]); /* X high: +1450 */
-        EXPECT_EQ_U8(0xAAU, enc[4]); /* X low */
-        EXPECT_EQ_U8(0xFAU, enc[5]); /* Y high: -1450 */
-        EXPECT_EQ_U8(0x56U, enc[6]); /* Y low */
+        EXPECT_EQ_U8(0x05U, enc[3]); /* drop X high: +1450 */
+        EXPECT_EQ_U8(0xAAU, enc[4]); /* drop X low */
+        EXPECT_EQ_U8(0xFAU, enc[5]); /* drop Y high: -1450 */
+        EXPECT_EQ_U8(0x56U, enc[6]); /* drop Y low */
+        EXPECT_EQ_U8(0xFAU, enc[8]); /* pick X high: -1450 */
+        EXPECT_EQ_U8(0x56U, enc[9]); /* pick X low */
+        EXPECT_EQ_U8(0x05U, enc[10]); /* pick Y high: +1450 */
+        EXPECT_EQ_U8(0xAAU, enc[11]); /* pick Y low */
 
         EXPECT_TRUE(ec_proto_decode_item_task(enc, sizeof(enc), &item));
         EXPECT_EQ_I16(1450, item.x_mm10);
         EXPECT_EQ_I16(-1450, item.y_mm10);
+        EXPECT_EQ_I16(-1450, item.pick_x_mm10);
+        EXPECT_EQ_I16(1450, item.pick_y_mm10);
     }
 
     /* ITEM_TASK: out-of-range X/Y, non-0xFF angle, and short payload reject. */
@@ -200,6 +214,22 @@ void test_protocol(void)
         static const uint8_t short_payload[] = {
             0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U
         };
+        /* P3 2026-09-16: the pre-P3 8-byte wire payload. It must be REFUSED
+         * (fail-closed): no grasp point -> no motion, never a misaligned
+         * execution. This is the codec half of the "old payload" proof. */
+        static const uint8_t old_8_byte_payload[] = {
+            0x01U, 0x02U, 0x02U, 0xFCU, 0x18U, 0x03U, 0xE8U, 0xFFU
+        };
+        /* pick X = +1451 (out of the +-1450 protocol domain) */
+        static const uint8_t bad_pick_x[] = {
+            0x01U, 0x02U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U, 0xFFU,
+            0x05U, 0xABU, 0x00U, 0x00U
+        };
+        /* pick Y = -1451 */
+        static const uint8_t bad_pick_y[] = {
+            0x01U, 0x02U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U, 0xFFU,
+            0x00U, 0x00U, 0xFAU, 0x55U
+        };
         ec_proto_item_task_t item;
 
         EXPECT_FALSE(ec_proto_decode_item_task(bad_x, sizeof(bad_x), &item));
@@ -208,9 +238,17 @@ void test_protocol(void)
                                                &item));
         EXPECT_FALSE(ec_proto_decode_item_task(short_payload,
                                                sizeof(short_payload), &item));
+        EXPECT_FALSE(ec_proto_decode_item_task(old_8_byte_payload,
+                                               sizeof(old_8_byte_payload),
+                                               &item));
+        EXPECT_FALSE(ec_proto_decode_item_task(bad_pick_x,
+                                               sizeof(bad_pick_x), &item));
+        EXPECT_FALSE(ec_proto_decode_item_task(bad_pick_y,
+                                               sizeof(bad_pick_y), &item));
     }
 
-    /* ITEM_TASK: encode rejects out-of-range X/Y and non-0xFF angle. */
+    /* ITEM_TASK: encode rejects out-of-range coordinates (both pairs),
+     * non-0xFF angle, and a too-small output buffer. */
     TEST_CASE_BEGIN("P-ITEM-004");
     {
         ec_proto_item_task_t item;
@@ -222,6 +260,8 @@ void test_protocol(void)
         item.x_mm10 = 1451;
         item.y_mm10 = 0;
         item.grip_angle = 0xFFU;
+        item.pick_x_mm10 = 0;
+        item.pick_y_mm10 = 0;
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.x_mm10 = 0;
@@ -229,12 +269,21 @@ void test_protocol(void)
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.y_mm10 = 0;
+        item.pick_x_mm10 = -1451;
+        EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
+
+        item.pick_x_mm10 = 0;
+        item.pick_y_mm10 = 1451;
+        EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
+
+        item.pick_y_mm10 = 0;
         item.grip_angle = 0x2DU;
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
 
         item.grip_angle = 0xFFU;
         EXPECT_FALSE(ec_proto_encode_item_task(&item, enc,
                                                EC_PROTO_ITEM_TASK_PAYLOAD_LEN - 1U));
+        EXPECT_TRUE(ec_proto_encode_item_task(&item, enc, sizeof(enc)));
     }
 
     /* ACK payload codec (proposal 2026-08-29 sec. 3.3.1, E-1):

@@ -33,7 +33,7 @@ def _capacity(name: str, value: int) -> int:
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class NodeRestarted:
     node: str
 

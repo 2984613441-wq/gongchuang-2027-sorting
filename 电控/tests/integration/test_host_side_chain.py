@@ -64,9 +64,11 @@ ROUND_TASK_ID = 7
 # class_id -> 货物名称（树莓派本地 TF 卡映射；只传类别 ID / 图片 ID，不传图片文件）
 NAMES = {2: "红方柱", 4: "蓝圆柱"}
 # class_id -> image_id
-IMAGE_IDS = {2: 102, 4: 104}
+IMAGE_IDS = {2: 2, 4: 4}  # 冻结不变式: image_id == class_id
 # box_id -> (x, y) 落料点；注入后 ITEM_TASK payload 才可序列化（grip_angle=0xFF）
 DROP_POINTS = {1: (100, 200), 2: (300, 400)}
+# box_id -> (x, y) 抓取点（P3：像素→mm 换算结果，必填；没有它载荷不可序列化）
+GRASP_POINTS = {1: (-300, 0), 2: (0, 150)}
 
 
 def stm32_frame(
@@ -104,14 +106,15 @@ class HostSideChainTests(unittest.TestCase):
         batch = BatchTargets(
             ROUND_TASK_ID,
             (
-                VisionTarget(1, 2, box_id=1),  # 红方柱
-                VisionTarget(2, 4, box_id=2),  # 蓝圆柱
+                VisionTarget(1, 2, 0, box_id=1),  # 红方柱
+                VisionTarget(2, 4, 0, box_id=2),  # 蓝圆柱
             ),
         )
         queue = build_item_task_queue(
             batch,
             image_id_for_class=IMAGE_IDS.__getitem__,
             drop_point_for_box=DROP_POINTS.__getitem__,
+            grasp_point_for_target=lambda target: GRASP_POINTS[target.box_id],
         )
         self.contexts = tuple(
             ItemTaskContext(
@@ -151,9 +154,9 @@ class HostSideChainTests(unittest.TestCase):
         self.assertEqual(Device.STM32, frame.receiver)
         self.assertEqual(Command.ITEM_TASK, Command(frame.command))
         self.assertEqual(task.task_id, frame.task_id)
-        self.assertEqual(8, len(frame.payload))
+        self.assertEqual(12, len(frame.payload))
         # decode_item_task_payload additionally enforces grip_angle == 0xFF and
-        # the +-1450 coordinate range at the wire boundary.
+        # the +-1450 coordinate range at the wire boundary (both pairs).
         payload = decode_item_task_payload(frame.payload)
         self.assertEqual(expected_seq, payload.target_seq)
         self.assertEqual(expected_class, payload.class_id)
@@ -331,7 +334,7 @@ class HostSideChainTests(unittest.TestCase):
         self.assertEqual(1, self.scheduler.success_count)
         self.assertEqual(view1.success_count, self.scheduler.success_count)
         self.assertEqual("红方柱", view1.name)
-        self.assertEqual(102, view1.image_id)
+        self.assertEqual(2, view1.image_id)  # image_id == class_id (冻结不变式)
 
         second = self.scheduler.next_task()
         self.outbound.send_item_task(second)
@@ -341,7 +344,7 @@ class HostSideChainTests(unittest.TestCase):
         self.assertEqual(2, self.scheduler.success_count)
         self.assertEqual(view2.success_count, self.scheduler.success_count)
         self.assertEqual("蓝圆柱", view2.name)
-        self.assertEqual(104, view2.image_id)
+        self.assertEqual(4, view2.image_id)  # image_id == class_id (冻结不变式)
 
     # ------------------------------------------------------- 断言点 5 ---------
 

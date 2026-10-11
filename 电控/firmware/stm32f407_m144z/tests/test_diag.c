@@ -9,6 +9,19 @@ static char tx_log[8192]; static size_t tx_used;
 uint16_t fake_active_inputs;
 void ec_diag_port_write(const char *text) { size_t length = strlen(text); TEST_ASSERT(tx_used + length < sizeof(tx_log)); memcpy(&tx_log[tx_used], text, length + 1U); tx_used += length; }
 ec_input_snapshot_t ec_board_read_inputs(void) { ec_input_snapshot_t s = { EC_INPUT_ALL_MASK, EC_INPUT_ALL_MASK, fake_active_inputs }; return s; }
+/* 2026-09-18：LIGHT ON|OFF 命令的桩。记录最后设定的状态，便于断言。 */
+bool fake_light_state;
+void ec_board_light_set(bool on) { fake_light_state = on; }
+/* 2026-09-18：GRIP 命令的桩。记录最后一次下发的夹爪位置/时间，供断言使用。 */
+uint16_t fake_grip_pos;
+uint16_t fake_grip_time;
+bool fake_grip_ok = true;
+bool ec_grip_port_move(uint16_t position, uint16_t time_ms)
+{
+  fake_grip_pos = position;
+  fake_grip_time = time_ms;
+  return fake_grip_ok;
+}
 static void assert_servo_command(const char *command, uint16_t pulse_us) {
   ec_diag_process_line("SERVO ARM");
   ec_diag_process_line(command);
@@ -72,10 +85,10 @@ void test_diag(void) {
   ec_step_test_stop();
   TEST_ASSERT(!ec_motion_test_is_armed());
 
-  ec_diag_process_line("SERVO PB11 P1500");
+  ec_diag_process_line("SERVO PB10 P1500");
   TEST_ASSERT(strstr(tx_log, "ERR SERVO_NOT_ARMED") != NULL);
   ec_diag_process_line("SERVO ARM"); TEST_ASSERT(ec_servo_test_is_armed());
-  ec_diag_process_line("SERVO PB11 P1500"); TEST_ASSERT(ec_servo_test_is_running());
+  ec_diag_process_line("SERVO PB10 P1500"); TEST_ASSERT(ec_servo_test_is_running());
   TEST_ASSERT(ec_servo_test_active_pulse_us() == 1500U);
   ec_diag_process_line("STEP X"); TEST_ASSERT(strstr(tx_log, "ERR TEST_BUSY") != NULL);
   ec_diag_process_line("STOP ALL"); TEST_ASSERT(!ec_servo_test_is_running());
@@ -96,7 +109,7 @@ void test_diag(void) {
   TEST_ASSERT(!ec_group_test_is_armed());
   TEST_ASSERT(ec_group_test_x_direction() == EC_DIRECTION_1);
   TEST_ASSERT(ec_group_test_y_direction() == EC_DIRECTION_0);
-  TEST_ASSERT(ec_group_test_servo_pulse_us() == 1000U);
+  TEST_ASSERT(ec_group_test_servo_pulse_us() == 1100U);
   ec_diag_process_line("STEP X");
   ec_diag_process_line("MOTION ARM");
   ec_diag_process_line("SERVO ARM");
@@ -124,24 +137,24 @@ void test_diag(void) {
   ec_diag_process_line("GROUP START XDIR0 YDIR0 MID");
   TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
 
-  assert_group_command("GROUP START XDIR0 YDIR0 OPEN", EC_DIRECTION_0, EC_DIRECTION_0, 1000U);
+  assert_group_command("GROUP START XDIR0 YDIR0 OPEN", EC_DIRECTION_0, EC_DIRECTION_0, 1100U);
   assert_group_command("GROUP START XDIR0 YDIR0 CLOSE", EC_DIRECTION_0, EC_DIRECTION_0, 1900U);
-  assert_group_command("GROUP START XDIR0 YDIR1 OPEN", EC_DIRECTION_0, EC_DIRECTION_1, 1000U);
+  assert_group_command("GROUP START XDIR0 YDIR1 OPEN", EC_DIRECTION_0, EC_DIRECTION_1, 1100U);
   assert_group_command("GROUP START XDIR0 YDIR1 CLOSE", EC_DIRECTION_0, EC_DIRECTION_1, 1900U);
-  assert_group_command("GROUP START XDIR1 YDIR0 OPEN", EC_DIRECTION_1, EC_DIRECTION_0, 1000U);
+  assert_group_command("GROUP START XDIR1 YDIR0 OPEN", EC_DIRECTION_1, EC_DIRECTION_0, 1100U);
   assert_group_command("GROUP START XDIR1 YDIR0 CLOSE", EC_DIRECTION_1, EC_DIRECTION_0, 1900U);
-  assert_group_command("GROUP START XDIR1 YDIR1 OPEN", EC_DIRECTION_1, EC_DIRECTION_1, 1000U);
+  assert_group_command("GROUP START XDIR1 YDIR1 OPEN", EC_DIRECTION_1, EC_DIRECTION_1, 1100U);
   assert_group_command("GROUP START XDIR1 YDIR1 CLOSE", EC_DIRECTION_1, EC_DIRECTION_1, 1900U);
 
-  assert_servo_command("SERVO PB11 P1000", 1000U);
-  assert_servo_command("SERVO PB11 P1100", 1100U);
-  assert_servo_command("SERVO PB11 P1200", 1200U);
-  assert_servo_command("SERVO PB11 P1300", 1300U);
-  assert_servo_command("SERVO PB11 P1500", 1500U);
-  assert_servo_command("SERVO PB11 P1700", 1700U);
-  assert_servo_command("SERVO PB11 P1900", 1900U);
+  assert_servo_command("SERVO PB10 P1000", 1000U);
+  assert_servo_command("SERVO PB10 P1100", 1100U);
+  assert_servo_command("SERVO PB10 P1200", 1200U);
+  assert_servo_command("SERVO PB10 P1300", 1300U);
+  assert_servo_command("SERVO PB10 P1500", 1500U);
+  assert_servo_command("SERVO PB10 P1700", 1700U);
+  assert_servo_command("SERVO PB10 P1900", 1900U);
   tx_log[0] = '\0'; tx_used = 0U;
-  ec_diag_process_line("SERVO PB11 P1400");
+  ec_diag_process_line("SERVO PB10 P1400");
   TEST_ASSERT(strstr(tx_log, "ERR BAD_COMMAND") != NULL);
 
   tx_log[0] = '\0'; tx_used = 0U;
@@ -151,7 +164,7 @@ void test_diag(void) {
   TEST_ASSERT(strstr(tx_log, "SAFE_LOCK=1") != NULL);
 
   ec_diag_process_line("SERVO ARM");
-  ec_diag_process_line("SERVO PB11 P1500");
+  ec_diag_process_line("SERVO PB10 P1500");
   TEST_ASSERT(ec_servo_test_is_running());
   tx_log[0] = '\0'; tx_used = 0U;
   for (unsigned i = 0U; i < 80U; ++i) ec_diag_on_rx_byte('A');
@@ -179,7 +192,7 @@ void test_diag(void) {
 
   tx_log[0] = '\0'; tx_used = 0U; ec_diag_init();
   ec_diag_process_line("SERVO ARM");
-  ec_diag_process_line("SERVO PB11 P1500");
+  ec_diag_process_line("SERVO PB10 P1500");
   TEST_ASSERT(ec_servo_test_is_running());
   tx_log[0] = '\0'; tx_used = 0U;
   for (unsigned i = 0U; i < 128U; ++i) ec_diag_on_rx_byte('A');

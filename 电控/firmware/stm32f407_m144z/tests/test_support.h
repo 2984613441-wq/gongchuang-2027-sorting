@@ -13,6 +13,7 @@ void test_diag(void);
 void test_safety_adapter(void);
 void test_app(void);
 void test_protocol(void);
+void test_app_start_motion_at(uint32_t motion_start_tick);
 
 /* Injectable HAL tick (host_stubs/hal_stub.c). Defaults to 0. */
 void test_set_tick(uint32_t tick);

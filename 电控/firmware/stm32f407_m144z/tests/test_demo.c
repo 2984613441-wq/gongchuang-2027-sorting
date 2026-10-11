@@ -150,10 +150,10 @@ static void test_full_loop_wraps(void)
     TEST_ASSERT(g_last_start_axis == EC_AXIS_Y);
     TEST_ASSERT(g_last_direction == EC_DIRECTION_1);
 
-    /* phase 3 done -> phase 4 (Z open) */
+    /* phase 3 done -> phase 4 (Z open) —— 张开实测 1100us */
     g_counted_remaining = 0U;
     ec_demo_poll(now += 1U, 0U);
-    TEST_ASSERT(g_last_z_servo_pulse == 1000U);
+    TEST_ASSERT(g_last_z_servo_pulse == 1100U);
     TEST_ASSERT(g_z_servo_start_count == 1);
 
     /* phase 4 settle -> phase 5 (Z close) */
@@ -188,7 +188,9 @@ static void test_inhibit_aborts(void)
     ec_demo_init();
     TEST_ASSERT(ec_demo_start(0U));
 
-    ec_demo_poll(1U, EC_INPUT_X_HOME);
+    /* 2026-09-15：X/Y 不装限位开关，安全遮罩收敛为仅 ESTOP，
+     * 因此必须用 ESTOP 触发 inhibit（原先的 EC_INPUT_X_HOME 已不再生效）。 */
+    ec_demo_poll(1U, EC_INPUT_ESTOP_FB);
     TEST_ASSERT(!ec_demo_is_active());
     TEST_ASSERT(g_step_stop_count >= 1);
 }

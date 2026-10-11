@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A4988 电机完全不动——硬件排查决策图（2026-09-18）</title>
+<style>
+  :root{
+    --ink:#1c2733; --sub:#5b6b7b; --line:#c9d1d9; --bg:#f6f8fa;
+    --red:#b3261e; --redbg:#fdecea; --org:#b45508; --orgbg:#fff3e0;
+    --slate:#33555f; --slatebg:#e8f1f3; --green:#0b6e4f;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.65 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 18px 40px;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:14px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;
+        padding:14px 16px;margin:14px 0;}
+  .card h2{font-size:16px;margin:0 0 10px;border-left:4px solid var(--slate);
+           padding-left:8px;}
+  .symptom{border-left:5px solid var(--red);background:var(--redbg);}
+  .keyline{margin:4px 0;}
+  .chip{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;
+        font-weight:600;color:#fff;margin-right:6px;}
+  .t0{background:var(--red);} .t1{background:var(--org);} .t2{background:var(--slate);}
+  /* 决策流 */
+  .flow{display:flex;flex-direction:column;gap:0;align-items:center;}
+  .fbox{border:2px solid var(--slate);border-radius:8px;background:#fff;
+        padding:8px 12px;text-align:center;max-width:760px;font-weight:600;}
+  .fbox.root{border-color:var(--red);background:var(--redbg);}
+  .arrow{color:var(--sub);font-size:18px;line-height:1;padding:3px 0;}
+  .split{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;width:100%;}
+  .colA,.colB{flex:1 1 340px;min-width:320px;border-radius:8px;padding:12px 14px;}
+  .colA{border:2px solid var(--red);background:#fff;}
+  .colB{border:2px solid var(--green);background:#fff;}
+  .colA .coltitle{color:var(--red);font-weight:700;margin-bottom:8px;}
+  .colB .coltitle{color:var(--green);font-weight:700;margin-bottom:8px;}
+  .chk{list-style:none;margin:0;padding:0;}
+  .chk li{padding:5px 6px;border-bottom:1px dashed var(--line);}
+  .chk li:last-child{border-bottom:none;}
+  .stepflow{border:2px solid var(--green);border-radius:8px;background:#fff;
+            padding:8px 10px;margin:8px 0;text-align:center;font-weight:600;}
+  .stepflow small{font-weight:400;color:var(--sub);}
+  .br{color:var(--green);font-weight:700;}
+  .exclude{margin-top:10px;font-size:13px;color:var(--sub);}
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{border:1px solid var(--line);padding:7px 9px;vertical-align:top;text-align:left;}
+  th{background:#eef1f4;white-space:nowrap;}
+  td.num{white-space:nowrap;font-weight:700;width:34px;}
+  tr.trow0{border-left:4px solid var(--red);}
+  tr.trow1{border-left:4px solid var(--org);}
+  tr.trow2{border-left:4px solid var(--slate);}
+  .mech{color:var(--ink);}
+  .foot{color:var(--sub);font-size:12px;margin-top:18px;line-height:1.7;}
+  code{background:#eef1f4;border:1px solid var(--line);border-radius:4px;
+       padding:0 4px;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>A4988 电机完全不动 —— 硬件排查决策图</h1>
+  <div class="sub">STM32F407 + A4988（脉冲/方向）｜现象：固件报「命令已启动 / 剩余步数=0 / 结果=完成」，电机物理完全不动、无异响无堵转声｜2026-09-18</div>
+
+  <div class="card symptom">
+    <h2>症状指纹（先读这一句）</h2>
+    <p class="keyline"><b>无声 + 计数完成</b> = 两个最可能的方向：① 线圈从头到尾没有电流（EN 未使能 / VMOT 缺失 / Vref=0 / 不共地 / 保护锁死 / 线圈断）；② STEP 沿根本没到驱动（线缆断、接错、或 MCU 引脚没输出）。<b>第一步用三个测量分流，不猜。</b></p>
+    <p class="keyline" style="font-size:13px;">已核对（当前工作树源码）：MOVE 路径为 <code>set_direction → enable_axis(拉低 EN) → 500Hz PWM 启动</code>（ec_axis_driver.c:228；EC_AXIS_MOVE_FREQUENCY_HZ=500）；「剩余步数」由定时器溢出中断逐次递减（ec_board_stm32.c:485）——<b>定时器跑满计数 ≠ STEP 引脚有输出</b>。</p>
+  </div>
+
+  <div class="card">
+    <h2>三问分流（第 0 步，约 3 分钟）</h2>
+    <div class="flow">
+      <div class="fbox root">症状：固件报「完成 / 剩余步数=0」、电机完全不动、无声</div>
+      <div class="arrow">↓</div>
+      <div class="fbox">Q1　上电使能后，手动盘电机轴 —— 有没有保持力矩？<br><small>（有力矩=电流通路 OK，问题在 STEP 通路；无力矩=电流通路没建立）</small></div>
+      <div class="arrow">↓ 分流</div>
+      <div class="split">
+        <div class="colA">
+          <div class="coltitle">无保持力矩 →「线圈无电流」族（按序查，10 秒/项）</div>
+          <ul class="chk">
+            <li>① EN 电平（X=PA5 / Y=PD7）：运动时 ≤0.8V</li>
+            <li>② VMOT：8–35V，运动不掉压（先查动力电源/保险/急停）</li>
+            <li>③ VREF 电位器：&gt;0V（≈0.8V@1A，Rs=0.1Ω）</li>
+            <li>④ 共地：MCU GND ↔ 驱动 GND &lt;0.3V</li>
+            <li>⑤ nSLEEP / nRESET：≥2V</li>
+            <li>⑥ 保护：VMOT 电流≈0 / 芯片温度 / 断电重上电复测</li>
+            <li>⑦ 线圈：1A-1B / 2A-2B 阻值 1–10Ω、两相对称</li>
+            <li>⑧ 换一块已知好模块对比</li>
+          </ul>
+          <div class="exclude">对应清单：T0-1～4、T1-7/8/9、T2-10/12</div>
+        </div>
+        <div class="colB">
+          <div class="coltitle">有保持力矩 →「STEP 通路」族</div>
+          <div class="stepflow">Q2　示波器测 <b>MCU</b> STEP 脚（X=PC6/TIM8_CH1，Y=PB6/TIM4_CH1）<br><small>命令期间应有 500Hz 方波串（高≈1ms），数量=80×mm（10mm→800 个）</small></div>
+          <div class="br">├─ 无脉冲 → 固件层：定时器在跑但引脚没输出（GPIO AF / TIM8 MOE / 台上固件版本不同）→ 交固件侧</div>
+          <div class="br">└─ 有脉冲 →</div>
+          <div class="stepflow">Q3　测<b>驱动板</b> STEP 脚</div>
+          <div class="br">├─ 无脉冲 → 断线 / 虚焊 / 接错脚 / 排针接触不良（T1-5）</div>
+          <div class="br">└─ 有脉冲 → 量脉宽：高、低各 ≥1µs（当前树 500Hz/50% 高≈1ms，此原因概率极低）</div>
+          <div class="stepflow" style="border-color:var(--org);">脉宽正常仍不动 → 相线接错 / 线圈断路（T2-10）+ 盘轴确认机械未卡死</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>梯队排查清单（按「可能性 ÷ 验证成本」排序，先做 T0）</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>成因</th><th>① 机理（一句）</th><th>② 判定（万用表 / 示波器）</th><th>③ 预期读数</th></tr>
+      </thead>
+      <tbody>
+        <tr class="trow0"><td class="num"><span class="chip t0">T0</span>1</td><td><b>EN 未生效</b>（极性低有效 / 悬空 / 线缆断）</td>
+          <td class="mech">EN 为高或悬空时 A4988 输出级全关断、线圈零电流；固件只按自身状态机报完成。</td>
+          <td>运动命令期间，分别量 MCU 的 EN 脚与驱动板 EN 脚（参考各自 GND）。</td>
+          <td>两处均 ≤0.8V；MCU 低而板高 → 线断/虚焊/接错/共地；两处都高 → 固件未使能（台上版本/命令路由）。</td></tr>
+        <tr class="trow0"><td class="num"><span class="chip t0">T0</span>2</td><td><b>VMOT 缺失或 &lt;8V</b></td>
+          <td class="mech">功率级无供电（或低于 8V 超规格）→ 全桥不斩波、线圈零电流。常见翻车：主控板由 USB/调试器供电正常，VMOT 独立电源没开/保险断/急停回路断开。</td>
+          <td>量驱动板 VMOT 对 GND；顺带查动力电源开关、保险、急停、端子压接。</td>
+          <td>8–35V（典型 12/24V），运动期间不掉压；0V=没供上，5V=超规格。</td></tr>
+        <tr class="trow0"><td class="num"><span class="chip t0">T0</span>3</td><td><b>限流电位器归零（Vref≈0）</b></td>
+          <td class="mech">Vref=0 → 峰值电流=0，驱动器"在运行"但线圈无电流，电机无力矩无声（新模块常出厂归零/过低）。</td>
+          <td>驱动上电，量 VREF 脚（电位器中心抽头）对 GND。</td>
+          <td>I=Vref/(8·Rs)；Rs=0.1Ω 时 1A↔0.8V；17HS4401 按 1.7A → ≈1.36V（Rs 以模块实际为准）；≈0V → 命中。</td></tr>
+        <tr class="trow0"><td class="num"><span class="chip t0">T0</span>4</td><td><b>MCU 与驱动器不共地</b></td>
+          <td class="mech">两套地参考不一致 → STEP/EN 电平相对驱动逻辑阈值乱飘，信号无效甚至不定态。</td>
+          <td>万用表直流档量 MCU GND 与驱动 GND；测信号一律以驱动板 GND 为参考。</td>
+          <td>&lt;0.3V；&gt;1V 即异常。</td></tr>
+        <tr class="trow1"><td class="num"><span class="chip t1">T1</span>5</td><td><b>STEP 未到达驱动板</b>（断线/虚焊/接错/排针）</td>
+          <td class="mech">定时器在 MCU 内跑满、固件报完成，但 STEP 沿断在物理链路，驱动收不到 → 不动（此时保持力矩应正常）。</td>
+          <td>示波器先测 MCU STEP 脚（PC6/PB6），再测驱动板 STEP 脚；必要时量线缆通断。</td>
+          <td>MCU 脚：500Hz 方波串（高≈1ms），数量=80×mm；驱动板脚同形；板脚平线 → 线缆问题；MCU 脚无脉冲 → 固件层。</td></tr>
+        <tr class="trow1"><td class="num"><span class="chip t1">T1</span>6</td><td><b>STEP 脉宽过窄 / 频率超限</b></td>
+          <td class="mech">A4988 要求 STEP 高、低各 ≥1µs：脉宽过窄沿被忽略（完全不动），频率过高丢步/失步（通常有声）。</td>
+          <td>示波器量 STEP 高/低脉宽与频率；DIR 变化到 STEP 沿 ≥200ns。</td>
+          <td>高≥1µs、低≥1µs。当前树固件 500Hz/50%（高≈1ms）远大于下限，此原因概率极低；仅当台上版本不同/改过频率时重点复查。</td></tr>
+        <tr class="trow1"><td class="num"><span class="chip t1">T1</span>7</td><td><b>nSLEEP / nRESET 被拉低或悬空</b></td>
+          <td class="mech">nSLEEP 低 → 全桥休眠零输出；nRESET 低 → 逻辑复位不工作。模块一般默认上拉，裸片/个别模块需自查。</td>
+          <td>万用表量 nSLEEP、nRESET 对 GND。</td>
+          <td>≥2V；≈0V → 命中。</td></tr>
+        <tr class="trow1"><td class="num"><span class="chip t1">T1</span>8</td><td><b>动力电源带载跌落</b>（功率不足/线阻过大）</td>
+          <td class="mech">空载量着够，一斩波就被拉垮到 &lt;8V（欠压），驱动反复关断 → 不动或抖动。</td>
+          <td>万用表/示波器挂 VMOT，发运动命令同时观察。</td>
+          <td>运动期间始终 ≥8V；塌陷 → 电源功率不足/线太细/端子接触电阻大/大电解电容缺失。</td></tr>
+        <tr class="trow1"><td class="num"><span class="chip t1">T1</span>9</td><td><b>过流 / 过热保护锁死（OCP/TSD）</b></td>
+          <td class="mech">相线短路/错接触发内部 OCP，或持续大电流过热触发 TSD，输出级关断 → 无力矩无声（多数模块无 FAULT 灯，只能靠测量）。</td>
+          <td>摸芯片温度；串电流表量 VMOT 电流；断电重上电后复测同一命令。</td>
+          <td>正常斩波：芯片温热、VMOT 电流数百 mA~A 级；锁死：电流≈0。重上电恢复但一运动又锁 → 先查电机短路（相间/对壳）。</td></tr>
+        <tr class="trow2"><td class="num"><span class="chip t2">T2</span>10</td><td><b>相线接错 / 线圈断路</b></td>
+          <td class="mech">两相交叉错接或某一线圈断路 → 合成磁场失效/力矩极弱：双断完全不动、单断微抖或不动。</td>
+          <td>断电拔线，电阻档分别量 1A-1B、2A-2B，再量相间、对机壳。</td>
+          <td>同相 1–10Ω 且两相对称（差&lt;10%）；相间/对壳 OL；断路 → OL（∞）。</td></tr>
+        <tr class="trow2"><td class="num"><span class="chip t2">T2</span>11</td><td><b>微步跳线 MS1/MS2/MS3</b></td>
+          <td class="mech">只改变步距与电流形状，不改变"是否转动"——几乎不可能是完全不动的原因（作排除项）。</td>
+          <td>量 MS1-3 电平对照真值表；你们固定 1/16（三脚全高）。</td>
+          <td>与目标细分一致即可；即便不一致只会位移量错误，不会完全不动。</td></tr>
+        <tr class="trow2"><td class="num"><span class="chip t2">T2</span>12</td><td><b>驱动器 / 模块损坏</b></td>
+          <td class="mech">输出级烧毁或模块故障，无斩波无电流。</td>
+          <td>前 11 项全过后，换一块已知好模块（同供电/同信号）对比。</td>
+          <td>好板命令时有斩波电流/电机转动；坏板没有。换板前先核对接线与限流，避免再烧。</td></tr>
+      </tbody>
+    </table>
+    <div class="exclude">排除项（看着像、不会导致「完全不动」）：STEP 与 DIR 接反（仍会动，只是方向/动作怪异）；串口/波特率（固件都回完成了，链路正常）；机械卡死（有电流时会堵转啸叫，本现象无声，但盘轴确认最稳）；微步细分（见 T2-11）。</div>
+  </div>
+
+  <div class="card">
+    <h2>预期读数速查</h2>
+    <table>
+      <thead><tr><th>测量点</th><th>预期读数</th><th>异常判据</th></tr></thead>
+      <tbody>
+        <tr><td>ENABLE（X=PA5 / Y=PD7）</td><td>运动时 ≤0.8V（低=使能）</td><td>恒 ~3.3V → 未使能</td></tr>
+        <tr><td>VMOT – GND</td><td>8–35V，运动不掉压</td><td>0V / &lt;8V / 带载塌陷</td></tr>
+        <tr><td>VREF – GND</td><td>&gt;0V（Rs=0.1Ω：1A=0.8V；17HS4401≈1.36V）</td><td>≈0V → 限流归零</td></tr>
+        <tr><td>MCU GND ↔ 驱动 GND</td><td>&lt;0.3V</td><td>&gt;1V → 不共地</td></tr>
+        <tr><td>STEP（MCU 脚 / 驱动板脚）</td><td>500Hz 方波，高≈1ms，数量=80×mm</td><td>MCU 无 → 固件层；板无 → 线缆</td></tr>
+        <tr><td>nSLEEP / nRESET</td><td>≥2V</td><td>≈0V → 休眠/复位</td></tr>
+        <tr><td>电机线圈（断电）</td><td>同相 1–10Ω，两相对称；相间/对壳 OL</td><td>断路 → OL；短路 → 0Ω</td></tr>
+        <tr><td>芯片温度 / VMOT 电流</td><td>温热可手按 / 数百 mA~A</td><td>冰冷 + 电流≈0 → 没工作或保护锁死</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="foot">
+    依据：仓库冻结文档（电控/资料/A4988-参数备忘.md；电控/资料/硬件映射待确认表.md；docs/reports/引脚真值表-Codex-2026-09-18.md；当前工作树 ec_axis_driver.c / ec_board_stm32.c）+ A4988 数据手册（EN 低有效、STEP 高/低各 ≥1µs、VMOT 8–35V、ITripMAX=Vref/(8·Rs)）。<br>
+    边界：本文只给测量判据与预期读数，不替代实机测量；台上烧录的固件版本未与当前工作树核对；串口日志未收到，收到后可进一步核对回包字段与使能/计数时序。接线、上电、烧录、实机运动按项目纪律执行。
+  </div>
+
+</div>
+</body>
+</html>

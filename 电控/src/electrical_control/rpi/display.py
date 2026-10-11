@@ -15,7 +15,7 @@ from electrical_control.protocol import DisplayContent
 from electrical_control.rpi import ItemTaskContext, PendingRender
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayViewModel:
     """Four competition-required display fields: seq / name / image / success total."""
 
@@ -62,6 +62,25 @@ def build_display_view(
     )
 
 
+def split_color_shape(name: str) -> tuple[str | None, str | None]:
+    """本地名称 -> (颜色, 形状)：``"青色正方体"`` -> ``("青色", "正方体")``。
+
+    屏幕两段显示要分别写「颜色」「形状」两行（2026-09-18 用户要求），但
+    BATCH_TARGETS 每目标只有 7 字节，**线格式里没有颜色/形状字段**（校赛模式下
+    那一个 id 字节承载的就是 box_id），树莓派手里只有本地名称表（TF 卡
+    ``names.json``，如 ``{"1": "青色正方体"}``）。所以颜色/形状**只能从本地名称就地
+    拆出**，不去猜、也不改线格式。
+
+    拆不出（名称里没有「色」字，如 ``"锂离子电池"``）时颜色返回 None（屏幕显示
+    ``—``），整个名称作为形状返回 —— 只影响显示文案，不参与任何决策。
+    """
+
+    head, sep, tail = name.partition("色")
+    if not sep or not head or not tail:
+        return None, name or None
+    return head + sep, tail
+
+
 class DisplayRenderer(Protocol):
     """Real HDMI rendering is injected at deployment; host uses FakeDisplayRenderer."""
 
@@ -96,4 +115,5 @@ __all__ = [
     "DisplayViewModel",
     "FakeDisplayRenderer",
     "build_display_view",
+    "split_color_shape",
 ]

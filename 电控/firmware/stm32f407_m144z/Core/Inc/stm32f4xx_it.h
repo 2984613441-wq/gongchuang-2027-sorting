@@ -55,7 +55,8 @@ void SVC_Handler(void);
 void DebugMon_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
-void USART3_IRQHandler(void);
+void USART2_IRQHandler(void);   /* 主链路（2026-09-15 由 USART3 切换） */
+void USART3_IRQHandler(void);   /* 备用链路 */
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */

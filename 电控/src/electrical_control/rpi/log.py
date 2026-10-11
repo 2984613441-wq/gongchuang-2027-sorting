@@ -21,7 +21,7 @@ STAGE = "stage"
 LOG_KINDS = frozenset({STARTUP, TASK, RESULT, DISPLAY, FAULT, STAGE})
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LogEntry:
     kind: str
     now: float

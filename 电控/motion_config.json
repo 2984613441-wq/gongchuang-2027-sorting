@@ -1,0 +1,9 @@
+{
+  "motion_speed_mm_per_s": 50.0,
+  "pick_action_time_s": 2.0,
+  "z_axis_time_s": 0.5,
+  "_note": "THIS IS A PLACEHOLDER - MUST BE CALIBRATED WITH REAL HARDWARE",
+  "_calibration_status": "NOT_CALIBRATED",
+  "_calibration_date": null,
+  "_calibration_method": "Run tools/calibrate_motion.py with real hardware"
+}

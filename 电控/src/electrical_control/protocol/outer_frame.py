@@ -78,7 +78,7 @@ def crc16_modbus(data: bytes) -> int:
     return crc & 0xFFFF
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class OuterFrame:
     version: int
     sender: Device

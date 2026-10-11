@@ -27,7 +27,7 @@ def task_context(frame_seq: int, target_seq: int) -> ItemTaskContext:
         "round-new",
         7,
         frame_seq,
-        ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0),
+        ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0, None, None),
     )
 
 

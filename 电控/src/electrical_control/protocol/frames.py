@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import PayloadError
+from .item_context import _ITEM_TASK_PAYLOAD_LEN
 from .outer_frame import VERSION, OuterFrame, encode_outer_frame
 from .types import Command, Device
 
@@ -21,7 +22,7 @@ def _u32(name: str, value: int) -> int:
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ItemResultPayload:
     target_seq: int
     result_code: int
@@ -75,15 +76,16 @@ def encode_item_task_frame(
 ) -> bytes:
     """Build an ITEM_TASK outer frame from a full, caller-supplied payload.
 
-    The caller must provide the complete frozen 8-byte payload (build it with
-    ``encode_item_task_payload``); this helper does not guess the wire format.
+    The caller must provide the complete 12-byte payload (V0.9, P3 2026-09-16:
+    drop point + grasp point; build it with ``encode_item_task_payload``); this
+    helper does not guess the wire format.
     """
 
     if not isinstance(payload, (bytes, bytearray, memoryview)):
         raise PayloadError("payload must be bytes-like")
     payload = bytes(payload)
-    if len(payload) != 8:
-        raise PayloadError("ITEM_TASK payload must be exactly 8 bytes")
+    if len(payload) != _ITEM_TASK_PAYLOAD_LEN:
+        raise PayloadError(f"ITEM_TASK payload must be exactly {_ITEM_TASK_PAYLOAD_LEN} bytes")
     frame = OuterFrame(
         version=VERSION,
         sender=Device.RASPI,

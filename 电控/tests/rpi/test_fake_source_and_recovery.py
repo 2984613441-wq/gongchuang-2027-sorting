@@ -7,7 +7,7 @@ from electrical_control.rpi import FakeTaskSource, Scheduler, SchedulerState, Ve
 
 
 def task(target_seq: int) -> ItemTaskPayload:
-    return ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0)
+    return ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0, None, None)
 
 
 class FakeSourceAndRecoveryTests(unittest.TestCase):

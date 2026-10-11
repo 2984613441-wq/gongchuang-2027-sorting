@@ -1,0 +1,65 @@
+#!/bin/sh
+# 2026-09-22 DSH: 开机自动拉起生产视觉发送程序（监督式）+ 现场取证
+#
+# 2026-09-23 修（依据外部节点 lsof/dmesg 证据）：
+#   真正持有摄像头的是 GUI 程序 /maixapp/apps/launcher/launcher（曾见 PID 863）
+#     —— 它打开了 /dev/cvi-vi、/dev/cvi-vpss、/dev/cvi-vo
+#   而 launcher_daemon 只是启动器守护；**maixvision_server 经 lsof 证明不持有摄像头**
+#     （只有 socket/eventfd，无任何 /dev/cvi-*）⇒ 不再杀它（它还是 MaixVision 的连接通道，杀了没必要）
+#   前三版 free_camera() 只匹配 "launcher_daemon" ⇒ 漏掉 GUI ⇒ sender 建 VI 通道失败 ✗（这就是根因）
+#
+# 与外部方案的两处不同（有意为之）：
+#   ① 同时杀 launcher_daemon 与 launcher（daemon 可能把 GUI 重新拉起）⇒ 保留两者
+#   ② 连杀两轮（间隔 2 秒），防"杀完被拉起"
+SUP=/root/vision_supervisor.sh
+LOG=/var/log/vision-sender.log
+BOOT=/var/log/vision-boot.log
+
+free_camera() {
+    for round in 1 2; do
+        for pat in launcher_daemon launcher benchmark; do
+            for p in $(ps | grep "$pat" | grep -v grep | awk '{print $1}'); do
+                echo "[init] kill $pat pid=$p (round $round)" >> "$BOOT"
+                kill "$p" 2>/dev/null
+            done
+        done
+        sleep 2
+    done
+}
+
+start_it() {
+    # 🛡 守卫（2026-09-23 补）：已在跑就不重复起。
+    #    踩过的坑：rc.local 里也挂过一行启动监督器 ⇒ 两个监督器各拉一个 sender ⇒
+    #    两个 sender 抢摄像头 ⇒ "vi get frame timeout" / "camera open failed"（实测）
+    if ps | grep '[v]ision_supervisor' >/dev/null; then
+        echo "[init] 已有监督器在跑，不重复启动 $(date '+%F %T')" >> "$BOOT"
+        return 0
+    fi
+    echo "=== boot $(date '+%F %T') ===" >> "$BOOT"
+    free_camera
+    echo "--- 释放后相关进程 ---" >> "$BOOT"
+    ps | grep -E 'maixvision|launcher|benchmark|stage1|vision_supervisor|uvc' | grep -v grep >> "$BOOT" 2>&1
+    echo "--- 释放后负载 ---" >> "$BOOT"
+    uptime >> "$BOOT" 2>&1
+    echo "[init] 起监督器" >> "$LOG"
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$SUP" >> "$LOG" 2>&1 &
+    else
+        nohup "$SUP" >> "$LOG" 2>&1 &
+    fi
+    echo "[init] started" >> "$BOOT"
+}
+
+stop_it() {
+    for p in $(ps | grep '[v]ision_supervisor' | awk '{print $1}'); do kill "$p" 2>/dev/null; done
+    for p in $(ps | grep '[s]tage1_color_v6_send' | awk '{print $1}'); do kill "$p" 2>/dev/null; done
+    echo "[init] stopped $(date '+%F %T')" >> "$BOOT"
+}
+
+case "$1" in
+    start)   start_it ;;
+    stop)    stop_it ;;
+    restart) stop_it; sleep 1; start_it ;;
+    status)  ps | grep '[v]ision_supervisor' >/dev/null && echo running || echo "not running" ;;
+    *)       echo "usage: $0 {start|stop|restart|status}"; exit 1 ;;
+esac

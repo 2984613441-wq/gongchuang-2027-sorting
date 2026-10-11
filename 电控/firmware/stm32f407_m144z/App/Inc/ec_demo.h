@@ -11,8 +11,9 @@
  * caller (ec_diag) gates the diagnostic command set while the demo is active
  * and starts/stops the demo; this module only owns the loop itself.
  *
- * NOTE: move frequency / leg distance / servo pulse widths are PLACEHOLDERS,
- * tuned for a clearly-visible demo (800 Hz, 40 mm legs, 1000/1900 us). */
+ * NOTE: move frequency / leg distance are PLACEHOLDERS, tuned for a
+ * clearly-visible demo (800 Hz, 40 mm legs). Servo pulse widths use the
+ * measured values 1100 us (open/lower) and 1900 us (close/raise). */
 
 void ec_demo_init(void);
 /* Begin the loop. Returns false (and stays inactive) if already active or if

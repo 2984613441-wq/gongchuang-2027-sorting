@@ -116,9 +116,6 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
   /* USER CODE END TIM4_MspInit 0 */
     /* Peripheral clock enable */
     __HAL_RCC_TIM4_CLK_ENABLE();
-    /* TIM4 interrupt Init */
-    HAL_NVIC_SetPriority(TIM4_IRQn, 1, 0);
-    HAL_NVIC_EnableIRQ(TIM4_IRQn);
   /* USER CODE BEGIN TIM4_MspInit 1 */
 
   /* USER CODE END TIM4_MspInit 1 */
@@ -130,9 +127,6 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
   /* USER CODE END TIM8_MspInit 0 */
     /* Peripheral clock enable */
     __HAL_RCC_TIM8_CLK_ENABLE();
-    /* TIM8 update interrupt Init */
-    HAL_NVIC_SetPriority(TIM8_UP_TIM13_IRQn, 1, 0);
-    HAL_NVIC_EnableIRQ(TIM8_UP_TIM13_IRQn);
   /* USER CODE BEGIN TIM8_MspInit 1 */
 
   /* USER CODE END TIM8_MspInit 1 */
@@ -144,9 +138,6 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
   /* USER CODE END TIM9_MspInit 0 */
     /* Peripheral clock enable */
     __HAL_RCC_TIM9_CLK_ENABLE();
-    /* TIM9 interrupt Init */
-    HAL_NVIC_SetPriority(TIM1_BRK_TIM9_IRQn, 1, 0);
-    HAL_NVIC_EnableIRQ(TIM1_BRK_TIM9_IRQn);
   /* USER CODE BEGIN TIM9_MspInit 1 */
 
   /* USER CODE END TIM9_MspInit 1 */
@@ -197,10 +188,10 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
   /* USER CODE END TIM2_MspPostInit 0 */
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**TIM2 GPIO Configuration
-    PB10     ------> TIM2_CH3
     PB11     ------> TIM2_CH4
+    （PB10 于 2026-09-18 让给 USART3_TX 驱动总线舵机，见 HAL_UART_MspInit(USART3)）
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
+    GPIO_InitStruct.Pin = GPIO_PIN_11;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -469,7 +460,17 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE BEGIN USART2_MspInit 1 */
-
+    /* USART2 中断使能 —— 主链路 RX（2026-09-15 由 USART3 切换为 USART2）。
+     * 原本只有 USART3_MspInit 使能 NVIC；主链路改到 USART2 后必须在此使能，
+     * 否则 HAL_UART_Receive_IT 收不到任何数据。
+     *
+     * 2026-09-18 修复（堵转挂死根因）：
+     * 将 USART2 中断优先级从 0（最高）改为 3，确保步进 TIM 中断（优先级 1）
+     * 不会被 UART 发送阻塞。堵转时若 TIM 中断被 UART 抢占，会导致计数永不递减
+     * → 中断风暴 → 主循环饿死 → IWDG 复位 → 只能断电重启。
+     * 正确优先级：TIM(1) > SysTick(2) > UART(3)，确保实时任务优先执行。 */
+    HAL_NVIC_SetPriority(USART2_IRQn, 3, 0);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
   /* USER CODE END USART2_MspInit 1 */
   }
   else if(huart->Instance==USART3)
@@ -480,20 +481,28 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     /* Peripheral clock enable */
     __HAL_RCC_USART3_CLK_ENABLE();
 
-    __HAL_RCC_GPIOD_CLK_ENABLE();
+    /* 2026-09-18 L4 批准（用户明示"那就可以"）：USART3_TX 由 PD8 迁至 PB10，
+     * 用于驱动自适应夹爪的 HX-06L 总线舵机（幻尔总线舵机协议，115200）。
+     * 交换代价：放弃原 PD8/PD9「备用链路」——该链路在业务代码中零应用、
+     * 板端亦无接线，故净亏为零。PB10 是唯一选择：舵机信号线物理上即接于
+     * PB10，而 PB10 的复用功能中只有 USART3_TX 一个 UART 选项。
+     * 注意：PB10 已在 HAL_TIM_MspPostInit(TIM2) 中被释放，见该处说明。 */
+    __HAL_RCC_GPIOB_CLK_ENABLE();
     /**USART3 GPIO Configuration
-    PD8     ------> USART3_TX
-    PD9     ------> USART3_RX
+    PB10    ------> USART3_TX
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+    GPIO_InitStruct.Pin = GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART3;
-    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /* USART3 interrupt Init */
-    HAL_NVIC_SetPriority(USART3_IRQn, 0, 0);
+    /* USART3 interrupt Init
+     * 2026-09-18 修复（堵转挂死根因）：
+     * 将 USART3 中断优先级从 0（最高）改为 3，与 USART2 保持一致。
+     * USART3 用于 HX-06L 总线舵机控制，非实时任务，必须让位给步进 TIM。 */
+    HAL_NVIC_SetPriority(USART3_IRQn, 3, 0);
     HAL_NVIC_EnableIRQ(USART3_IRQn);
   /* USER CODE BEGIN USART3_MspInit 1 */
 
@@ -525,7 +534,8 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2|GPIO_PIN_3);
 
   /* USER CODE BEGIN USART2_MspDeInit 1 */
-
+    /* USART2 中断关闭（主链路，见 MspInit 说明） */
+    HAL_NVIC_DisableIRQ(USART2_IRQn);
   /* USER CODE END USART2_MspDeInit 1 */
   }
   else if(huart->Instance==USART3)

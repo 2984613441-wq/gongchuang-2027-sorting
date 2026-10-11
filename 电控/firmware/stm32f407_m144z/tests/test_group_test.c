@@ -94,7 +94,7 @@ static void test_directions_and_servo_positions(void)
 {
     unsigned x;
     unsigned y;
-    const uint16_t pulses[] = { UINT16_C(1000), UINT16_C(1900) };
+    const uint16_t pulses[] = { UINT16_C(1100), UINT16_C(1900) };
     unsigned p;
 
     for (x = 0U; x < 2U; ++x) {
@@ -128,12 +128,12 @@ static void test_partial_start_failures(void)
         if (stage <= FAIL_ENABLE) {
             TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0,
                                              EC_DIRECTION_1,
-                                             UINT16_C(1000), 0U,
+                                             UINT16_C(1100), 0U,
                                              false, false));
         } else {
             TEST_ASSERT(ec_group_test_start(EC_DIRECTION_0,
                                             EC_DIRECTION_1,
-                                            UINT16_C(1000), 0U,
+                                            UINT16_C(1100), 0U,
                                             false, false));
             ec_group_test_poll(120U, 0U);
         }
@@ -156,7 +156,7 @@ void test_group_test(void)
 
     reset_group_fixture();
     TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, false, false));
+                                     UINT16_C(1100), 0U, false, false));
     TEST_ASSERT(!ec_group_test_arm(EC_INPUT_START, false, false));
     TEST_ASSERT(!ec_group_test_arm(0U, true, false));
     TEST_ASSERT(!ec_group_test_arm(0U, false, true));
@@ -165,14 +165,14 @@ void test_group_test(void)
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
     fake_group_now_ms = 11000U;
     TEST_ASSERT(ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                    UINT16_C(1000), 0U, false, false));
+                                    UINT16_C(1100), 0U, false, false));
     ec_group_test_stop();
 
     fake_group_now_ms = 12000U;
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
     fake_group_now_ms = 22001U;
     TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, false, false));
+                                     UINT16_C(1100), 0U, false, false));
     TEST_ASSERT(!ec_group_test_is_armed());
 
     fake_group_now_ms = 23000U;
@@ -185,9 +185,9 @@ void test_group_test(void)
     fake_group_now_ms = 34000U;
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
     TEST_ASSERT(!ec_group_test_start((ec_direction_t)7, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, false, false));
+                                     UINT16_C(1100), 0U, false, false));
     TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, false, false));
+                                     UINT16_C(1100), 0U, false, false));
 
     fake_group_now_ms = 35000U;
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
@@ -197,12 +197,12 @@ void test_group_test(void)
     fake_group_now_ms = 36000U;
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
     TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, true, false));
+                                     UINT16_C(1100), 0U, true, false));
 
     fake_group_now_ms = 37000U;
     TEST_ASSERT(ec_group_test_arm(0U, false, false));
     TEST_ASSERT(!ec_group_test_start(EC_DIRECTION_0, EC_DIRECTION_0,
-                                     UINT16_C(1000), 0U, false, true));
+                                     UINT16_C(1100), 0U, false, true));
 
     reset_group_fixture();
     start_group(EC_DIRECTION_1, EC_DIRECTION_0, UINT16_C(1900));
@@ -224,13 +224,13 @@ void test_group_test(void)
         TEST_ASSERT(group_stop_calls == 0U);
 
         reset_group_fixture();
-        start_group(EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1000));
+        start_group(EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1100));
         ec_group_test_poll(101U, input_bit);
         TEST_ASSERT(ec_group_test_mode() == EC_GROUP_TEST_IDLE);
         TEST_ASSERT(group_stop_calls == 1U);
 
         reset_group_fixture();
-        start_group(EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1000));
+        start_group(EC_DIRECTION_0, EC_DIRECTION_1, UINT16_C(1100));
         ec_group_test_poll(120U, 0U);
         TEST_ASSERT(ec_group_test_mode() == EC_GROUP_TEST_RUNNING);
         ec_group_test_poll(121U, input_bit);
@@ -242,7 +242,7 @@ void test_group_test(void)
     test_partial_start_failures();
 
     reset_group_fixture();
-    start_group(EC_DIRECTION_0, EC_DIRECTION_0, UINT16_C(1000));
+    start_group(EC_DIRECTION_0, EC_DIRECTION_0, UINT16_C(1100));
     ec_group_test_stop();
     TEST_ASSERT(ec_group_test_mode() == EC_GROUP_TEST_IDLE);
     TEST_ASSERT(!ec_group_test_blocks_single());

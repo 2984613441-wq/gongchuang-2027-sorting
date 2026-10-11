@@ -1,0 +1,406 @@
+# -*- coding: utf-8 -*-
+"""V6「掩膜现场取证」：抓一帧 + 打印 analyze() 全部中间量。只读，不发 8765。
+
+为什么要有它
+------------
+8765 那条链路每目标只传 7 字节、**不传图像**（stage1_color_v6_send.py:44-62），
+现场没有任何办法看到「掩膜到底怎么坏的」。本脚本把**同一帧**的：
+  · 原始图 PNG（干净，不叠任何东西）
+  · 6 色掩膜拼图 PNG（ROI 内，与 analyze() 同一口径）
+  · 每个候选的 area / bbox / extent / aspect / color_fraction / clipped
+  · 每道 continue 各自的拒绝计数（按色分开）+ 每色「取最大」丢掉几个
+  · 这一帧「本来会发给树莓派的 7 字节」（只编码，不发送）
+一起落到设备磁盘 + stdout。
+
+放哪
+----
+本脚本**不复制任何判据**：它直接 import 生产文件，让生产 analyze() 自己把中间量吐进
+`trace`（见生产文件里 analyze(trace=...) 与 _mark()）。所以现场改阈值，这里自动跟着改，
+不存在"抄本落后生产"的可能。生产文件按候选目录搜索（见 _find_production），
+MaixVision 只推当前打开的那一个文件，故生产文件**不必**与本文件同目录。
+
+怎么跑（SSH 最稳）
+------------------
+    ssh root@172.20.10.9
+    python /root/forensic/forensic_v6_frame.py prism_tri side 02
+MaixVision 直接点运行时没法传参 → 改下面 POSE / LIGHT / SEQ 三行。
+
+不进生产链路
+------------
+本脚本自己不建任何连接；生产文件里只有 BatchSender.send() 才 connect
+（stage1_color_v6_send.py:144），本脚本从不实例化它。相机是独占设备：
+跑本脚本前必须先停掉 V6（见 视觉/现场取证-怎么用.md）。
+
+【总控落盘说明 2026-09-21 ⑤】本文件由 DSH 审核后落盘。
+  · **本文件里已经没有 analyze() 的副本了。** 2026-09-21 之前这里抄了一份
+    analyze_instrumented()，它落后生产 4 次改动（c2 改判据 / c7 M2 / c8 M3 /
+    A' 形心 / C 互斥 / center 字段），会产出"描述着不存在的闸"的现场报告。
+    根因是"存在第二份真相"，所以删掉副本、改由生产函数吐 trace。
+  · 生产侧新增：analyze(..., trace=None) 与 _mark()。trace=None 时行为逐字节不变。
+  · XCHECK 现在是「按色重新打包后的闸计数」对「生产函数自己的 _REJ」逐闸复算，
+    即检查本文件的**重新打包**有没有丢东西，而不是比对两份判据。
+  · 承重假设（已核）：生产文件 import 不触发 main()（有 __main__ 保护），
+    模块级无 socket、无实例化；本脚本从不建连接。
+  · ⚠️ 本文件里的行号引用（如 :166）会随生产文件改动而过期，别当权威用。
+"""
+
+import importlib.util
+import os
+import sys
+import time
+
+import cv2
+import numpy as np
+
+# ── 现场改这三行（MaixVision 直接点运行、没法传参时）──────────────
+POSE = "prism_tri"    # prism_flat / prism_tri / prism_tri_side / cube / cylinder
+LIGHT = "normal"       # normal / side
+SEQ = "01"             # 同姿态同光照重拍时递增
+
+OUT_DIR = os.environ.get("FORENSIC_DIR", "/root/forensic")
+REQ_FRAME_SIZE = 320   # 与 stage1_color_v6_send.py:166 一致（实得尺寸以读到的帧为准）
+WARMUP_FRAMES = 30     # 先丢 30 帧等自动曝光/白平衡稳定，抓的那帧才与生产可比
+MAX_READ_RETRY = 100
+
+# 闸的出处与真名。打印时直接引用，防对错行。
+# ⑤(2026-09-21)：序号已按生产文件重核；c7 是 M2 绝对尺寸下限，c8 是 M3 饱和门
+# （c8 在颜色循环之外，按色表里不会出现）。
+GATE_SRC = {
+    "c1_area": "c1 area",
+    "c2_border": "c2 roi_border>=2",
+    "c3_aspect_extent": "c3 aspect_extent",
+    "c4_color_frac": "c4 color_fraction",
+    "c5_black_core": "c5 black_core",
+    "c7_min_size": "c7 M2 min_size",
+}
+
+
+TARGET_NAME = "stage1_color_v6_send.py"
+
+
+def _find_production():
+    """按候选目录找生产文件；返回 (路径, 找过的路径列表)。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands = [here]
+    if os.environ.get("FORENSIC_PROD_DIR"):
+        cands.append(os.environ["FORENSIC_PROD_DIR"])
+    cands += ["/root/forensic", "/tmp/maixpy_run", "/root", os.getcwd()]
+    tried = []
+    for d in cands:
+        p = os.path.join(d, TARGET_NAME)
+        if os.path.exists(p):
+            return p, tried
+        tried.append(p)
+    return None, tried
+
+
+def load_production():
+    """import 生产文件本体（只用它的常量和纯函数）。
+
+    ⚠️ 2026-09-21 修：MaixVision 运行时只把**当前打开的那一个文件**推到
+    /tmp/maixpy_run/ 再执行，所以取证脚本旁边**不会**有 V6。
+    因此改为按候选目录搜索，并打印**完整路径 + sha256**，
+    用来确认加载的正是现场实际在跑的那一份（hash 对不上就说明版本不同，读数作废）。
+    """
+    src, tried = _find_production()
+    if src is None:
+        raise SystemExit(
+            "找不到 %s。找过这些地方：\n  %s\n"
+            "→ 把你 MaixVision 项目里那份 %s 复制到 /root/forensic/ 即可。"
+            % (TARGET_NAME, "\n  ".join(tried), TARGET_NAME))
+    import hashlib
+    with open(src, "rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    print("[forensic] production = %s" % src)
+    print("[forensic] sha256     = %s" % digest)
+    spec = importlib.util.spec_from_file_location("v6_prod", src)
+    mod = importlib.util.module_from_spec(spec)
+    # 只执行模块级定义：main() 在 __main__ 保护下；socket 只在 BatchSender.send() 里建。
+    spec.loader.exec_module(mod)
+    return mod, src
+
+
+def analyze_via_production(pixels, M, input_rgb=False, detect_size=None):
+    """⑤(2026-09-21) 不再抄一份 analyze()：直接调生产函数，让它把中间量吐进 trace。
+
+    旧版本是本文件的 hand-copy，落后生产 4 次改动，产出的报告描述的闸根本不存在。
+    现在每一行 rows 都由生产函数自己填 —— 结构上不可能与生产不一致。
+    本文件只负责"呈现"（掩膜拼图 / H 直方图 / 表格），不负责判据。
+    """
+    tr = {}
+    results, roi_320 = M.analyze(pixels, input_rgb=input_rgb,
+                                  detect_size=detect_size, trace=tr)
+    det = tr["det"]
+    sx, sy = tr["sx"], tr["sy"]
+    x0, y0 = tr["roi_det"][0], tr["roi_det"][1]
+    original_h, original_w = pixels.shape[:2]
+    report = {
+        "det": det, "sx": sx, "sy": sy, "roi_det": tr["roi_det"],
+        "roi_320": tr["roi_320"], "min_area_det": tr["min_area_det"],
+        "max_area_det": tr["max_area_det"], "min_area_320": tr["min_area_320"],
+        "max_area_320": tr["max_area_320"], "sat": tr["sat"], "colors": {},
+        "h_hist": None, "h_hist_sel": 0, "bright_px": 0, "roi_px": 0,
+    }
+    # 下面这段是纯呈现：掩膜、H 直方图、过曝量化。它退化了也不会让"哪道闸丢了件"的
+    # 结论变错，所以允许留在这里自己算（生产函数里不该塞这些东西）。
+    det_px = cv2.resize(pixels, det, interpolation=cv2.INTER_NEAREST)
+    hsv = cv2.cvtColor(det_px[y0:tr["roi_det"][3], x0:tr["roi_det"][2]],
+                       cv2.COLOR_RGB2HSV if input_rgb else cv2.COLOR_BGR2HSV)
+    H, S, V = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    sel = (S >= 95) & (V >= 35)
+    hist180 = np.bincount(H[sel].ravel(), minlength=180)[:180]
+    report["h_hist"] = np.add.reduceat(hist180, np.arange(0, 180, 5))
+    report["h_hist_sel"] = int(sel.sum())
+    report["roi_px"] = int(hsv.shape[0] * hsv.shape[1])
+    report["bright_px"] = int(np.count_nonzero(V >= 150))
+
+    rows_by = {}
+    for r in tr["rows"]:
+        rows_by.setdefault(r["color"], []).append(r)
+    masks = {}
+    for color in M.COLOR_TO_MATERIAL:
+        ranges = M.COLOR_RANGES[color]
+        mask = cv2.inRange(hsv, ranges[0][0], ranges[0][1])
+        for low, high in ranges[1:]:
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, low, high))
+        raw_px = int(cv2.countNonZero(mask))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, M.KERNEL)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, M.KERNEL)
+        masks[color] = mask
+        rows = rows_by.get(color, [])
+        rec = {"n_contours": len(rows), "raw_px": raw_px,
+               "morphed_px": int(cv2.countNonZero(mask)),
+               "rej": {k: 0 for k in GATE_SRC}, "dropped_by_max": 0, "rows": [],
+               "h_stats": None}
+        m_ys, m_xs = np.nonzero(mask)
+        if len(m_ys):
+            hv = hsv[m_ys, m_xs, 0]
+            rec["h_stats"] = (int(hv.min()), int(np.median(hv)), int(hv.max()))
+        n_pass = 0
+        for i, r in enumerate(rows):
+            x, y, w, h = r["bbox_det"]
+            gate = r["gate"]
+            if gate:
+                rec["rej"][gate] = rec["rej"].get(gate, 0) + 1
+            else:
+                n_pass += 1
+            row = {
+                "i": i, "area_det": r["area_det"], "area_320": r["area_det"] * sx * sy,
+                "bbox_det": r["bbox_det"],
+                "bbox_320": (round((x + x0) * sx), round((y + y0) * sy),
+                             round(w * sx), round(h * sy)),
+                "clamped": (round((x + x0 + w) * sx) > original_w or
+                            round((y + y0 + h) * sy) > original_h),
+                # edge 直接取生产函数算好的值（贴几条 ROI 边是 c2 的判据本身）
+                "clip_roi": bool(r.get("edge", 0)),
+                "edge": r.get("edge", 0),
+                "clip_frame": bool(x <= -x0 or y <= -y0 or
+                                   x + w >= det[0] - x0 or y + h >= det[1] - y0),
+                "aspect": (min(w, h) / max(w, h)) if w and h else 0.0,
+                "extent": (r["area_det"] / (w * h)) if w and h else 0.0,
+                "verdict": ("REJECT " + GATE_SRC.get(gate, gate)) if gate else "PASS",
+            }
+            if "color_fraction" in r:
+                row["color_fraction"] = r["color_fraction"]
+            if "black_core" in r:
+                row["black_core"] = r["black_core"]
+            rec["rows"].append(row)
+        rec["dropped_by_max"] = max(
+            0, n_pass - (1 if any(x["color"] == color for x in results) else 0))
+        report["colors"][color] = rec
+    # 独立复算：把按色汇总的闸计数加回去，必须等于生产函数自己的 _REJ。
+    # 这是本文件唯一真正的交叉验证 —— 它检查"重新打包"有没有丢东西。
+    xcheck = _gate_crosscheck(M, report, tr)
+    return results, report, masks, xcheck
+
+
+def _gate_crosscheck(M, report, tr):
+    """返回 (是否一致, 说明)。逐闸比对"按色汇总" vs 生产函数的全局 _REJ。"""
+    bad = []
+    for gate in sorted(GATE_SRC):
+        summed = sum(report["colors"][c]["rej"].get(gate, 0)
+                     for c in M.COLOR_TO_MATERIAL)
+        actual = M._REJ.get(gate, 0)
+        if summed != actual:
+            bad.append("%s sum=%d prod=%d" % (gate, summed, actual))
+    if len(tr["rows"]) != sum(report["colors"][c]["n_contours"]
+                              for c in M.COLOR_TO_MATERIAL):
+        bad.append("rows 总数对不上")
+    return (not bad), ("OK 逐闸一致（rows=%d，sat=%s）" % (len(tr["rows"]), tr["sat"])
+                       if not bad else "MISMATCH " + "; ".join(bad))
+
+
+def _q(v, fmt="%.4f"):
+    return "-" if v is None else (fmt % v)
+
+
+def print_report(tag, src, frame_wh, report, results, M, png, png_mask, xcheck, ms):
+    line = "=" * 78
+    print(line)
+    print("V6 MASK FORENSICS  tag=%s" % tag)
+    print(line)
+    print("time       : %s" % time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("module     : %s" % src)
+    print("             DETECT_SIZE=%d FRAME_SIZE=%d TASK_ID=%d ENABLE_NETWORK=%s"
+          % (M.DETECT_SIZE, M.FRAME_SIZE, M.TASK_ID, M.ENABLE_NETWORK))
+    print("camera     : requested %dx%d -> got %dx%d"
+          % (REQ_FRAME_SIZE, REQ_FRAME_SIZE, frame_wh[0], frame_wh[1]))
+    print("det frame  : %dx%d  scale=%.6f  sx=sy=%.6f"
+          % (report["det"][0], report["det"][1],
+             report["det"][0] / float(frame_wh[0]), report["sx"]))
+    print("ROI (det)  : %s   size=%dx%d" % (str(report["roi_det"]),
+                                            report["roi_det"][2] - report["roi_det"][0],
+                                            report["roi_det"][3] - report["roi_det"][1]))
+    print("ROI (320)  : %s   内缩 %.3f px = %.3f mm/边"
+          % (str(report["roi_320"]), report["roi_320"][0],
+             report["roi_320"][0] * 0.4855))
+    print("gates      : min_area=%.3f px2(det)=%.2f px2(320)=%.2f mm2"
+          % (report["min_area_det"], report["min_area_320"],
+             report["min_area_320"] * 0.4855 * 0.4855))
+    print("             max_area=%.2f px2(det)=%.2f px2(320)"
+          % (report["max_area_det"], report["max_area_320"]))
+    print("             MIN_COLOR_FRACTION=%.2f  aspect>=0.28  extent>=0.35  ROI_MARGIN=%.3f"
+          % (M.MIN_COLOR_FRACTION, M.ROI_MARGIN))
+    print("XCHECK     : %s  （按色重新打包后的闸计数 vs 生产函数自己的 _REJ）" % xcheck)
+    print("png        : %s" % png)
+    print("png(mask)  : %s" % png_mask)
+    print("elapsed    : %.1f ms" % ms)
+    print("-" * 78)
+
+    for color in M.COLOR_TO_MATERIAL:
+        rec = report["colors"][color]
+        shape, bin_id = M.COLOR_TO_MATERIAL[color]
+        print("-- color=%-7s (%s bin=%d) --" % (color, shape, bin_id))
+        print("   contours=%d candidates=%d dropped_by_max=%d raw_mask_px=%d "
+              "morphed_mask_px=%d mask_H(min/med/max)=%s"
+              % (rec["n_contours"], rec["n_contours"] - sum(rec["rej"].values()),
+                 rec["dropped_by_max"], rec["raw_px"], rec["morphed_px"],
+                 str(rec["h_stats"])))
+        print("   reject  c1_area=%d  c2_border=%d  c3_aspect_extent=%d  "
+              "c4_color_frac=%d  c5_black_core=%d  c7_min_size=%d"
+              % (rec["rej"]["c1_area"], rec["rej"]["c2_border"],
+                 rec["rej"]["c3_aspect_extent"], rec["rej"]["c4_color_frac"],
+                 rec["rej"]["c5_black_core"], rec["rej"]["c7_min_size"]))
+        for r in rec["rows"]:
+            clip = []
+            if r["clip_frame"]:
+                clip.append("frame")
+            if r["clip_roi"]:
+                clip.append("roi")
+            print("   #%-2d area_det=%9.2f area_320=%10.2f bbox320=%-20s "
+                  "extent=%-8s aspect=%-8s cfrac=%-8s clip=%-10s%s -> %s"
+                  % (r["i"], r["area_det"], r["area_320"], str(r["bbox_320"]),
+                     _q(r.get("extent")), _q(r.get("aspect")),
+                     _q(r.get("color_fraction")), "+".join(clip) or "none",
+                     (" black_core=%.3f" % r["black_core"]) if "black_core" in r else "",
+                     r["verdict"]))
+    print("-" * 78)
+    h = report["h_hist"]
+    print("H_histogram (ROI 内 S>=95 & V>=35, %d px of %d; bin=5)"
+          % (report["h_hist_sel"], report["roi_px"]))
+    for start in range(0, 36, 6):
+        print("   " + "  ".join("H[%3d-%3d]=%6d" % (i * 5, i * 5 + 4, h[i])
+                                for i in range(start, start + 6)))
+    print("bright_px(V>=150) = %d / %d  (%.2f%%)   <- 过曝量化"
+          % (report["bright_px"], report["roi_px"],
+             100.0 * report["bright_px"] / max(1, report["roi_px"])))
+    print("-" * 78)
+    print("results    : %d 件" % len(results))
+    shown = []
+    for r in results:
+        left, top, w, hgt = r["bbox"]
+        # ⑤b(2026-09-21) 抓取点必须用候选里的 "center" —— 那才是 encode_target 真正读的字段。
+        # 这里以前**又算了一遍** bbox 中心，于是 A′ 生效的三角形会显示成 (134,173)，
+        # 而 wire 里实际发的是形心 (135,164)：差 9px ≈ 4.4mm，逼近项目 5mm 误差预算。
+        # 报告自己和自己打架，看报告的人会被带偏。根因同 ⑤：重新推导而非取唯一真相。
+        cx, cy = r.get("center") or (int(left + w / 2), int(top + hgt / 2))
+        shown.append((cx, cy))
+        print("   bin=%d color=%-7s bbox320=%s center=(%d,%d) color_fraction=%.4f"
+              % (r["bin"], r["color"], str(r["bbox"]), cx, cy, r["color_fraction"]))
+    payload = M.encode_batch_targets(results, M.TASK_ID)
+    print("wire       : %d bytes (只编码，未发送)  %s"
+          % (len(payload), payload.hex(" ").upper()))
+    # 把 wire 解回来和上面显示的中心逐件对齐：报告内部自洽由这一行保证，
+    # 不一致就当场喊 —— 不再靠人眼比对十六进制。
+    # 格式权威 = 生产文件的 struct.pack(">BBHHB", bin_id, conf, cx, cy, angle) 那行，
+    # 批头 = bytes([count]) + struct.pack(">H", task_id) ⇒ 3 字节。
+    # ⚠️ 交接文档里写的"target_seq/class_id/image_id"是错的（字段名与个数都不对），
+    #    以生产源码为准；本脚本刻意做一次独立解码，就是为了能抓出编码器被改坏。
+    bad = []
+    for i, off in enumerate(range(3, len(payload), 7)):
+        wx = (payload[off + 2] << 8) | payload[off + 3]
+        wy = (payload[off + 4] << 8) | payload[off + 5]
+        if i < len(shown) and (wx, wy) != shown[i]:
+            bad.append("#%d wire=(%d,%d) 显示=%s" % (i, wx, wy, shown[i]))
+        print("   wire[%d] id=%d conf=%d x=%d y=%d angle=0x%02X"
+              % (i, payload[off], payload[off + 1], wx, wy, payload[off + 6]))
+    print("wire检查   : %s"
+          % ("逐件与上面 center 一致" if not bad
+             else "❌ 不一致 " + "; ".join(bad)))
+    print("network    : socket 建立 0 次，向 8765 发送 0 字节")
+    print(line)
+
+
+def save_mask_montage(path, masks, order):
+    panels = []
+    sep = np.full((next(iter(masks.values())).shape[0], 3, 3), 64, np.uint8)
+    for color in order:
+        p = np.dstack([masks[color]] * 3)
+        cv2.putText(p, color, (4, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        panels.append(p)
+        panels.append(sep)
+    cv2.imwrite(path, np.hstack(panels[:-1]))
+
+
+def main(argv):
+    global POSE, LIGHT, SEQ
+    if len(argv) == 2 and argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if len(argv) >= 4:
+        POSE, LIGHT, SEQ = argv[1], argv[2], argv[3]
+
+    M, src = load_production()
+    from maix import camera, image
+
+    tag = "%s_%s_%s" % (POSE, LIGHT, SEQ)
+    os.makedirs(OUT_DIR, exist_ok=True)
+    png = os.path.join(OUT_DIR, tag + ".png")
+    png_mask = os.path.join(OUT_DIR, tag + "_mask.png")
+
+    t0 = time.monotonic()
+    cam = camera.Camera(REQ_FRAME_SIZE, REQ_FRAME_SIZE, image.Format.FMT_RGB888)
+    try:
+        for _ in range(WARMUP_FRAMES):
+            cam.read()
+        frame = None
+        for _ in range(MAX_READ_RETRY):
+            frame = cam.read()
+            if frame is not None:
+                break
+        if frame is None:
+            print("读不到帧：相机被别的进程占着？先把 V6 停掉。")
+            return 2
+        frame_wh = (frame.width(), frame.height())
+        # 和生产完全同一口径：:370 共享视图 + :372 input_rgb=True
+        rgb = image.image2cv(frame, ensure_bgr=False, copy=False)
+        # ⑤ 只有一个 analyze()：这里不再有"副本 vs 生产"的比对，改成
+        #    "按色重新打包后的闸计数 vs 生产函数自己的 _REJ" 的独立复算。
+        results, report, masks, xcheck = analyze_via_production(
+            rgb, M, input_rgb=True)
+        try:
+            frame.save(png)
+        except Exception as exc:      # 极端情况下退回 cv2（颜色已 RGB->BGR）
+            cv2.imwrite(png, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            print("[warn] frame.save 失败(%s)，已退回 cv2.imwrite" % exc)
+        save_mask_montage(png_mask, masks, list(M.COLOR_TO_MATERIAL))
+        print_report(tag, src, frame_wh, report, results, M, png, png_mask,
+                     xcheck, (time.monotonic() - t0) * 1000.0)
+        del rgb
+    finally:
+        cam.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

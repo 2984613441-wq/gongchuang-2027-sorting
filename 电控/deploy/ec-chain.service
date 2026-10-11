@@ -9,9 +9,8 @@
 #
 # 说明：
 #   * 所有路径均为占位，按实际拷贝位置修改 WorkingDirectory / Environment / ExecStart。
-#   * ExecStart 带 --start-round：开机即自动开始一轮 verified new round（部署/示例简化）。
-#     实赛应按操作员确认流程改造（见 README「当前限制」），去掉该参数则链路保持
-#     RECOVERY_LOCK 待命，等操作员确认后再开始。
+#   * systemd 没有现场交互终端，绝不能带 --start-round；真实 --start-round 现在要求
+#     操作员输入 HOME。服务只启动链路并保持 RECOVERY_LOCK 待命。
 #   * User=pi 需在 dialout 组（树莓派默认）才能访问串口 /dev/ttyAMA0。
 #   * 波特率 BAUD=115200 为已冻结的 STM32 USART2 配置（8N1），一般无需修改。
 
@@ -29,14 +28,14 @@ Environment=PYTHONPATH=/opt/ec-chain/src
 Environment=PORT=/dev/ttyAMA0
 Environment=BAUD=115200
 Environment=IMAGE_DIR=/opt/ec-chain/images
-Environment=FONT=/usr/share/fonts/truetype/wqy/wqy-zenhei/wqy-zenhei.ttc
+Environment=FONT=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
 Environment=NAMES_FILE=/opt/ec-chain/names.json
 Environment=ROUND_ID=round-1
 Environment=ROUND_TASK_ID=7
 Environment=FRAME_OUTPUT=fb0
 # ----------------------------------------------------------------------
 
-ExecStart=/opt/ec-chain/deploy/.venv/bin/python /opt/ec-chain/deploy/run_chain.py --start-round
+ExecStart=/opt/ec-chain/deploy/.venv/bin/python /opt/ec-chain/deploy/run_chain.py
 Restart=on-failure
 RestartSec=5
 

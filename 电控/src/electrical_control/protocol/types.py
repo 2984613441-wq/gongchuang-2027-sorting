@@ -32,7 +32,7 @@ class Command(IntEnum):
     ESTOP = 0x26
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Frame:
     """Already-delimited abstract frame.
 
@@ -53,7 +53,7 @@ class DomainEvent:
     """Marker for events that may be consumed by the pure state machine."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayAckMessage:
     """Direction-checked wire message without task-context conclusions."""
 
@@ -64,7 +64,7 @@ class DisplayAckMessage:
     content_crc32: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayAckReceived(DomainEvent):
     task_id: int
     frame_seq: int

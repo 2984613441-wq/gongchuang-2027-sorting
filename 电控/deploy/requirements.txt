@@ -6,20 +6,26 @@
 #   .venv/bin/pip install -r requirements.txt
 #
 # 注意：
-#   * buster 镜像（2021-10-18-raspbian-buster-full，Python 3.7）请装 pillow 9.x
-#     （9.5 是最后支持 3.7 的版本）；Bookworm / 新版系统可直接用 10.x / 11.x。
-#   * pyserial 是 PySerialLink 的运行时依赖（serial_link_serial.py 懒加载）。
+#   * Pillow 版本下限按**实测能跑的版本**写，不要写高：树莓派上装的是系统包
+#     python3-pil 8.1.2（apt 装的），而 display_hdmi.py 已经为 8.x 做了兼容
+#     （Image.Resampling 是 Pillow 9.1 才有的，代码用 getattr 兜底；
+#      ImageOps.fit 自 Pillow 2.7 起就有）。原先写 >=9.0.0 会让 pip 去升级
+#     Pillow —— 在 Pi 上大概率要现场编译，白等半小时还可能失败，且升完并没有
+#     任何新能力被用到。
+#   * pyserial 同理：树莓派上是 **3.5b0**（beta），按 PEP 440 它 **小于** 3.5，
+#     所以 `>=3.5` 会判定不满足并试图重装。下限写 3.4 即可 —— 本工程只用
+#     serial.Serial 的基础读写，3.4 起就没有 API 差异。
 #   * 视觉侧（MaixCAM）线格式未冻结，本清单不含任何视觉专用依赖。
 # ============================================================================
 
-pyserial>=3.5
-pillow>=9.0.0
+pyserial>=3.4
+pillow>=8.1.2
+# PixelToDeviceConverter is part of the live chain (affine matrix arithmetic).
+numpy>=1.19.5
 
 # ----------------------------------------------------------------------------
 # 可选依赖（仅联调/调试用，非运行必需）：
 #   * opencv —— 仅"主机侧预览合成帧 / 视觉联调"需要；正式链路不用。
-#   * numpy  —— opencv 的传递依赖，需要时随 opencv 一起装。
-# 当前未冻结 MaixCAM 线格式，正式运行不需要它们，默认保持注释。
+# NumPy 已列入必需依赖；OpenCV 仍仅供联调，保持注释。
 # ----------------------------------------------------------------------------
 # opencv-python-headless>=4.8
-# numpy>=1.24

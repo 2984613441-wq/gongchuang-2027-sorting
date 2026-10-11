@@ -34,8 +34,8 @@
 #define EC_GATEWAY_DEDUP_CAPACITY 8U
 
 /* Max assembled RX frame and queued TX frame. Every currently-defined command
- * is small (ITEM_TASK identity prefix 3 + X/Y/angle, DISPLAY_ACK 6, ITEM_RESULT
- * 3); 64 bytes leaves ample margin for the not-yet-frozen X/Y/angle payload. */
+ * is small (ITEM_TASK 12 = identity 3 + drop X/Y + angle + grasp X/Y, DISPLAY_ACK
+ * 6, ITEM_RESULT 3); 64 bytes leaves ample margin. */
 #define EC_GATEWAY_RX_MAX 64U
 #define EC_GATEWAY_TX_MAX 64U
 
@@ -89,6 +89,32 @@ typedef struct {
     int16_t item_x_mm10;
     int16_t item_y_mm10;
 
+    /* P3 (2026-09-16): grasp (pick) point latch, same frame and units as
+     * item_x/y. Written in the SAME latch blocks as item_x/y and cleared in the
+     * SAME blocks - splitting the two would recreate the E-18 class of bug
+     * ("new grasp point paired with the previous item's drop point", or the
+     * reverse after a new round). */
+    int16_t item_pick_x_mm10;
+    int16_t item_pick_y_mm10;
+    /* True only once an accepted ITEM_TASK has latched a grasp point.
+     * ec_gateway_item_pick() refuses to answer while this is false, so a call
+     * that arrives before any item (or after a verified new round) fails closed
+     * instead of silently commanding a (0,0) = device-centre grasp. Rejecting
+     * "no grasp point supplied" at the source is the sender's job: the wire has
+     * no "absent pick" encoding (ec_protocol.h), and the Python/PC-tool codecs
+     * refuse to serialise an ITEM_TASK without one. */
+    bool item_has_pick;
+
+    /* 2026-09-18 BU-FIX: ben di mei jie ren he an jian(START/MANUAL_RESET/ESTOP jun xuan kong),
+     * gu wu fa chan sheng MANUAL_NEW_ROUND_CONFIRMED shi jian. wei shi xian "shu mei pai
+     * fa lai ITEM_TASK ji ke jian li xin yi lun", wang guan xu yao zai gou zao gai shi jian shi
+     * dai shang ZHEN SHI de an quan zhuang tai.
+     * 🔴 zhe liang ge zhi bi xu you App ceng mei lun yong zhen shi active_inputs ji suan hou
+     *    tui jin lai, JUE DUI bu ke xie si wei true —— na deng yu rao guo ji ting jian cha.
+     * mo ren false = fail-closed: App ceng mei tui jin lai zhi qian, jian li lun ci yi ding shi bai. */
+    bool last_danger_area_clear;
+    bool last_estop_released;
+
     /* Result code of the current item's completed axis program, used to build
      * ITEM_RESULT and to validate DISPLAY_ACK content. */
     uint8_t item_result_code;
@@ -126,6 +152,10 @@ typedef struct {
 
 void ec_gateway_init(ec_gateway_t *g);
 
+/* 2026-09-18 BU-FIX: App ceng mei lun tui jin zhen shi an quan zhuang tai (jian shang). */
+void ec_gateway_update_safety_state(ec_gateway_t *g, bool danger_area_clear,
+                                    bool estop_released);
+
 /* Feed one RX byte. When a complete, CRC-valid frame has been assembled it is
  * dispatched and the resulting transition returned. When no frame completed
  * (or the frame was rejected / out of context), returns a transition with the
@@ -147,6 +177,31 @@ ec_state_t ec_gateway_state(const ec_gateway_t *g);
  * otherwise writes the latched values. */
 bool ec_gateway_item_target(const ec_gateway_t *g, int16_t *x_mm10,
                             int16_t *y_mm10);
+
+/* Read the current item's PICK (grasp) coordinates - same frame and same units
+ * (0.1mm, origin = device center) as ec_gateway_item_target() above; the grasp
+ * point differs per item, the drop point does not.
+ *
+ * P3 (2026-09-16): the temporary bench stub (fixed (0,0), always true) is gone.
+ * The grasp point now comes from the ITEM_TASK latch (offsets 8-11).
+ *
+ * Fail-closed rule: returns false while no accepted ITEM_TASK has latched a
+ * grasp point (item_has_pick == false), i.e. after ec_gateway_init() or after a
+ * verified new round. (0,0) is a legal grasp point (device centre), so it must
+ * only be honoured when a sender actually said so - the call site
+ * (ec_app_start_motion) turns false into POSITION_UNREACHABLE and never guesses
+ * a coordinate. */
+bool ec_gateway_item_pick(const ec_gateway_t *g, int16_t *x_mm10,
+                          int16_t *y_mm10);
+
+/* 2026-09-21 新增：读当前件的**类别 ID**（ITEM_TASK payload offset 1，取值 1..6）。
+ * 用途 = 按类别选择张开脉宽（现场实测三类需要不同开度）。
+ *
+ * Fail-closed 与 ec_gateway_item_pick() 同款：**没有已受理的件**时返回 false
+ * （item_class_id == 0 —— ec_gateway_init 与验证过的新轮次都会把它清零，
+ * 且它和 pick 坐标是同批锁存/同批清除的）。调用方此时必须退回默认张开脉宽
+ * EC_AXIS_GRIPPER_OPEN_US，**绝不猜类别**。 */
+bool ec_gateway_item_class(const ec_gateway_t *g, uint8_t *class_id);
 
 /* Response cache (same window as dedup; cleared on verified new round).
  * Store records the exact response frame bytes for one identity (overwriting

@@ -8,16 +8,32 @@ static unsigned stop_count;
 static uint16_t last_pulse_us;
 static bool port_start_result;
 
-bool ec_servo_port_start_z(uint16_t pulse_us)
+/* Gripper-channel port doubles: ec_servo_test.c (the unit under test here)
+ * drives the GRIPPER channel via ec_servo_port_start/stop. The start/stop
+ * counters below are what this suite asserts on. */
+bool ec_servo_port_start(uint16_t pulse_us)
 {
     start_count++;
     last_pulse_us = pulse_us;
     return port_start_result;
 }
 
-void ec_servo_port_stop_z(void)
+void ec_servo_port_stop(void)
 {
     stop_count++;
+}
+
+/* Z-channel doubles exist only because ec_demo.c is linked into
+ * ec_firmware_host_tests and calls them; this suite never exercises the Z
+ * channel, so they stay inert. */
+bool ec_servo_port_start_z(uint16_t pulse_us)
+{
+    (void)pulse_us;
+    return true;
+}
+
+void ec_servo_port_stop_z(void)
+{
 }
 
 uint32_t ec_servo_port_now_ms(void)
@@ -52,7 +68,9 @@ void test_servo_test(void)
     TEST_ASSERT(!ec_servo_test_start(1500U, 0U, false));
     TEST_ASSERT(start_count == 0U);
 
-    TEST_ASSERT(!ec_servo_test_arm(EC_INPUT_X_HOME, false));
+    /* 2026-09-15 裁决：安全遮罩仅含 EC_INPUT_ESTOP_FB，限位输入不再参与
+     * inhibit。原断言（X_HOME 阻止 arm）按旧遮罩已过时，改为正面断言新契约。 */
+    TEST_ASSERT(ec_servo_test_arm(EC_INPUT_X_HOME, false));
     TEST_ASSERT(!ec_servo_test_arm(EC_INPUT_ESTOP_FB, false));
     TEST_ASSERT(!ec_servo_test_arm(0U, true));
     TEST_ASSERT(!ec_servo_test_is_armed());
@@ -78,7 +96,7 @@ void test_servo_test(void)
 
     fake_now_ms = 13000U;
     TEST_ASSERT(ec_servo_test_arm(0U, false));
-    TEST_ASSERT(!ec_servo_test_start(1500U, EC_INPUT_Z_DOWN, false));
+    TEST_ASSERT(!ec_servo_test_start(1500U, EC_INPUT_ESTOP_FB, false));
     TEST_ASSERT(!ec_servo_test_is_armed());
 
     fake_now_ms = 14000U;
@@ -107,7 +125,7 @@ void test_servo_test(void)
     fake_now_ms = 19000U;
     TEST_ASSERT(ec_servo_test_arm(0U, false));
     TEST_ASSERT(ec_servo_test_start(1700U, 0U, false));
-    ec_servo_test_poll(19001U, EC_INPUT_Y_END);
+    ec_servo_test_poll(19001U, EC_INPUT_ESTOP_FB);
     TEST_ASSERT(!ec_servo_test_is_running());
 
     fake_now_ms = 20000U;

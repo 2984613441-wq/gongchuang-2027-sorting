@@ -1,0 +1,69 @@
+P3 ITEM_TASK 8->12 字节：落地后验证证据
+Wed Sep 16 23:28:08     2026
+
+## 1) C 主机测试（stm32_logic；gcc -std=c11 -Wall -Wextra -Wpedantic -Werror）
+RUN C-GW-PICK-004
+ALL 77 STM32 LOGIC TESTS PASSED
+
+## 2) 跨语言逐字节一致性（含 CRC）+ 8 字节旧载荷 fail-closed
+=== 1/2 ���������ֽ�һ���ԣ��� CRC��
+[GOLDEN] payload (12B)  C == Py : True
+          C : 01 02 02 FC 18 03 E8 FF 00 FA FF 06
+          Py: 01 02 02 FC 18 03 E8 FF 00 FA FF 06
+       ��֡ (26B, �� CRC) C == Py : True
+          C : A5 5A 01 02 03 00 07 00 0B 21 00 0C 01 02 02 FC 18 03 E8 FF 00 FA FF 06 B9 CA
+          Py: A5 5A 01 02 03 00 07 00 0B 21 00 0C 01 02 02 FC 18 03 E8 FF 00 FA FF 06 B9 CA
+[BOUND] payload (12B)  C == Py : True
+          C : FF 02 02 05 AA FA 56 FF FA 56 05 AA
+          Py: FF 02 02 05 AA FA 56 FF FA 56 05 AA
+       ��֡ (26B, �� CRC) C == Py : True
+          C : A5 5A 01 02 03 12 34 00 FF 21 00 0C FF 02 02 05 AA FA 56 FF FA 56 05 AA 14 40
+          Py: A5 5A 01 02 03 12 34 00 FF 21 00 0C FF 02 02 05 AA FA 56 FF FA 56 05 AA 14 40
+
+=== 2/2 8 �ֽھ��غ� fail-closed
+C  ec_proto_decode_item_task(8B)      -> REJECTED
+Py decode_item_task_payload(8B)       -> PayloadError: ITEM_TASK payload must be exactly 12 bytes
+
+OK��C / Python ���ֽ�һ�£��� CRC����8 �ֽھ��غ�˫�����ܾ���fail-closed��
+exit=0
+
+## 3) Python 测试（unittest，按文件跑；本机未装 pytest）
+tests/protocol/test_frames.py :: Ran 6 tests in 0.000s  OK 
+tests/protocol/test_item_task_identity.py :: Ran 9 tests in 0.000s  OK 
+tests/protocol/test_outer_frame.py :: Ran 11 tests in 0.000s  OK 
+tests/protocol/test_protocol_contract.py :: Ran 14 tests in 0.000s  OK 
+tests/protocol/test_protocol_v04_enhanced_a.py :: Ran 10 tests in 0.000s  OK 
+tests/rpi/test_boundaries_and_public_api.py :: Ran 5 tests in 0.008s  OK 
+tests/rpi/test_display.py :: Ran 11 tests in 0.000s  OK 
+tests/rpi/test_display_hdmi.py :: Ran 14 tests in 0.055s  OK 
+tests/rpi/test_fake_source_and_recovery.py :: Ran 3 tests in 0.000s  OK 
+tests/rpi/test_gateway.py :: Ran 19 tests in 0.001s  OK 
+tests/rpi/test_log.py :: Ran 4 tests in 0.000s  OK 
+tests/rpi/test_offline_main_chain.py :: Ran 1 test in 0.000s  OK 
+tests/rpi/test_outbound.py :: Ran 22 tests in 0.001s  OK 
+tests/rpi/test_scheduler_rendering.py :: Ran 13 tests in 0.001s  OK 
+tests/rpi/test_serial_link_serial.py :: Ran 11 tests in 0.002s  OK 
+tests/rpi/test_socket_vision_source.py ::   File "C:\Users\29845\Desktop\工创赛\电控\tests\rpi\test_socket_vision_source.py", line 10, in <module>     import pytest ModuleNotFoundError: No module named 'pytest' 
+tests/rpi/test_vision_ingest.py :: Ran 8 tests in 0.000s  OK 
+tests/integration/test_control_flow_guard.py :: Ran 15 tests in 0.006s  OK 
+tests/integration/test_host_side_chain.py :: Ran 6 tests in 0.002s  OK 
+
+## 3b) tests/rpi/test_socket_vision_source.py（需 pytest，本机缺；用 sys.modules 桩替代后只跑其断言）
+无断言失败
+
+## 4) PC 工具主机自检（--dry-run，不开串口）
+  [自检] OK  codec 拒绝非法载荷：pick-x 超协议域 1450
+  [自检] OK  codec 拒绝非法载荷：pick-y 超协议域 1450
+  [自检] OK  codec 拒绝非法载荷：抓取点缺失（None）
+  [自检] OK  codec 拒绝 8 字节旧载荷（fail-closed）：ITEM_TASK payload must be exactly 12 bytes
+  [自检] 全部通过（14/14）
+
+## 5) 离线演示链（run_chain DEMO 夹具）产出可序列化的 12 字节载荷
+frame_seq=10 drop=(100,200) pick=(-300,0) payload=12B
+frame_seq=11 drop=(300,400) pick=(0,150) payload=12B
+items=2
+
+## 6) 已知遗留（均非 P3 引入，未修）
+a) firmware App 层主机测试自 P2 起无法编译（test_app.c 的 ec_motion_plan_build double 仍是 3 参）；本次顺带修好 double 后 0 error，运行到 test_app.c:171 boot 时序断言失败（HOMING->PREPARE_BARRIER 500ms 窗口），与协议/pick 无关。
+b) 电控/deploy/selftest_failclosed.py:157 SocketVisionSource 返回 None（parse_batch_targets 不填 box_id -> _expand 全拒识）；与 P3 无关，属视觉 box_id 映射遗留。
+c) ec_app.c 中描述台架临时桩的注释已过时（桩已删），按红线未改 ec_app.c。

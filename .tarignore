@@ -1,0 +1,39 @@
+# 编译产物
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+*.o
+*.d
+*.axf
+*.lst
+*.map
+*.dep
+*.crf
+*.bak
+*.ddk
+
+# Keil编译产物（保留源码和项目文件）
+电控/firmware/*/DebugConfig/
+电控/firmware/*/Listings/
+电控/firmware/*/Objects/
+电控/firmware/*/RTE/
+
+# 大型数据文件
+*.mp4
+*.avi
+*.mkv
+历史版本/
+代码/
+演示代码/
+工具/
+
+# 临时文件
+tmp/
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# Git
+.git/

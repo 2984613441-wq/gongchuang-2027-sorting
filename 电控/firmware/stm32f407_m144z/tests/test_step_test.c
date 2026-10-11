@@ -64,7 +64,7 @@ void test_step_test(void) {
   ec_step_test_poll(6020U, 0U); TEST_ASSERT(start_count == 3U);
   TEST_ASSERT(last_frequency_hz == 100U);
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_RUNNING);
-  ec_step_test_poll(6021U, EC_INPUT_X_HOME);
+  ec_step_test_poll(6021U, EC_INPUT_ESTOP_FB); /* 2026-09-15：遮罩仅含 ESTOP */
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
   TEST_ASSERT(ec_step_test_active_axis() == EC_AXIS_NONE);
 
@@ -98,7 +98,7 @@ void test_step_test(void) {
   TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
   TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
                                           100U, 100U, 0U));
-  ec_step_test_poll(25001U, EC_INPUT_X_HOME);
+  ec_step_test_poll(25001U, EC_INPUT_ESTOP_FB); /* 2026-09-15：遮罩仅含 ESTOP */
   TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
   TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_ABORTED);
 
@@ -120,7 +120,7 @@ void test_step_test(void) {
   TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
                                           100U, 10001U, 0U));
   TEST_ASSERT(!ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
-                                          1000001U, 100U, 0U));
+                                          EC_STEP_MAX_STEPS + 1U, 100U, 0U));
   TEST_ASSERT(ec_motion_test_is_armed());
   TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
                                          100U, 100U, 0U));
@@ -130,8 +130,8 @@ void test_step_test(void) {
   fake_now_ms = 28000U;
   TEST_ASSERT(ec_motion_test_arm(0U));
   TEST_ASSERT(ec_motion_test_start_steps(EC_AXIS_X, EC_DIRECTION_0,
-                                         1000000U, 100U, 0U));
-  TEST_ASSERT(last_counted_steps == 1000000U);
+                                         EC_STEP_MAX_STEPS, 100U, 0U));
+  TEST_ASSERT(last_counted_steps == EC_STEP_MAX_STEPS);
   ec_motion_test_on_counted_done();
 
   fake_now_ms = 29000U;
@@ -147,15 +147,13 @@ void test_step_test(void) {
   ec_step_test_stop();
   TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_NONE);
 
-  /* ec_motion_inhibit_from_raw: active-low safety inputs (P2-3). */
+  /* ec_motion_inhibit_from_raw: active-low safety inputs (P2-3).
+   * 2026-09-15：遮罩收敛为仅 EC_INPUT_ESTOP_FB（X/Y 不装限位开关）。 */
   {
-    const uint16_t safety = (uint16_t)(EC_INPUT_X_HOME | EC_INPUT_X_END |
-                                       EC_INPUT_Y_HOME | EC_INPUT_Y_END |
-                                       EC_INPUT_Z_UP | EC_INPUT_Z_DOWN |
-                                       EC_INPUT_ESTOP_FB);
-    TEST_ASSERT(!ec_motion_inhibit_from_raw(safety));        /* all HIGH -> no inhibit */
+    const uint16_t safety = (uint16_t)EC_INPUT_ESTOP_FB;
+    TEST_ASSERT(!ec_motion_inhibit_from_raw(safety));        /* ESTOP HIGH -> no inhibit */
     TEST_ASSERT(ec_motion_inhibit_from_raw(0U));             /* all LOW -> inhibit */
-    TEST_ASSERT(ec_motion_inhibit_from_raw(safety & (uint16_t)~EC_INPUT_ESTOP_FB)); /* ESTOP LOW -> inhibit */
+    TEST_ASSERT(ec_motion_inhibit_from_raw((uint16_t)~EC_INPUT_ESTOP_FB)); /* ESTOP LOW -> inhibit */
   }
 
   /* --- dual-axis counted move (COUNTED_XY) --- */
@@ -210,7 +208,7 @@ void test_step_test(void) {
     TEST_ASSERT(ec_motion_test_start_steps_xy(EC_DIRECTION_0, 100U,
                                               EC_DIRECTION_0, 100U, 100U, 0U));
     TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_MOTION_COUNTED_XY);
-    ec_step_test_poll(40001U, EC_INPUT_X_HOME);
+    ec_step_test_poll(40001U, EC_INPUT_ESTOP_FB); /* 2026-09-15：遮罩仅含 ESTOP */
     TEST_ASSERT(ec_step_test_mode() == EC_STEP_TEST_IDLE);
     TEST_ASSERT(ec_motion_test_step_result() == EC_STEP_RESULT_ABORTED);
 

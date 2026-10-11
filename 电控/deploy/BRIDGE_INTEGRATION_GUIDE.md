@@ -78,7 +78,7 @@ PYTHONPATH=src python deploy/run_chain.py --fake-link --round-id demo \
 
 ## 六、延迟要点
 
-- 串口 **不是** 瓶颈：ITEM_TASK 22 字节 ≈ 1.9ms，单件全往返 73 字节 ≈ 6.3ms。
+- 串口 **不是** 瓶颈：ITEM_TASK 26 字节（P3：14 头/尾开销 + 12 载荷）≈ 2.3ms，单件全往返 77 字节 ≈ 6.7ms。
 - 真正瓶颈是**物理运动**：最坏 46400 步 @4kHz ≈ 11.6s，逼近 15s 上限。
 - 桥接已消除两处人为延迟：MaixCAM 每帧新建 TCP 连接（→ 长连接）、
   run_chain 50ms+50ms 轮询（→ 5ms）。

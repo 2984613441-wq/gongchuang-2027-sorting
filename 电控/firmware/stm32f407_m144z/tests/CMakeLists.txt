@@ -21,6 +21,43 @@ endif()
 enable_testing()
 add_test(NAME ec_firmware_host_tests COMMAND ec_firmware_host_tests)
 
+# Compile-time fail-closed proof. This target deliberately compiles the same
+# ec_app implementation with EC_APP_PROGRESS_SOURCE_ENABLED=0, then tries to
+# enable/feed a token after opening a real motion window. The base must remain
+# unchanged; a runtime setter must not resurrect code removed by the macro.
+add_executable(ec_progress_source_disabled_tests
+    test_progress_disabled.c test_app.c test_diag.c test_step_test.c
+    test_servo_test.c test_group_test.c test_barrier_test.c
+    test_safety_adapter.c
+    ../App/Src/ec_inputs.c ../App/Src/ec_step_test.c ../App/Src/ec_servo_test.c
+    ../App/Src/ec_group_test.c ../App/Src/ec_barrier_test.c ../App/Src/ec_diag.c
+    ../App/Src/ec_demo.c ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c
+    ../App/Src/ec_startup_sequence.c
+    ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c
+    ../../../stm32_logic/src/ec_crc32.c ../../../stm32_logic/src/ec_protocol.c
+    ../../../stm32_logic/src/ec_protocol_gateway.c host_stubs/hal_stub.c)
+target_include_directories(ec_progress_source_disabled_tests PRIVATE
+    ../App/Inc ../../../stm32_logic/include host_stubs)
+target_compile_definitions(ec_progress_source_disabled_tests PRIVATE
+    EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1 EC_SERVO_TEST_BUILD=1
+    EC_GROUP_TEST_BUILD=1 EC_BARRIER_TEST_BUILD=1 EC_APP_TEST_HOOKS=1
+    EC_APP_PROGRESS_SOURCE_ENABLED=0)
+if(MSVC)
+  target_compile_options(ec_progress_source_disabled_tests PRIVATE /W4 /WX /utf-8)
+else()
+  target_compile_options(ec_progress_source_disabled_tests PRIVATE
+      -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME ec_progress_source_disabled_tests
+         COMMAND ec_progress_source_disabled_tests)
+
+# 2026-09-18 新增：总线舵机帧构造与校验（纯逻辑，无 HAL 依赖）
+add_executable(ec_bus_servo_tests
+    test_bus_servo.c ../App/Src/ec_bus_servo.c)
+target_include_directories(ec_bus_servo_tests PRIVATE
+    ../App/Inc ../../../stm32_logic/include host_stubs)
+add_test(NAME ec_bus_servo_tests COMMAND ec_bus_servo_tests)
+
 add_executable(ec_diag_disabled_tests
     test_diag_disabled.c ../App/Src/ec_diag.c)
 target_include_directories(ec_diag_disabled_tests PRIVATE

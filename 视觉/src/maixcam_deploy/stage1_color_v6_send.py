@@ -1,0 +1,673 @@
+"""MaixCAM / MaixVision 单文件：V6 颜色分离稳定版 **+ 树莓派发送桥**。
+
+【这个文件是什么】
+朋友的 V6 原文（`stage1_color_v6_stable.py`）**一个字都没改**，
+只在最上面加了发送桥、在 main() 里插了 2 行。
+→ 打开这个文件、点运行，就会一边在屏幕上画框、一边把结果发给树莓派。
+
+【和原版 V6 的差异，只有 3 处（用 <<<V6-BRIDGE>>> 标出）】
+  1. 顶部多了一段「发送桥」代码
+  2. main() 里 tracker 之后：  sender = BatchSender()
+  3. 循环里 update 之后：      sender.send(results)
+  （外加 finally 里 sender.close()）
+
+【识别逻辑完全没动】颜色阈值、形状映射、稳定/平滑/HOLD 全部照旧。
+
+【线上格式（已冻结，不要改）】
+BATCH_TARGETS：target_count(1) + task_id(2,BE) + target[N]，每 target 7 字节：
+    id_byte(1) + confidence(1,0-100) + X(2,BE) + Y(2,BE) + angle(1,0xFF)
+校赛模式下 id_byte 填 box_id(1..6)（用户 2026-09-17 批准，台账 §2.1）。
+V6 的 `bin` 字段就是货格号，直接当 id_byte。
+
+【出问题先看这三条】
+  · 树莓派要先在 8765 监听，否则这里会打 connect failed（不致命，会一直重试）
+  · bin=None（HOLD 灰框）不会发出去 —— 这是对的
+  · 像素坐标原样透传（320 系），换算口径由树莓派侧负责
+"""
+import os
+import time
+
+import cv2
+import numpy as np
+
+# <<<V6-BRIDGE>>> 发送桥所需的额外 import
+import socket
+import struct
+
+# <<<V6-BRIDGE>>> ================= 发送桥开始 =================
+GATEWAY_HOST = "172.20.10.8"   # 树莓派
+GATEWAY_PORT = 8765
+TASK_ID = 1                    # ⚠️ 绝不能是 0（树莓派 task_id 对不上会整批丢）
+ENABLE_NETWORK = True          # 先设 False 可以只打印不发，用于单独调视觉
+MIN_SEND_INTERVAL_S = 0.10     # 发送节流；V6 最高 6 FPS，不必每帧都发
+
+_ANGLE_NONE = 0xFF
+_TARGET_BYTES = 7
+
+
+def encode_target(row):
+    """把一个 V6 result 编成 7 字节。认不出货格（bin=None）返回 None。"""
+    bin_id = row.get("bin")
+    if bin_id is None:
+        return None          # HOLD 灰框 / 未知颜色 —— 不发货格，也不发这一件
+    if not isinstance(bin_id, int) or not (1 <= bin_id <= 6):
+        return None
+    left, top, w, h = row["bbox"]
+    # F1(2026-09-21)：A' 的形心只有在这里被读到才算生效。
+    # 没有 "center" 键（旧 row / 对称形状回落的旧路径）⇒ 逐字节等同原实现。
+    cx, cy = row.get("center") or (int(left + w / 2), int(top + h / 2))
+    if not (0 <= cx <= 0xFFFF and 0 <= cy <= 0xFFFF):
+        return None
+    # confidence：V6 没有 score，只有 color_fraction。这是【合成值】，不是模型置信度。
+    frac = row.get("color_fraction") or 0.0
+    conf = max(0, min(100, int(round(frac * 100))))
+    return struct.pack(">BBHHB", bin_id, conf, cx, cy, _ANGLE_NONE)
+
+
+def encode_batch_targets(rows, task_id):
+    """把若干 V6 result 编成完整的 BATCH_TARGETS 数据区。bin=None 的会被丢掉。"""
+    if not isinstance(task_id, int) or not (0 <= task_id <= 0xFFFF):
+        raise ValueError("task_id 必须落在 0..65535")
+    if task_id == 0:
+        print("[V6-BRIDGE] WARNING: task_id=0，树莓派可能整批丢弃")
+    payload = bytearray()
+    for row in rows:
+        packed = encode_target(row)
+        if packed is not None:
+            payload += packed
+    count = len(payload) // _TARGET_BYTES
+    if count > 255:
+        raise ValueError("target_count 是 1 字节，不能超过 255")
+    return bytes([count]) + struct.pack(">H", task_id) + bytes(payload)
+
+
+class BatchSender:
+    """带重连的 TCP 发送器。一帧一件都没认出来时不发（不占树莓派的槽）。"""
+
+    def __init__(self, host=GATEWAY_HOST, port=GATEWAY_PORT, task_id=TASK_ID,
+                 enable=ENABLE_NETWORK, interval=MIN_SEND_INTERVAL_S):
+        self._host = host
+        self._port = port
+        self._task_id = task_id
+        self._enable = enable
+        self._interval = interval
+        self._sock = None
+        self._last = 0.0
+        self.sent_frames = 0
+        self.sent_items = 0
+        self.skipped_frames = 0
+
+    def _ensure(self):
+        if self._sock is not None:
+            return True
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect((self._host, self._port))
+            s.settimeout(None)
+            self._sock = s
+            print("[V6-BRIDGE] connected %s:%d" % (self._host, self._port))
+            return True
+        except Exception as exc:  # 桥不能因为网络挂掉就崩视觉
+            print("[V6-BRIDGE] connect failed: %s（下次再试）" % exc)
+            self._sock = None
+            return False
+
+    def _drop(self):
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+
+    def send(self, rows, task_id=None, now=None):
+        """把这一帧的 results 发出去。返回实际发出的件数。"""
+        now = now if now is not None else time.monotonic()
+        if now - self._last < self._interval:
+            return 0
+        self._last = now
+        try:
+            data = encode_batch_targets(
+                rows, self._task_id if task_id is None else task_id)
+        except Exception as exc:
+            print("[V6-BRIDGE] encode failed: %s" % exc)
+            return 0
+        n = data[0]
+        if n == 0:
+            self.skipped_frames += 1
+            return 0
+        if not self._enable:
+            print("[V6-BRIDGE] (disabled) would send %d item(s), %d bytes"
+                  % (n, len(data)))
+            self.sent_frames += 1
+            self.sent_items += n
+            return n
+        if not self._ensure():
+            return 0
+        try:
+            self._sock.sendall(data)
+        except Exception as exc:
+            print("[V6-BRIDGE] send failed: %s -> 重连" % exc)
+            self._drop()
+            return 0
+        self.sent_frames += 1
+        self.sent_items += n
+        return n
+
+    def close(self):
+        self._drop()
+
+    def summary(self):
+        return ("[V6-BRIDGE] 累计发出 %d 帧 / %d 件（跳过空帧 %d 次）"
+                % (self.sent_frames, self.sent_items, self.skipped_frames))
+# <<<V6-BRIDGE>>> ================= 发送桥结束 =================
+
+
+# ============ 以下为 V6 原文，未作任何修改 ============
+FRAME_SIZE = 320
+DETECT_SIZE = 224  # 160 更快；320 更精细。
+TARGET_FPS = 6.0  # 最高显示节奏；计算较慢时不会强行达到该帧率。
+CONFIRM_FRAMES = 2
+SMOOTH_TIME = 0.22  # 秒，越大越平稳，但移动时跟随更慢。
+HOLD_SECONDS = 0.30  # 短时漏检仅保留灰色 HOLD 框，不输出货格。
+MAX_TRACK_GAP = 0.65
+PERF_INTERVAL = 5.0
+PREVIEW_JPEG_QUALITY = 70  # 仅电脑预览 JPEG 质量，原始检测图与设备屏幕不降质。
+LOG_RESULTS = False  # True 时每 5 秒额外输出一行物料结果。
+ROI_MARGIN = 0.01
+MIN_AREA_FRACTION = 0.0015
+MAX_AREA_FRACTION = 0.22
+MIN_COLOR_FRACTION = 0.60   # 2026-09-23 DSH: 只靠颜色判据，贴边阴影使占比下降，放宽
+SHAPE_EXTENT_CENTROID = 0.65   # A'(2026-09-21) ext<此值判为"非中心对称形状"，抓取点改用形心
+_REJ = {}                      # 方案0(2026-09-21) 每帧五道 continue 的拒绝计数
+_REJ_TOT = {}                  # F3(2026-09-21) 进程内累计，用于事件触发打印
+_REJ_C = {}                    # ②(2026-09-21) 同上，但按颜色分开：{gate: {color: n}}
+# ②的理由：全局计数看不出"是哪一色在被丢"。c2_border=6 到底是 6 个红件的碎屑，
+# 还是黑圆柱被整件判掉？后者要改门限，前者不用管。量级差一个决策。
+# ponytail: 只加一层 {gate: {color: n}}，不加直方图/时间序列；要趋势就存日志。
+
+
+def _bump(gate, color=None):
+    """拒绝计数统一入口：同时记全局与按色。全局键名不变，老读法继续有效。"""
+    _REJ[gate] = _REJ.get(gate, 0) + 1
+    if color is not None:
+        _d = _REJ_C.setdefault(gate, {})
+        _d[color] = _d.get(color, 0) + 1
+
+# M2/M3/M5(2026-09-21)：外部报告实测量化后新增的三道门 + black 更严确认。
+# M2 绝对尺寸下限（det 口径；= 320 口径短边 62px / 面积 2600px²）：
+#   实测依据：关掉 c2 后每帧多出的假目标短边 59px@320、面积 2258~2485px²@320，
+#   而最小真件是短边 73px / 面积 3089px²。且过曝把件切成两半时残片 area=1550px²@320、
+#   extent=0.5047（≈理想三角 0.5）⇒ **相对形状判据抓不到，只有绝对面积下限能抓**。
+#   ⚠️ 只加下限，坚决不加上限（实测 cube 的 cyan 候选 99×94 / 8078.6px² 已超出旧"自述带"）。
+MIN_BBOX_SIDE_DET = 30   # 2026-09-23: 43 会误杀窄件（实拍窄边28px@224）         # 短边下限 px(224)
+MIN_AREA_DET_PX = 850.0   # 2026-09-23: 同步放宽面积下限       # 面积下限 px²(224)
+# M3 饱和门：本场景正常帧的 (V>=245 & S<=25) 像素实测为 0 / 0 / 0。
+#   门限 1500px@320 落在"被 c4 打掉(1793)"与"坐标还能用(1257)"之间。
+MAX_SATURATED_PX = 1500
+# M5 black 更严确认：夹爪/机架也是黑的，黑件要求连续 3 帧静置才确认（彩色仍 2 帧）。
+BLACK_CONFIRM_FRAMES = 3
+# AE/AWB 锁定开关：**默认关**。锁定后六色 HSV 阈值必须全部重标，故先留开关、现场取证后再开。
+LOCK_AE_AWB = False
+KERNEL = np.ones((3, 3), np.uint8)
+# ④-②(2026-09-21) 机构扫掠遮罩：夹爪与 X/Y 轴黑方框**本身就是黑的**，与黑圆柱同色。
+# 实测三张不同件的实拍互比：件 bbox 内帧间变化 36.9~67.3%，那两块固定黑物内 0.00~0.06%
+# ⇒ 颜色/亮度/形状/面积全都分不开，唯一与光照无关的判据是"动过没有"。
+# 为什么非做不可：现在挡住幻影的余量只有 3px / 4.6%（短边 59 vs M2 下限 62、
+# 面积 2470 vs 2600），而幻影自身帧间抖动 ±10% ⇒ 换个光照它就会通过 M2 变成"像件"的目标。
+# 由 make_gripper_mask.py 一次性标定产出（那一步由人手动移动机构，本文件绝不自主动）。
+# ⚠️ 文件不存在 ⇒ 这道门**完全不生效**，行为与今天逐字节相同。
+GRIPPER_MASK_PATH = "/root/forensic/gripper_mask.png"
+GRIPPER_MASK_OVERLAP_MAX = 0.0   # 黑候选 bbox 内允许落在遮罩里的比例；0 = 必须完全在遮罩外
+
+# 彩色阈值沿用 V4；黑色收紧亮度并要求深色核心，以降低托盘阴影误检。
+# HSV: H=0..179，S/V=0..255；这些初始阈值仍需现场核对。
+COLOR_RANGES = {
+    "red": [((0, 95, 35), (2, 255, 255)), ((173, 95, 35), (179, 255, 255))],
+    "orange": [((3, 95, 45), (23, 255, 255))],
+    "yellow": [((24, 95, 45), (35, 255, 255))],
+    "green": [((36, 95, 35), (84, 255, 255))],
+    "cyan": [((85, 95, 35), (104, 255, 255))],
+    "blue": [((105, 95, 30), (137, 255, 255))],
+    "black": [((0, 0, 0), (179, 150, 50))],
+}
+COLOR_TO_MATERIAL = {
+    "cyan": ("cube", 1), "green": ("cube", 2),
+    "red": ("triangular_prism", 3), "blue": ("triangular_prism", 4),
+    "black": ("cylinder", 5), "orange": ("cylinder", 6),
+}
+DISPLAY_SHAPE = {"cube": "cube", "cylinder": "cylinder",
+                 "triangular_prism": "tri-prism", "unknown": "unknown"}
+
+
+def _mark(_tr, gate=None, **extra):
+    """⑤(2026-09-21) 取证用：记下"这个轮廓被哪道闸丢了"以及闸的输入量。
+
+    trace=None 时是纯空操作，线上零开销。存在的理由：旧取证脚本抄了一份 analyze()，
+    抄本必然落后（今天已落后 4 次改动），于是在现场产出一份"看起来很像、其实描述的是
+    不存在的闸"的报告。让生产函数自己吐中间量，抄本就不需要了，也就不会再漂移。
+    """
+    if _tr is not None:
+        if gate:
+            _tr["gate"] = gate
+        _tr.update(extra)
+
+
+def analyze(pixels, input_rgb=False, detect_size=None, trace=None,
+            gripper_mask=None):
+    """六色分别找区域，避免阴影将异色物料连成一个目标。只读输入。
+
+    trace: 传一个 dict 就顺带记下每道闸的中间量（只为取证）。默认 None ⇒
+    行为逐字节不变、判定路径零开销。
+    """
+    _REJ.clear()
+    _REJ_C.clear()
+    _REJ.update(c1_area=0, c2_border=0, c3_aspect_extent=0,
+                c4_color_frac=0, c5_black_core=0, c6_black_mutex=0,
+                c7_min_size=0, c8_saturated=0, c9_gripper_mask=0)
+    original_h, original_w = pixels.shape[:2]
+    limit = DETECT_SIZE if detect_size is None else detect_size
+    if limit < 32:
+        raise ValueError("detect_size must be at least 32")
+    scale = min(1.0, float(limit) / max(original_w, original_h))
+    if scale < 1.0:
+        # 最近邻不混合红橙边缘色相；没有使用跳帧或复用上一帧结果。
+        pixels = cv2.resize(pixels, (max(1, round(original_w * scale)),
+                                     max(1, round(original_h * scale))),
+                            interpolation=cv2.INTER_NEAREST)
+    height, width = pixels.shape[:2]
+    sx, sy = original_w / width, original_h / height
+    x0, y0 = int(width * ROI_MARGIN), int(height * ROI_MARGIN)
+    x1, y1 = width - x0, height - y0
+    hsv = cv2.cvtColor(pixels[y0:y1, x0:x1],
+                       cv2.COLOR_RGB2HSV if input_rgb else cv2.COLOR_BGR2HSV)
+    min_area = MIN_AREA_FRACTION * width * height
+    max_area = MAX_AREA_FRACTION * width * height
+    # M3(2026-09-21) 饱和门：过曝会让 S→0，六个彩窗**同时**失配 ⇒ 整件消失；
+    # 更阴险的是"把掩膜切成两半、全闸放行、抓取点偏 8.7mm"（实测 prism_tri r=20）。
+    # 本场景正常帧的 (V>=245 & S<=25) 像素实测为 0/0/0，故这道门几乎零误伤。
+    _sat = int(np.count_nonzero((hsv[:, :, 2] >= 245) & (hsv[:, :, 1] <= 25)))
+    if trace is not None:
+        # ⑤ metadata：取证脚本原本要自己复现 resize/ROI/闸口径才能算这些数，
+        # 复现就是"第二份真相"。这里直接给它唯一的真相。
+        trace.update(det=(width, height), sx=sx, sy=sy, roi_det=(x0, y0, x1, y1),
+                     roi_320=(round(x0 * sx), round(y0 * sy),
+                              round(x1 * sx), round(y1 * sy)),
+                     min_area_det=min_area, max_area_det=max_area,
+                     min_area_320=min_area * sx * sy, max_area_320=max_area * sx * sy,
+                     sat=_sat, rows=[])
+    # ④-② 遮罩与 hsv 同口径：先按同一个 scale 缩到 det 尺寸，再裁到同一个 ROI，
+    # 于是黑候选的 (x,y,w,h) 可以直接索引它，不需要第二套坐标换算。
+    _gm = None
+    if gripper_mask is not None:
+        _gm = gripper_mask
+        if scale < 1.0:
+            _gm = cv2.resize(_gm, (width, height), interpolation=cv2.INTER_NEAREST)
+        _gm = _gm[y0:y1, x0:x1] > 0
+    if _sat >= MAX_SATURATED_PX:
+        _REJ["c8_saturated"] = _sat
+        for _k in _REJ:
+            _REJ_TOT[_k] = _REJ_TOT.get(_k, 0) + _REJ[_k]
+        print("V6 SATURATED frame=%d sat=%d -> 本帧不报目标" % (
+            getattr(analyze, "_frames", 0) + 1, _sat))
+        analyze._frames = getattr(analyze, "_frames", 0) + 1
+        return [], (round(x0 * sx), round(y0 * sy), round(x1 * sx), round(y1 * sy))
+    results = []
+    for color in COLOR_TO_MATERIAL:
+        ranges = COLOR_RANGES[color]
+        mask = cv2.inRange(hsv, ranges[0][0], ranges[0][1])
+        for low, high in ranges[1:]:
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, low, high))
+        # 每种颜色独立去噪和补小洞，不再把所有暗色和彩色区域连在一起。
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, KERNEL)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, KERNEL)
+        contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+        candidates = []
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            # ⑤ 取证：boundingRect 提到面积闸之前。纯函数、不改任何判定，但让被
+            # 面积闸丢掉的轮廓也能报 bbox（旧抄本正是靠这一点才看得见 c1 的现场）。
+            x, y, w, h = cv2.boundingRect(contour)
+            _tr = None
+            if trace is not None:
+                _tr = {"color": color, "area_det": area, "bbox_det": (x, y, w, h),
+                       "gate": None}
+                trace["rows"].append(_tr)
+            if not min_area <= area <= max_area:
+                _bump("c1_area", color)
+                _mark(_tr, "c1_area")
+                continue
+            # 接触 ROI 的区域往往是托盘外背景；不画满屏 CHECK 大框。
+            # C2 改判据(2026-09-21)：从「贴任意 1 条 ROI 边就丢」改成「贴 >=2 条才丢」。
+            # 实测依据：杆子/机架的深色带贴 2~3 条边（(9,253,61,59) 贴 2 条；
+            # (271,9,40,303) 贴 3 条），而真实件只贴 1 条边 —— 用户现场目击：
+            # 蓝正方体 4/5 在识别框内，却被现行 c2 整件丢掉。
+            # 代价：贴 1 条边时只能按可见部分算中心，会偏向可见一侧
+            # （4/5 可见 ≈ 偏 4mm，仍在 5mm 预算内）；可见更少的由 M2 面积下限兜底。
+            # ⚠️ 根因未治：ROI 只内缩 3%=4.37mm，比项目自身 5mm 误差预算还小，
+            #    c2 一直是在替一个"选得太小的 ROI"兜底。正解是重定取景/托盘位置。
+            _edge = ((x <= 1) + (y <= 1) + (x + w >= hsv.shape[1] - 1)
+                     + (y + h >= hsv.shape[0] - 1))
+            # ⑤ 无条件记下贴边数（不只记被丢的）：取证脚本就不必自己再算一遍 c2 判据。
+            _mark(_tr, edge=_edge)
+            if _edge >= 3:   # 2026-09-23 DSH: 贴>=2边就丢 会误杀贴边件（用户实测）
+                _bump("c2_border", color)
+                _mark(_tr, "c2_border")
+                continue
+            # M2(2026-09-21) 绝对尺寸下限：c2 之后、c3 之前。
+            # 它同时是"贴 ROI 边的静物黑块"的兜底与"过曝半件"的唯一解药
+            # （半件 extent≈0.5 与理想三角无异，只有绝对面积能识别）。
+            if min(w, h) < MIN_BBOX_SIDE_DET or area < MIN_AREA_DET_PX:
+                _bump("c7_min_size", color)
+                _mark(_tr, "c7_min_size")
+                continue
+            # ④-②(2026-09-21) c9 机构扫掠遮罩：**只对 black 生效**。
+            # 夹爪与 X/Y 轴黑方框会动，件放好后不动 —— 差分信号差 3 个数量级。
+            # 遮罩为 None（没标定过）时整段跳过 ⇒ 零行为变化。
+            if _gm is not None and color == "black":
+                _ov = float(_gm[y:y + h, x:x + w].mean()) if (w and h) else 0.0
+                _mark(_tr, gripper_overlap=_ov)
+                if _ov > GRIPPER_MASK_OVERLAP_MAX:
+                    _bump("c9_gripper_mask", color)
+                    _mark(_tr, "c9_gripper_mask")
+                    continue
+            if min(w, h) / max(w, h) < 0.28 or area / (w*h) < 0.35:
+                _bump("c3_aspect_extent", color)
+                _mark(_tr, "c3_aspect_extent")
+                continue  # 排除细长背景条和极稀疏噪声，不据此确定物料形状。
+            inside = np.zeros((h, w), np.uint8)
+            local = contour - np.array([[[x, y]]], dtype=contour.dtype)
+            cv2.drawContours(inside, [local], -1, 255, -1)
+            inside = cv2.erode(inside, KERNEL, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+            count = cv2.countNonZero(inside)
+            crop = hsv[y:y+h, x:x+w]
+            matching = cv2.inRange(crop, ranges[0][0], ranges[0][1])
+            for low, high in ranges[1:]:
+                matching = cv2.bitwise_or(matching, cv2.inRange(crop, low, high))
+            votes = cv2.countNonZero(cv2.bitwise_and(matching, inside))
+            fraction = votes/count if count else 0.0
+            _mark(_tr, color_fraction=fraction)
+            if fraction < MIN_COLOR_FRACTION:
+                _bump("c4_color_frac", color)
+                _mark(_tr, "c4_color_frac")
+                continue
+            if color == "black":
+                # 真黑物料应有足够深色核心，浅灰投影不应变成黑色圆柱。
+                core = cv2.inRange(crop, (0, 0, 0), (179, 150, 38))
+                # ⑤ 把算好的比值存下来再判：阈值与判定逐字节不变。
+                _cr = (cv2.countNonZero(cv2.bitwise_and(core, inside)) / count
+                       if count else 0.0)
+                _mark(_tr, black_core=_cr)
+                if not count or _cr < 0.30:
+                    _bump("c5_black_core", color)
+                    _mark(_tr, "c5_black_core")
+                    continue
+            left, top = round((x+x0)*sx), round((y+y0)*sy)
+            right = min(original_w, round((x+x0+w)*sx))
+            bottom = min(original_h, round((y+y0+h)*sy))
+            shape, bin_id = COLOR_TO_MATERIAL[color]
+            # A'(2026-09-21)：只在"测出不是中心对称形状"时才用形心当抓取点。
+            # 三角形 ext∈[0.464,0.500]、圆盘 0.785、正方形 1.000 ⇒ 条件天然只命中三角形；
+            # 对称形状走原 bbox 中心路径，取值逐字节不变。
+            _ext = area / float(w * h) if w and h else 1.0
+            if _ext < SHAPE_EXTENT_CENTROID:
+                _m = cv2.moments(contour)
+                if _m["m00"] > 0:
+                    cxl, cyl = _m["m10"] / _m["m00"], _m["m01"] / _m["m00"]
+                else:
+                    cxl, cyl = x + w / 2.0, y + h / 2.0
+            else:
+                cxl, cyl = x + w / 2.0, y + h / 2.0
+            candidates.append({"color": color, "shape": shape, "bin": bin_id,
+                               "classification_source": "color", "reason": "color_mapping",
+                               "color_fraction": fraction, "area": area*sx*sy,
+                               "bbox": (left, top, right-left, bottom-top),
+                               # F1(2026-09-21)：中心必须**存进候选**，否则上面算的形心当场被丢掉。
+                               # 口径与 bbox 一致：都乘回 320 系并加上 ROI 偏移 (x0,y0)。
+                               "center": (round((cxl + x0) * sx), round((cyl + y0) * sy)),
+                               "clipped": False})
+        # 本场景每种颜色只有一个物料：小碎片不与主物料抢同一个编号。
+        if candidates:
+            results.append(max(candidates, key=lambda r: r["area"]))
+    results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
+    # C(2026-09-21)：black 与彩色候选空间互斥。
+    # black 窗口 :191 横跨全部色相、与彩色窗在 S∈[95,150] 重叠 ⇒ 同一个物体可能
+    # 同时产出 bin4(blue) 与 bin5(black)（实测 HSV(120,120,34) 双发）。这里丢掉与
+    # 彩色候选 bbox 重叠、或中心距 < 0.5*max(w,h) 的 black 候选。
+    # 系数取 0.5 而非 0.8：幻影双发的两候选中心几乎重合，0.5 一样拦得住，
+    # 却更不容易误丢"紧挨着彩色件"的真黑圆柱。
+    # ponytail: 启发式上限，只做空间互斥，不动 :184-192 的色阈值。
+    _colored = [r for r in results if r["color"] != "black"]
+    if _colored:
+        _kept = []
+        for _row in results:
+            if _row["color"] != "black":
+                _kept.append(_row)
+                continue
+            _l, _t, _w, _h = _row["bbox"]
+            _rc = _row.get("center") or (_l + _w // 2, _t + _h // 2)
+            _drop = False
+            for _o in _colored:
+                _ol, _ot, _ow, _oh = _o["bbox"]
+                _oc = _o.get("center") or (_ol + _ow // 2, _ot + _oh // 2)
+                _ix = max(0, min(_l + _w, _ol + _ow) - max(_l, _ol))
+                _iy = max(0, min(_t + _h, _ot + _oh) - max(_t, _ot))
+                # F4(2026-09-21)：判据从"1 像素相交 or 中心近"收紧为 **IoU>=0.6**。
+                # 实测依据：幻影是"同一批像素同时进两个窗"，IoU≈1，稳过；
+                # 而画面右缘那堵墙(blue#0 × black#5)的 IoU 只有 0.19 ⇒ 不再误杀；
+                # 真黑圆柱与彩色件相邻时 IoU≈0 ⇒ 保住。旧写法每边有 2~4mm 的误伤带。
+                _inter = _ix * _iy
+                _union = _w * _h + _ow * _oh - _inter
+                _iou = (_inter / _union) if _union > 0 else 0.0
+                if _iou >= 0.6:
+                    _drop = True
+                    # ②(2026-09-21)：c6 之前**从来没被计数过**（init 里有键、无人自增），
+                    # 于是"black 被 C 段悄悄丢掉"在日志里完全不可见。补上——这条丢的
+                    # 恰好是真黑圆柱，是现场最需要看见的一条。
+                    _bump("c6_black_mutex", _row["color"])
+                    break
+            if not _drop:
+                _kept.append(_row)
+        results = _kept
+    # F3(2026-09-21)：原来"每 60 帧挑第 1 帧打印"，导致 59/60 帧的读数全丢。
+    # 改为**累计 + 事件触发**：只有"本帧一个候选都没留下"或"本帧有任何一闸拒绝"时
+    # 才打印，既不再丢信息，正常帧也不刷屏。
+    for _k in _REJ:
+        _REJ_TOT[_k] = _REJ_TOT.get(_k, 0) + _REJ[_k]
+    analyze._frames = getattr(analyze, "_frames", 0) + 1
+    if (not results) or any(_REJ.values()):
+        # ②(2026-09-21) 追加 bycolor 段：只列非零项，正常帧通常 1~3 项，不刷屏。
+        _pc = " ".join("%s:%s=%d" % (g, c, n)
+                       for g in sorted(_REJ_C) for c, n in sorted(_REJ_C[g].items()) if n)
+        print("V6 REJECT frame=%d kept=%d | frame[%s] | total[%s] | bycolor[%s]"
+              % (analyze._frames, len(results),
+                 " ".join("%s=%d" % (k, _REJ[k]) for k in sorted(_REJ)),
+                 " ".join("%s=%d" % (k, _REJ_TOT[k]) for k in sorted(_REJ_TOT)),
+                 _pc or "-"))
+    return results, (round(x0*sx), round(y0*sy), round(x1*sx), round(y1*sy))
+
+
+class StableTargets:
+    """每色一件：连续确认、时间平滑、短时漏检保留灰框；缓存不输出货格。"""
+    def __init__(self):
+        self.tracks = {}
+
+    def update(self, detections, now):
+        seen = set()
+        for row in detections:
+            color = row["color"]
+            seen.add(color)
+            box = np.array(row["bbox"], dtype=float)
+            previous = self.tracks.get(color)
+            new_target = previous is None or now-previous["last_seen"] > MAX_TRACK_GAP
+            if not new_target:
+                old = previous["box"]
+                distance = float(np.linalg.norm((box[:2]+box[2:]/2)-(old[:2]+old[2:]/2)))
+                new_target = distance > max(30.0, 0.9*max(old[2], old[3]))
+            if new_target:
+                previous = {"box": box, "hits": 0, "confirmed": False,
+                            "last_seen": now, "row": row, "center": None}
+                self.tracks[color] = previous
+            else:
+                dt = max(0.0, now-previous["last_seen"])
+                alpha = 1.0 - np.exp(-dt / SMOOTH_TIME)
+                previous["box"] += alpha*(box-previous["box"])
+                _c = np.array(row.get("center") or (
+                    row["bbox"][0] + row["bbox"][2] / 2.0,
+                    row["bbox"][1] + row["bbox"][3] / 2.0), dtype=float)
+                if previous.get("center") is None:
+                    previous["center"] = _c
+                else:
+                    previous["center"] += alpha * (_c - previous["center"])
+            previous["hits"] += 1
+            # M5(2026-09-21)：黑色要求连续 3 帧静置（夹爪/机架也是黑的，需要更强证据）。
+            _need = BLACK_CONFIRM_FRAMES if color == "black" else CONFIRM_FRAMES
+            previous["confirmed"] = previous["confirmed"] or previous["hits"] >= _need
+            previous["last_seen"], previous["row"] = now, row
+        results = []
+        for color, track in list(self.tracks.items()):
+            age = now-track["last_seen"]
+            if color not in seen:
+                track["hits"] = 0
+                if age > HOLD_SECONDS or not track["confirmed"]:
+                    del self.tracks[color]
+                    continue
+            if not track["confirmed"]:
+                continue
+            row = dict(track["row"])
+            row["bbox"] = tuple(int(round(v)) for v in track["box"])
+            if track.get("center") is not None:
+                row["center"] = tuple(int(round(v)) for v in track["center"])
+            row["stale"] = color not in seen
+            if row["stale"]:
+                row["bin"], row["classification_source"], row["reason"] = None, "none", "short_hold"
+            results.append(row)
+        results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
+        return results
+
+
+def render_rgb(rgb, results, roi, fps=0.0):
+    """小标签置于物料框内；顶部一行图例，避免长文字互相穿插。"""
+    x0, y0, x1, y1 = roi
+    cv2.rectangle(rgb, (x0, y0), (x1-1, y1-1), (220, 220, 0), 1)
+    for r in results:
+        held = r.get("stale", False)
+        ink = (150, 150, 150) if held else (0, 220, 0)
+        x, y, w, h = r["bbox"]
+        cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), ink, 1)
+        label = "HOLD" if held else "%d %s" % (r["bin"], r["color"])
+        tx = max(2, min(x+2, rgb.shape[1]-75))
+        ty = max(48, min(y+12, rgb.shape[0]-3))
+        cv2.putText(rgb, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 2)
+        cv2.putText(rgb, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.35, ink, 1)
+    cv2.rectangle(rgb, (0, 0), (rgb.shape[1]-1, 34), (0, 0, 0), -1)
+    cv2.putText(rgb, "V6 STABLE  FPS %.1f" % fps, (8, 14),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (220, 220, 0), 1)
+    cv2.putText(rgb, "1/2 cube  3/4 prism  5/6 cylinder", (8, 28),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.32, (220, 220, 220), 1)
+
+
+def main():
+    from maix import app, camera, display, image
+
+    cv2.setNumThreads(1)
+    print("V6 STABLE + BRIDGE: 颜色定形状；显示=%d，检测=%d；物料分开放且完整位于黄框内。"
+          % (FRAME_SIZE, DETECT_SIZE))
+    if hasattr(display, "set_trans_image_quality"):
+        display.set_trans_image_quality(PREVIEW_JPEG_QUALITY)
+    cam = camera.Camera(FRAME_SIZE, FRAME_SIZE, image.Format.FMT_RGB888)
+    # AE/AWB 锁定（2026-09-21，API 真名已在设备上实测确认，MaixPy 4.12.5）：
+    #   camera.AeMode/AwbMode members = [Invalid, Auto, Manual]
+    #   Camera.exposure(us) / gain / iso / luma(0..100) / exp_mode(AeMode) [deprecated]
+    #   Camera.set_wb_gain(List[float])  ← 文档原话"disable auto white balance"
+    # 默认关（LOCK_AE_AWB=False）：**锁定后六色 HSV 阈值必须全部重标**，
+    # 必须先在现场正常光照下读一次基线值再写死。
+    try:
+        _wb = list(cam.set_wb_gain())
+        print("V6 AE/AWB baseline: exp_mode=%s exposure=%s gain=%s iso=%s luma=%s wb_gain=%s"
+              % (cam.exp_mode(), cam.exposure(), cam.gain(), cam.iso(), cam.luma(), _wb))
+        if LOCK_AE_AWB:
+            cam.exp_mode(camera.AeMode.Manual)
+            cam.awb_mode(camera.AwbMode.Manual)
+            # 实测(2026-09-21 现场)：AWB 处于 Auto 时 set_wb_gain() 读回 [0,0,0,0]，
+            # 必须先切手动再读，否则"读一次再写死"会把全 0 写进去。
+            cam.set_awb(0)
+            _wb2 = list(cam.set_wb_gain())
+            if _wb2 and any(_wb2):
+                cam.set_wb_gain(_wb2)
+            print("V6 AE/AWB LOCKED: exposure=%s gain=%s wb_gain=%s"
+                  % (cam.exposure(), cam.gain(), cam.set_wb_gain()))
+    except Exception as _exc:
+        print("V6 AE/AWB lock unavailable: %s（继续用自动曝光）" % _exc)
+    # ④-② 机构扫掠遮罩：只在文件存在时启用。**绝不在生产循环里自动标定/动机构。**
+    gripper_mask = None
+    try:
+        if os.path.exists(GRIPPER_MASK_PATH):
+            gripper_mask = cv2.imread(GRIPPER_MASK_PATH, cv2.IMREAD_GRAYSCALE)
+            if gripper_mask is None:
+                print("V6 GRIPPER MASK 读不了：%s ⇒ c9 门不生效" % GRIPPER_MASK_PATH)
+            else:
+                _n = int(cv2.countNonZero(gripper_mask))
+                print("V6 GRIPPER MASK 已载入 %s  白像素 %d (%.2f%%)"
+                      % (GRIPPER_MASK_PATH, _n, 100.0 * _n / gripper_mask.size))
+        else:
+            print("V6 GRIPPER MASK 不存在（%s）⇒ c9 门不生效；"
+                  "标定见 make_gripper_mask.py" % GRIPPER_MASK_PATH)
+    except Exception as _exc:
+        print("V6 GRIPPER MASK 载入失败：%s ⇒ c9 门不生效" % _exc)
+    try:
+        disp = display.Display()
+        tracker = StableTargets()
+        sender = BatchSender()          # <<<V6-BRIDGE>>> 新增
+        print("[V6-BRIDGE] 目标 %s:%d  enable=%s" % (GATEWAY_HOST, GATEWAY_PORT, ENABLE_NETWORK))
+        started = time.monotonic()
+        frames, fps = 0, 0.0
+        totals = [0.0] * 6
+        work_max = 0.0
+        while not app.need_exit():
+            t0 = time.monotonic()
+            frame = cam.read()
+            if frame is None:
+                continue
+            t1 = time.monotonic()
+            # RGB 共享视图：frame 必须保持存活到绘制和 disp.show 完成。
+            rgb = image.image2cv(frame, ensure_bgr=False, copy=False)
+            t2 = time.monotonic()
+            detections, roi = analyze(rgb, input_rgb=True,
+                                      gripper_mask=gripper_mask)
+            results = tracker.update(detections, time.monotonic())
+            sender.send(results)        # <<<V6-BRIDGE>>> 新增
+            t3 = time.monotonic()
+            render_rgb(rgb, results, roi, fps)
+            t4 = time.monotonic()
+            # rgb 的原地绘制已写入 frame，直接显示，无需 cv2image 回转换。
+            disp.show(frame)
+            del rgb  # 在下一次读取/释放原帧前释放借用视图。
+            work_done = time.monotonic()
+            # 限制最高帧率，不通过积累旧帧/旧框来制造“稳定”。
+            wait = 1.0/TARGET_FPS - (work_done-t0)
+            if wait > 0:
+                time.sleep(wait)
+            now = time.monotonic()
+            frames += 1
+            for i, elapsed in enumerate((t1-t0, t2-t1, t3-t2, t4-t3, work_done-t4, now-work_done)):
+                totals[i] += elapsed
+            work_max = max(work_max, work_done-t0)
+            if now-started >= PERF_INTERVAL:
+                fps = frames / (now-started)
+                print("V6 PERF FPS=%.1f read=%.1fms view=%.1fms detect=%.1fms draw=%.1fms display=%.1fms pace=%.1fms work_max=%.1fms" %
+                      ((fps,) + tuple(v*1000.0/frames for v in totals) + (work_max*1000.0,)))
+                print(sender.summary())   # <<<V6-BRIDGE>>> 新增：跟着性能行一起报发送量
+                if LOG_RESULTS:
+                    print("RESULT " + (" | ".join("%s %s BIN=%s" % (r["color"], r["shape"], r["bin"])
+                                                for r in results) or "empty"))
+                started, frames, work_max = now, 0, 0.0
+                totals = [0.0] * 6
+    finally:
+        sender.close()                  # <<<V6-BRIDGE>>> 新增
+        cam.close()
+
+
+if __name__ == "__main__":
+    main()

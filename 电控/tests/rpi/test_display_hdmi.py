@@ -34,7 +34,7 @@ def make_task(
         round_id="round-new",
         task_id=7,
         frame_seq=target_seq,
-        payload=ItemTaskPayload(target_seq, class_id, image_id, 0, 0, 0),
+        payload=ItemTaskPayload(target_seq, class_id, image_id, 0, 0, 0, None, None),
     )
 
 

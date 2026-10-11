@@ -6,7 +6,22 @@
 
 #define EC_STEP_MIN_HZ UINT32_C(10)
 #define EC_STEP_MAX_HZ UINT32_C(10000)
-#define EC_STEP_MAX_STEPS UINT32_C(1000000)
+/* 🔴 2026-09-20 收紧：1000000 → 16000（用户裁决"收紧到真实行程 + 一点余量"）。
+ *
+ * 原值 1000000 步 = 12.5 米（@80 步/mm），而 X/Y 机械行程只有 190mm 左右，
+ * 且 **X/Y 不装限位开关**（2026-09-15 用户裁决）⇒ 一次手误的 MOVE 就能把轴顶死。
+ * 历史：X+ 越程堵转已发生 3 次（`ec_motion_plan.h:145`）。
+ *
+ * 16000 步 = 200mm，依据：
+ *   · 单腿最长 = 行程全程 —— X 185mm（−95.0 → +90.0）、Y 190mm（−97.5 → +92.5）
+ *   · 200mm 留 10mm 余量，**覆盖所有合法运动**，台架小步增量工具照常可用
+ *   · 只挡住"不可能合法"的超长命令
+ *
+ * ⚠️ 本常量虽在"台架测试"头文件里，**生产路径也在用**：
+ *    `ec_axis_driver.c:90/97/98/116`、`ec_board_stm32.c:370`、`ec_diag.c:199`
+ *    ⇒ 改这里等于同时收紧三条路径。（把常量挪进生产头文件才是正解，属重构，暂缓。）
+ * ⚠️ 本改动需**重新编译并烧录**才生效。 */
+#define EC_STEP_MAX_STEPS UINT32_C(16000)
 
 typedef enum {
     EC_AXIS_NONE = 0,
@@ -25,7 +40,10 @@ typedef enum {
     EC_STEP_TEST_SIGNAL_ONLY,
     EC_STEP_TEST_MOTION_ARMING,
     EC_STEP_TEST_MOTION_RUNNING,
-    EC_STEP_TEST_MOTION_COUNTED
+    EC_STEP_TEST_MOTION_COUNTED,
+    /* 2026-09-15 双轴：X/Y 同时计数的斜线/联动移动。追加在末尾，保持既有
+     * 枚举值不变，避免动到已冻结的单轴行为。 */
+    EC_STEP_TEST_MOTION_COUNTED_XY
 } ec_step_test_mode_t;
 
 typedef enum {
@@ -43,6 +61,18 @@ bool ec_motion_test_start(ec_axis_t axis, ec_direction_t direction,
 bool ec_motion_test_start_steps(ec_axis_t axis, ec_direction_t direction,
                                 uint32_t steps, uint32_t frequency_hz,
                                 uint16_t active_inputs);
+/* Dual-axis counted move: X and Y start together and are counted down
+ * independently. Either leg may be zero, but not both (an axis-aligned move
+ * is valid). The timeout is derived from the slower (larger) axis. Consumes
+ * the armed window exactly like ec_motion_test_start_steps(). */
+bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
+                                   ec_direction_t y_direction, uint32_t y_steps,
+                                   uint32_t frequency_hz,
+                                   uint16_t active_inputs);
+uint32_t ec_motion_test_x_step_target(void);
+uint32_t ec_motion_test_y_step_target(void);
+uint32_t ec_motion_test_x_step_remaining(void);
+uint32_t ec_motion_test_y_step_remaining(void);
 void ec_motion_test_on_counted_done(void);
 bool ec_motion_inhibit_from_raw(uint16_t raw_mask);
 void ec_motion_test_on_aborted(void);
@@ -60,10 +90,30 @@ bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz,
                                 uint32_t steps);
 bool ec_step_port_set_direction(ec_axis_t axis, ec_direction_t direction);
 bool ec_step_port_enable_axis(ec_axis_t axis);
+/* Dual-axis port primitives (2026-09-15). enable_xy() enables both drivers;
+ * start_counted_xy() arms both axes in one go, each with its own step count and
+ * its own step frequency. counted_remaining() returns X+Y while an XY move is
+ * active for diagnostics only; completion is reported through the explicit
+ * completion latch below, because an abort/stop path also clears remaining. */
+bool ec_step_port_enable_xy(void);
+bool ec_step_port_start_counted_xy(uint32_t x_steps, uint32_t x_frequency_hz,
+                                   uint32_t y_steps, uint32_t y_frequency_hz);
+uint32_t ec_step_port_counted_remaining_for(ec_axis_t axis);
+uint32_t ec_step_port_counted_target_for(ec_axis_t axis);
+/* True once every axis of the active counted move has counted down to zero. */
+bool ec_step_port_counted_all_done(void);
 void ec_step_port_stop_all(void);
 void ec_step_port_disable_all(void);
 uint32_t ec_step_port_now_ms(void);
 uint32_t ec_step_port_counted_remaining(void);
 uint32_t ec_step_port_counted_target(void);
+
+/* Completion/abort events are latched by the STM32 timer/safety paths.  A
+ * remaining count of zero is not a completion signal: stop/abort paths also
+ * clear that count.  The executor consumes each latch exactly once.  For a
+ * single-axis completion, *completed_axis is X or Y; for a dual-axis
+ * completion it is EC_AXIS_NONE. */
+bool ec_step_port_take_counted_completion(ec_axis_t *completed_axis);
+bool ec_step_port_take_counted_abort(void);
 
 #endif

@@ -149,8 +149,12 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         ec_crc32_iso_hdlc(frame->payload, frame->payload_len);
     event.round_id = (uint32_t)frame->task_id;
     event.round_closed = false;
-    event.danger_area_clear = false;
-    event.estop_released = false;
+    /* 2026-09-18 BU-FIX: yuan wei ying bian ma false, dao zhi zhuang tai ji zai
+     * FAULT_LOCK xia wu fa tong guo an quan tiao jian, lun ci yong yuan jian li bu qi lai.
+     * gai wei App ceng mei lun tui jin de zhen shi zhi (jian shang last_* zi duan).
+     * mo ren false = fail-closed. */
+    event.danger_area_clear = g->last_danger_area_clear;
+    event.estop_released = g->last_estop_released;
     event.content_validated = false;
 
     /* Latch the item context BEFORE the event is consumed: the ACK(ACCEPTED)
@@ -165,6 +169,9 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         g->item_image_id = item.image_id;
         g->item_x_mm10 = item.x_mm10;
         g->item_y_mm10 = item.y_mm10;
+        g->item_pick_x_mm10 = item.pick_x_mm10;
+        g->item_pick_y_mm10 = item.pick_y_mm10;
+        g->item_has_pick = true;
     }
 
     t = consume_and_emit(g, &event);
@@ -177,6 +184,9 @@ static ec_transition_t handle_item_task(ec_gateway_t *g,
         g->item_image_id = item.image_id;
         g->item_x_mm10 = item.x_mm10;
         g->item_y_mm10 = item.y_mm10;
+        g->item_pick_x_mm10 = item.pick_x_mm10;
+        g->item_pick_y_mm10 = item.pick_y_mm10;
+        g->item_has_pick = true;
     }
     return t;
 }
@@ -224,7 +234,11 @@ static ec_transition_t handle_display_ack(ec_gateway_t *g,
     event.identity = g->sm.current_item; /* must match current_item */
     event.round_id = g->sm.round_id;
     event.round_closed = false;
-    event.danger_area_clear = false;
+    /* 2026-09-18 BU-FIX: yuan wei ying bian ma false, dao zhi zhuang tai ji zai
+     * FAULT_LOCK xia wu fa tong guo an quan tiao jian, lun ci yong yuan jian li bu qi lai.
+     * gai wei App ceng mei lun tui jin de zhen shi zhi (jian shang last_* zi duan).
+     * mo ren false = fail-closed. */
+    event.danger_area_clear = false;   /* DISPLAY_ACK lu jing wu xu gai: round_id qu zi sm, bu kao an quan biao zhi */
     event.estop_released = false;
     event.content_validated = true;
 
@@ -271,6 +285,9 @@ void ec_gateway_init(ec_gateway_t *g)
     g->item_image_id = 0U;
     g->item_x_mm10 = 0;
     g->item_y_mm10 = 0;
+    g->item_pick_x_mm10 = 0;
+    g->item_pick_y_mm10 = 0;
+    g->item_has_pick = false;
     g->item_result_code = EC_RESULT_UNKNOWN;
     g->tx_seq = 0U;
     g->rx_len = 0U;
@@ -340,6 +357,17 @@ bool ec_gateway_resp_cache_lookup(const ec_gateway_t *g, ec_dedup_key_t key,
     return false;
 }
 
+/* 2026-09-18 BU-FIX: App ceng mei lun tui jin zhen shi an quan zhuang tai.
+ * zhi cun chu, bu zuo ren he pan ding; pan ding reng you zhuang tai ji fu ze. */
+void ec_gateway_update_safety_state(ec_gateway_t *g, bool danger_area_clear,
+                                    bool estop_released)
+{
+    if (g == NULL) {
+        return;
+    }
+    g->last_danger_area_clear = danger_area_clear;
+    g->last_estop_released = estop_released;
+}
 void ec_gateway_resp_cache_clear(ec_gateway_t *g)
 {
     size_t index;
@@ -483,6 +511,9 @@ ec_transition_t ec_gateway_inject(ec_gateway_t *g,
         g->item_image_id = 0U;
         g->item_x_mm10 = 0;
         g->item_y_mm10 = 0;
+        g->item_pick_x_mm10 = 0;
+        g->item_pick_y_mm10 = 0;
+        g->item_has_pick = false;
         g->item_result_code = EC_RESULT_UNKNOWN;
         /* Same window as dedup (proposal sec. 3.3.3 / E-7): a verified new
          * round invalidates every cached response. */
@@ -531,6 +562,49 @@ bool ec_gateway_item_target(const ec_gateway_t *g, int16_t *x_mm10,
     }
     *x_mm10 = g->item_x_mm10;
     *y_mm10 = g->item_y_mm10;
+    return true;
+}
+
+/* P3 (2026-09-16): the bench stub (fixed (0,0), always true) is gone. Read the
+ * grasp point latched from ITEM_TASK offsets 8-11, mirroring
+ * ec_gateway_item_target() above.
+ *
+ * The gate is item_has_pick, NOT "the gateway once accepted something": a bare
+ * (0,0) from an unset latch must never be mistaken for a real device-centre
+ * grasp. Both latch sites set the flag together with the coordinates, and both
+ * clear sites (ec_gateway_init / verified new round) clear it together with
+ * them, so the flag can never outlive the coordinates it describes. */
+bool ec_gateway_item_pick(const ec_gateway_t *g, int16_t *x_mm10,
+                          int16_t *y_mm10)
+{
+    if ((g == NULL) || (x_mm10 == NULL) || (y_mm10 == NULL)) {
+        return false;
+    }
+    if (!g->item_has_pick) {
+        return false; /* fail-closed: no grasp point has been supplied yet */
+    }
+    *x_mm10 = g->item_pick_x_mm10;
+    *y_mm10 = g->item_pick_y_mm10;
+    return true;
+}
+
+/* 2026-09-21 新增：读当前件的**类别 ID**（ITEM_TASK payload offset 1）。
+ * 用途：按类别选择张开脉宽 —— 现场实测三类需要不同开度
+ * （正方体 650 / 三棱柱 750 / 圆柱 800 µs，见 docs/交付/2026-09-21/现场脉宽标定记录）。
+ *
+ * 锁存与清除都与 item_pick 同批（:168/:183 与 :174/:189 一起写，
+ * :284/:510 与 :290/:516 一起清），而 class_id 的现行取值域是 1..6
+ * （视觉端 COLOR_TO_MATERIAL 的 bin_id），0 表示"没有已受理的件"。
+ * 故直接用 `item_class_id == 0` 当闸，不需要额外标志位。 */
+bool ec_gateway_item_class(const ec_gateway_t *g, uint8_t *class_id)
+{
+    if ((g == NULL) || (class_id == NULL)) {
+        return false;
+    }
+    if (g->item_class_id == 0U) {
+        return false; /* fail-closed：无已受理件，调用方退回默认张开脉宽 */
+    }
+    *class_id = g->item_class_id;
     return true;
 }
 

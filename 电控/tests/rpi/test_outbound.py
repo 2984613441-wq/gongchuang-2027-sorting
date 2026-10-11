@@ -44,7 +44,8 @@ def task_context(
         task_id,
         frame_seq,
         # image_id == class_id（冻结 1:1）；grip_angle 恒 0xFF（夹爪不旋转）。
-        ItemTaskPayload(target_seq, 2, image_id, 0, 0, 0xFF),
+        # P3：抓取点必填（这里给非零值，证明尾部 4 字节真的上线）。
+        ItemTaskPayload(target_seq, 2, image_id, 0, 0, 0xFF, 250, -250),
     )
 
 
@@ -151,9 +152,11 @@ class SendItemTaskTests(unittest.TestCase):
         self.assertEqual(1, decoded.frame_seq)
         expected_payload = encode_item_task_payload(task.payload)
         self.assertEqual(expected_payload, decoded.payload)
-        self.assertEqual(8, len(decoded.payload))
-        # The frozen 8-byte payload round-trips to the same logical fields.
+        self.assertEqual(12, len(decoded.payload))
+        # The 12-byte payload (P3: drop point + grasp point) round-trips to the
+        # same logical fields.
         self.assertEqual(task.payload, decode_item_task_payload(decoded.payload))
+        self.assertEqual(250, decode_item_task_payload(decoded.payload).pick_x_position)
 
     def test_send_item_task_increments_tx_seq_from_one_per_frame(self) -> None:
         link, gateway = new_gateway()
@@ -193,7 +196,7 @@ class SendItemTaskTests(unittest.TestCase):
             "round-new",
             ROUND_TASK_ID,
             11,
-            ItemTaskPayload(1, 2, 3, 0, 0, 0x05),  # grip_angle != 0xFF
+            ItemTaskPayload(1, 2, 3, 0, 0, 0x05, 0, 0),  # grip_angle != 0xFF
         )
 
         with self.assertRaises(PayloadError):

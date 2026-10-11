@@ -151,3 +151,19 @@ node_modules/
 # Office 同步备份与验证临时产物
 .office-backup-*/
 .office-dump/
+
+# ===== 2026-09-10 整理：归档区与缓存（防止 4GB 归档物进入版本库） =====
+archive/
+.pytest_cache/
+.pytest-tmp/
+.tmp-vis/
+pytest-cache-files-*/
+*.exe
+
+# ===== 2026-09-28 整理：未进 git 的临时/快照目录（原会被 git add -A 提交，约 226 MB） =====
+_incoming/
+_scratch_tmp/
+Testing/
+# 注：`备份/`、`资料-学习/`、`交付-给朋友/`、`明日任务包-2026-09-16/` 已于 2026-09-28 移入 archive/，
+#     由上面的 archive/ 规则统一覆盖，无需另列。
+

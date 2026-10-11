@@ -6,7 +6,7 @@
 #define EC_GROUP_SETTLE_MS     UINT32_C(20)
 #define EC_GROUP_RUN_MS        UINT32_C(10000)
 #define EC_GROUP_STEP_HZ       UINT32_C(100)
-#define EC_GROUP_OPEN_US       UINT16_C(1000)
+#define EC_GROUP_OPEN_US       UINT16_C(1100)
 #define EC_GROUP_CLOSE_US      UINT16_C(1900)
 
 static ec_group_test_mode_t mode;

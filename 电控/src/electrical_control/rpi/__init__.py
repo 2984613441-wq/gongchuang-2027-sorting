@@ -39,7 +39,7 @@ class SchedulerFault(RuntimeError):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class VerifiedNewRound:
     round_id: str
     human_confirmed: bool
@@ -47,7 +47,7 @@ class VerifiedNewRound:
     both_nodes_initialized: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ItemTaskContext:
     round_id: str
     task_id: int
@@ -55,7 +55,7 @@ class ItemTaskContext:
     payload: ItemTaskPayload
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ItemResult:
     round_id: str
     task_id: int
@@ -64,7 +64,7 @@ class ItemResult:
     result_code: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RenderReceipt:
     round_id: str
     task_id: int
@@ -88,7 +88,7 @@ def _was_completed_by_pending(receipt: RenderReceipt) -> bool:
     return any(receipt is completed for completed in _completed_receipts)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayAckIntent:
     task: ItemTaskContext
     target_seq: int

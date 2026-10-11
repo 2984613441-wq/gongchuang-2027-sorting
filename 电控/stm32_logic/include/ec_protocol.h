@@ -140,12 +140,35 @@ bool ec_proto_decode_nack(const uint8_t *payload, uint16_t payload_len,
                           uint8_t *reason, uint8_t *target_seq);
 
 /* --- ITEM_TASK payload (0x21) - FROZEN (interface-contract.md sec. 5.2) ---
- * target_seq(1) + class_id(1) + image_id(1)
- * + X(2, int16 big-endian, 0.1 mm) + Y(2, int16 big-endian, 0.1 mm)
- * + grip_angle(1, always 0xFF) = 8 bytes.
- * X/Y origin = device center; |value| > 1450 (+-145.0 mm) is rejected.
- * grip_angle must be 0xFF (claw does not rotate); 0..180 unused this round. */
-#define EC_PROTO_ITEM_TASK_PAYLOAD_LEN 8U
+ * 2026-09-16 (P3): payload 8 -> 12 bytes, the grasp (pick) point appended at
+ * the TAIL. The competition requires a random grasp point and a fixed drop
+ * point; the 8-byte payload only carried the drop point, so the grasp point
+ * was hard-wired to (0,0) in the firmware -> every real grasp would close on
+ * empty air (ledger E-18). Appending instead of reusing offsets 3-6 keeps the
+ * frozen "drop point" meaning of those bytes.
+ *
+ *   offset 0     target_seq(1)
+ *   offset 1     class_id(1)
+ *   offset 2     image_id(1)
+ *   offset 3-4   x_mm10(2, int16 BE, 0.1mm)      drop X (semantics unchanged)
+ *   offset 5-6   y_mm10(2, int16 BE, 0.1mm)      drop Y (semantics unchanged)
+ *   offset 7     grip_angle(1, always 0xFF)
+ *   offset 8-9   pick_x_mm10(2, int16 BE, 0.1mm) *NEW* grasp X
+ *   offset 10-11 pick_y_mm10(2, int16 BE, 0.1mm) *NEW* grasp Y
+ *
+ * Both coordinate pairs share one frame: origin = device center, units 0.1mm,
+ * |value| > 1450 (+-145.0 mm) rejected. The grasp point is additionally
+ * bounded by the tighter mechanical reach limit (EC_MOTION_REACH_LIMIT_MM10 =
+ * 825 in ec_motion_plan.h), but that check belongs to the motion planner; this
+ * codec only enforces the protocol domain.
+ * grip_angle must be 0xFF (claw does not rotate); 0..180 unused this round.
+ *
+ * There is no "no grasp point" encoding on the wire. A sender that has no
+ * millimetre grasp point must not send this frame at all (Python raises
+ * PayloadError; see item_context.py). The strict length check makes old and
+ * new firmware mutually incompatible (12 != 8 -> decode fails -> fail-closed,
+ * never misaligned execution); Pi and STM32 must be upgraded together. */
+#define EC_PROTO_ITEM_TASK_PAYLOAD_LEN 12U
 #define EC_PROTO_ITEM_TASK_X_LIMIT 1450
 #define EC_PROTO_ITEM_TASK_ANGLE_NONE UINT8_C(0xFF)
 
@@ -153,9 +176,11 @@ typedef struct {
     uint8_t target_seq;
     uint8_t class_id;
     uint8_t image_id;
-    int16_t x_mm10;
-    int16_t y_mm10;
+    int16_t x_mm10;         /* drop X (semantics unchanged) */
+    int16_t y_mm10;         /* drop Y (semantics unchanged) */
     uint8_t grip_angle;
+    int16_t pick_x_mm10;    /* *NEW* grasp X */
+    int16_t pick_y_mm10;    /* *NEW* grasp Y */
 } ec_proto_item_task_t;
 
 bool ec_proto_encode_item_task(const ec_proto_item_task_t *item,

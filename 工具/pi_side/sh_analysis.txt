@@ -1,0 +1,125 @@
+============================================================================
+pi_chain_debug.sh   42 行  CRLF=0  BOM=False
+        14|     --port /dev/serial0 \
+        15|     --image-dir /home/pi/images \
+        16|     --names-file /home/pi/电控/deploy/names.json \
+        17|     --frame-output fb0 \
+        18|     --font /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc \
+        19|     --round-id r1 --round-task-id 1 \
+   >>   20|     --start-round -v > "$LOG" 2>&1 &
+        21| 
+        22| sleep 14
+   ---
+============================================================================
+pi_repro_and_read.sh   47 行  CRLF=0  BOM=False
+        21|     --port /dev/serial0 \
+        22|     --image-dir /home/pi/images \
+        23|     --names-file /home/pi/电控/deploy/names.json \
+        24|     --frame-output fb0 \
+        25|     --font /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc \
+        26|     --round-id r1 --round-task-id 1 \
+   >>   27|     --start-round > /tmp/chain.log 2>&1 &
+        28| echo "链路已启动: $(date '+%H:%M:%S')"
+        29| 
+   ---
+============================================================================
+pi_start_chain.sh   21 行  CRLF=0  BOM=False
+         1| #!/bin/bash
+   >>    2| # 重启真实链路（含 --start-round）
+         3| cd /home/pi/电控 || exit 1
+         4| pkill -f 'deploy/run_chain.py' 2>/dev/null
+   ---
+         9|     --port /dev/serial0 \
+        10|     --image-dir /home/pi/images \
+        11|     --names-file /home/pi/电控/deploy/names.json \
+        12|     --frame-output fb0 \
+        13|     --font /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc \
+        14|     --round-id r1 --round-task-id 1 \
+   >>   15|     --start-round > /tmp/chain.log 2>&1 &
+        16| sleep 15
+        17| echo "=== chain.log ==="
+   ---
+============================================================================
+p_start7.sh   21 行  CRLF=0  BOM=False
+         8|   --port /dev/serial0 \
+         9|   --image-dir /home/pi/images \
+        10|   --names-file /home/pi/电控/deploy/names.json \
+        11|   --frame-output fb0 \
+        12|   --font /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc \
+        13|   --round-id R7 --round-task-id 1 \
+   >>   14|   --pick-strategy order --start-round -v \
+        15|   > "$LOG" 2>&1 &
+        16| echo "PID=$!  日志=$LOG"
+   ---
+============================================================================
+p_start_round.sh   20 行  CRLF=0  BOM=False
+         8|   --port /dev/serial0 \
+         9|   --image-dir /home/pi/images \
+        10|   --names-file /home/pi/电控/deploy/names.json \
+        11|   --frame-output fb0 \
+        12|   --font /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc \
+        13|   --round-id R6 --round-task-id 1 \
+   >>   14|   --pick-strategy order --start-round -v \
+        15|   > "$LOG" 2>&1 &
+        16| echo "PID=$!"
+   ---
+============================================================================
+start2.sh   21 行  CRLF=0  BOM=False
+        10|   --port /dev/serial0 \
+        11|   --image-dir /home/pi/images \
+        12|   --names-file /home/pi/电控/deploy/names.json \
+        13|   --frame-output fb0 \
+        14|   --round-id R2 --round-task-id 2 \
+        15|   --pick-strategy order \
+   >>   16|   --start-round -v > /home/pi/logs/round2.log 2>&1 < /dev/null &
+        17| sleep 12
+        18| echo "--- 进程 ---"
+   ---
+============================================================================
+start3.sh   23 行  CRLF=0  BOM=False
+        12|   --port /dev/serial0 \
+        13|   --image-dir /home/pi/images \
+        14|   --names-file /home/pi/电控/deploy/names.json \
+        15|   --frame-output fb0 \
+        16|   --round-id R2 --round-task-id 1 \
+        17|   --pick-strategy order \
+   >>   18|   --start-round -v > /home/pi/logs/round2b.log 2>&1 < /dev/null &
+        19| sleep 14
+        20| echo "--- 进程 ---"
+   ---
+============================================================================
+start4.sh   40 行  CRLF=0  BOM=False
+        29| setsid nohup python3 deploy/run_chain.py \
+        30|   --port /dev/serial0 --image-dir /home/pi/images \
+        31|   --names-file /home/pi/电控/deploy/names.json \
+        32|   --frame-output fb0 \
+        33|   --round-id R3 --round-task-id 1 \
+        34|   --pick-strategy order \
+   >>   35|   --start-round -v > /home/pi/logs/round3.log 2>&1 < /dev/null &
+        36| sleep 15
+        37| echo "--- 进程 ---"
+   ---
+============================================================================
+start5.sh   38 行  CRLF=0  BOM=False
+        27| setsid nohup python3 deploy/run_chain.py \
+        28|   --port /dev/serial0 --image-dir /home/pi/images \
+        29|   --names-file /home/pi/电控/deploy/names.json \
+        30|   --frame-output fb0 \
+        31|   --round-id R4 --round-task-id 1 \
+        32|   --pick-strategy order \
+   >>   33|   --start-round -v > /home/pi/logs/round4.log 2>&1 < /dev/null &
+        34| sleep 16
+        35| echo "--- 进程 ---"
+   ---
+============================================================================
+start_round.sh   20 行  CRLF=0  BOM=False
+         9| setsid nohup python3 deploy/run_chain.py \
+        10|   --port /dev/serial0 \
+        11|   --image-dir /home/pi/images \
+        12|   --names-file /home/pi/电控/deploy/names.json \
+        13|   --frame-output fb0 \
+        14|   --round-id R1 --round-task-id 1 \
+   >>   15|   --start-round -v > /home/pi/logs/round1.log 2>&1 < /dev/null &
+        16| sleep 10
+        17| echo "--- 进程 ---"
+   ---

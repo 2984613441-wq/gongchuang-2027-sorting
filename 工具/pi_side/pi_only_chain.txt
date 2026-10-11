@@ -1,0 +1,175 @@
+含删除的 hunk 数 = 8 ；删除行总数 = 24
+==============================================================================
+@@ -439,6 +463,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+              "--start-round",
+              action="store_true",
+  <<< PI-ONLY           help="启动时自动开始一轮 verified new round（部署/示例简化；"
+  <<< PI-ONLY           "实赛应按操作员确认流程改造，见 README「当前限制」）",
+  >>> REPO-ONLY         help="启动时开始一轮 verified new round；真实模式会先要求操作员输入 HOME，"
+  >>> REPO-ONLY         "确认滑台已在负向最里角（板子无绝对位置，无法自动检测）",
+          )
+          parser.add_argument(
+------------------------------------------------------------------------------
+@@ -470,14 +494,53 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+              choices=("off", "order"),
+              default=_env("PICK_STRATEGY", "off"),
+  <<< PI-ONLY           help="夹取策略：off=现有贪心最近邻（默认，与接入前逐字节一致）；"
+  <<< PI-ONLY           "order=用 pick_strategy 的离托盘无壁边最近规则选件（只改顺序、不丢件）",
+  >>> REPO-ONLY         help="夹取策略：off=按现有贪心最近邻取件（**默认，与接入前逐字节一致**）；"
+  >>> REPO-ONLY         "order=用 pick_strategy 的「离托盘无壁边最近」规则选件（α：只改顺序、不丢件）。"
+  >>> REPO-ONLY         "配套配置 --pick-strategy-config",
+          )
+          parser.add_argument(
+              "--pick-strategy-config",
+              default=_env("PICK_STRATEGY_CONFIG", "/home/pi/电控/deploy/pick_strategy.ini"),
+  <<< PI-ONLY           help="--pick-strategy=order 时的策略配置；缺失或解析失败则自动退回 off",
+  >>> REPO-ONLY         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
+          )
+          return parser.parse_args(argv)
+      
+  >>> REPO-ONLY 
+  >>> REPO-ONLY def require_home_confirmation(
+  >>> REPO-ONLY     args: argparse.Namespace,
+  >>> REPO-ONLY     *,
+  >>> REPO-ONLY     input_fn=input,
+  >>> REPO-ONLY     output=sys.stderr,
+  >>> REPO-ONLY ) -> None:
+  >>> REPO-ONLY     """真实 ``--start-round`` 的人工 HOME 门禁；在串口/视觉初始化前调用。
+  >>> REPO-ONLY 
+  >>> REPO-ONLY     X/Y 无编码器且不执行寻零，软件无法读取绝对位置。此门禁只能防止“忘记确认”，
+  >>> REPO-ONLY     不能证明操作员确实把滑台推到了 HOME；输入必须精确为 ``HOME``，EOF/非交互
+  >>> REPO-ONLY     启动也一律拒绝。``--fake-link`` 是主机逻辑测试，不触碰机构，因此跳过。
+  >>> REPO-ONLY     """
+  >>> REPO-ONLY 
+  >>> REPO-ONLY     if not args.start_round or args.fake_link:
+  >>> REPO-ONLY         return
+  >>> REPO-ONLY 
+  >>> REPO-ONLY     banner = "\n".join((
+  >>> REPO-ONLY         "",
+  >>> REPO-ONLY         "!" * 72,
+  >>> REPO-ONLY         "!!! 启动拦截：板子无法自动判断 XY 是否位于 HOME !!!",
+  >>> REPO-ONLY         "期望起点：X=-95.0mm, Y=-97.5mm（X/Y 负方向最里角，均顶住）",
+  >>> REPO-ONLY         "判据：上电/跑链路前已人工把 X、Y 推到各自负向机械极限。",
+  >>> REPO-ONLY         "未确认时绝不能发送 --start-round；错误起点会令第一段增量运动整体偏移，",
+  >>> REPO-ONLY         "可能顶死堵转并使开环坐标永久失准。",
+  >>> REPO-ONLY         "!" * 72,
+  >>> REPO-ONLY     ))
+  >>> REPO-ONLY     print(banner, file=output, flush=True)
+  >>> REPO-ONLY     try:
+  >>> REPO-ONLY         answer = input_fn("确认滑台已在 HOME 后输入 HOME（其他输入均退出）：")
+  >>> REPO-ONLY     except (EOFError, OSError) as exc:
+  >>> REPO-ONLY         raise SystemExit(
+  >>> REPO-ONLY             "HOME 未确认：当前启动环境不可交互。移除 --start-round 保持待命，"
+  >>> REPO-ONLY             "或在现场终端人工确认后启动。"
+  >>> REPO-ONLY         ) from exc
+  >>> REPO-ONLY     if answer.strip() != "HOME":
+  >>> REPO-ONLY         raise SystemExit("HOME 未确认：拒绝 --start-round，未打开串口、未启动视觉线程。")
+  >>> REPO-ONLY 
+      # ---------------------------------------------------------------------------
+      # 注入件工厂：字体 / 名称表 / 图片加载器 / 帧输出 / 视觉源（占位）
+------------------------------------------------------------------------------
+@@ -712,9 +776,10 @@ def build_socket_source(
+              _LOGGER.info(
+                  "抓取点来源 = 像素→毫米标定 %s（工作区 [%.1f,%.1f]×[%.1f,%.1f]mm，"
+  <<< PI-ONLY               "物体高度 %d 类）",
+  >>> REPO-ONLY             "物体高度 %d 类，pixel_to_device 后工具偏移=(%.1f,%.1f)mm）",
+                  converter.config_path,
+                  converter.x_limits[0], converter.x_limits[1],
+                  converter.y_limits[0], converter.y_limits[1],
+                  len(converter.object_heights),
+  >>> REPO-ONLY             converter.tool_offset_mm[0], converter.tool_offset_mm[1],
+              )
+              grasp_point_for_target = make_grasp_point_for_target(converter)
+------------------------------------------------------------------------------
+@@ -979,7 +1047,13 @@ def run(args: argparse.Namespace) -> int:
+          # 方案A 的校验与"缺货格就拒启动"行为与接线前【完全一致】，只是搬进了工厂函数。
+          if demo:
+  <<< PI-ONLY           drop_points = dict(DEMO_DROP_POINTS)
+  <<< PI-ONLY           logger.warning("--fake-link：使用 DEMO 落点表 %s（仅开发/冒烟）", drop_points)
+  <<< PI-ONLY           strategy = FixedBoxStrategy(drop_points)
+  >>> REPO-ONLY         if config_has_section(args.config, "TurntablePositions"):
+  >>> REPO-ONLY             # --fake-link 主机冒烟：--config 里配了方案C 就按方案C 装配
+  >>> REPO-ONLY             # （转盘后端换成 FakeBackend + 假索引）。没有这一支，"转盘接线"在主机上
+  >>> REPO-ONLY             # 一行都执行不到，等于没测。
+  >>> REPO-ONLY             strategy = load_strategy_from_config(args.config)
+  >>> REPO-ONLY         else:
+  >>> REPO-ONLY             drop_points = dict(DEMO_DROP_POINTS)
+  >>> REPO-ONLY             logger.warning("--fake-link：使用 DEMO 落点表 %s（仅开发/冒烟）", drop_points)
+  >>> REPO-ONLY             strategy = FixedBoxStrategy(drop_points)
+              fixed_pick_point = None
+          else:
+------------------------------------------------------------------------------
+@@ -1045,10 +1154,15 @@ def run(args: argparse.Namespace) -> int:
+                      payload_orderer_from_ini,
+                  )
+  >>> REPO-ONLY 
+                  payload_orderer = payload_orderer_from_ini(args.pick_strategy_config)
+                  if payload_orderer is None:
+  <<< PI-ONLY                   logger.warning("夹取策略：构造失败，本次退回默认排序")
+  >>> REPO-ONLY                 logger.warning(
+  >>> REPO-ONLY                     "夹取策略：--pick-strategy=order 但排序器构造失败 ⇒ 本次退回默认排序"
+  >>> REPO-ONLY                 )
+                  else:
+  <<< PI-ONLY                   logger.info("夹取策略：已启用 order 模式（只改顺序、不丢件），配置=%s",
+  <<< PI-ONLY                               args.pick_strategy_config)
+  >>> REPO-ONLY                 logger.info(
+  >>> REPO-ONLY                     "夹取策略：已启用【顺序】模式（α：只改顺序、不丢件），配置=%s",
+  >>> REPO-ONLY                     args.pick_strategy_config,
+  >>> REPO-ONLY                 )
+              source = build_socket_source(
+                  round_id=round_id,
+------------------------------------------------------------------------------
+@@ -1100,10 +1214,12 @@ def run(args: argparse.Namespace) -> int:
+          last_task_sent_at = 0.0
+          last_task_context = None
+  <<< PI-ONLY       task_timeout_s = 5.0  # 2026-09-21 回落：NACK 已改成立即重试，超时只用于真静默；恢复越快越好
+  >>> REPO-ONLY     task_timeout_s = 5.0  # 5s 无 MOTION_DONE/ITEM_RESULT → 重传
+          # 🔴 2026-09-21 新增：板子明确拒收（NACK）时的重试退避。
+  <<< PI-ONLY       #   实机证据（R3/R4 两轮）：每件收 DISPLAY_ACK 后链立刻派下一件，而板子还没收尾完、
+  <<< PI-ONLY       #   没进 WAIT_TASK ⇒ 回 NACK_ACK_NOT_APPLICABLE + NACK_SINGLE_TASK_ONLY。
+  <<< PI-ONLY       #   旧代码把 NACK 落到最后的 else 分支**只打日志、不重试** ⇒ 只能干等满超时
+  <<< PI-ONLY       #   ⇒ **每件白拖 ~8 秒（实测 21~22s/件）**。
+  >>> REPO-ONLY     #   实机证据（R3/R4 两轮）：每件成功收 DISPLAY_ACK 之后，链**立刻**派下一件，
+  >>> REPO-ONLY     #   而板子此时还没收尾完、没进到 WAIT_TASK ⇒ 回 NACK_ACK_NOT_APPLICABLE +
+  >>> REPO-ONLY     #   NACK_SINGLE_TASK_ONLY。旧代码把 NACK 落到最后的 else 分支**只打日志、不重试**，
+  >>> REPO-ONLY     #   于是只能干等满 task_timeout_s 才重传 ⇒ **每件白拖 ~8 秒（实测 21~22s/件）**。
+  >>> REPO-ONLY     #   这里改成"收到 NACK 立刻带小退避重发"：0.3s 是留给板子"收尾上一件 → 进
+  >>> REPO-ONLY     #   WAIT_TASK"的时间，避免把 NACK 打成死循环。
+          nack_retry_backoff_s = 0.3
+      
+------------------------------------------------------------------------------
+@@ -1285,8 +1436,12 @@ def run(args: argparse.Namespace) -> int:
+                  logger.info("inbound: IGNORED（含 ACK/NACK 等未建模命令）")
+              elif isinstance(event, str) and event.startswith("NACK"):
+  <<< PI-ONLY               # 🔴 2026-09-21：板子明确拒收在飞的那一帧（典型 NACK_SINGLE_TASK_ONLY）。
+  <<< PI-ONLY               # 立刻带小退避重发，不再干等超时。
+  <<< PI-ONLY               cl.record(TASK, now=time.monotonic(), detail="inbound %s（立即重试）" % event)
+  <<< PI-ONLY               logger.warning("inbound %s：板子拒收本帧，%.1fs 后立即重发", event, nack_retry_backoff_s)
+  >>> REPO-ONLY             # 🔴 2026-09-21：板子**明确拒收**在飞的那一帧（典型：NACK_SINGLE_TASK_ONLY
+  >>> REPO-ONLY             #    —— 它还没进到 WAIT_TASK）。必须**立刻带小退避重发**，
+  >>> REPO-ONLY             #    不能等满 task_timeout_s（旧行为每件白拖 ~8s，实测 21~22s/件）。
+  >>> REPO-ONLY             cl.record(TASK, now=time.monotonic(), detail=f"inbound {event}（立即重试）")
+  >>> REPO-ONLY             logger.warning(
+  >>> REPO-ONLY                 "inbound %s：板子拒收本帧，%.1fs 后立即重发（不再等 %.1fs 超时）",
+  >>> REPO-ONLY                 event, nack_retry_backoff_s, task_timeout_s,
+  >>> REPO-ONLY             )
+                  if last_task_context is not None:
+                      time.sleep(nack_retry_backoff_s)
+------------------------------------------------------------------------------
+@@ -1297,8 +1452,11 @@ def run(args: argparse.Namespace) -> int:
+                      else:
+                          last_task_sent_at = time.monotonic()
+  <<< PI-ONLY                       cl.record(TASK, now=time.monotonic(),
+  <<< PI-ONLY                                 detail="NACK(%s) 后立即重发 (%dB)" % (event, len(raw_resend)))
+  >>> REPO-ONLY                     cl.record(
+  >>> REPO-ONLY                         TASK,
+  >>> REPO-ONLY                         now=time.monotonic(),
+  >>> REPO-ONLY                         detail=f"NACK({event}) 后立即重发 ({len(raw_resend)}B)",
+  >>> REPO-ONLY                     )
+                  else:
+  <<< PI-ONLY                   logger.warning("收到 %s 但没有在飞的件：忽略", event)
+  >>> REPO-ONLY                 logger.warning("收到 %s 但没有在飞的件：忽略（不进队列、不动机械）", event)
+              else:
+                  # FRAME_REJECTED / DIRECTION_REJECTED / CRASH / *_IGNORED 等
+      
+------------------------------------------------------------------------------

@@ -15,12 +15,12 @@ from electrical_control.rpi.display import (
 
 
 def context(target_seq: int = 1) -> ItemTaskContext:
-    """ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 2, 3, 0, 0, 0)) at seq 1."""
+    """ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None)) at seq 1."""
     return ItemTaskContext(
         round_id="round-new",
         task_id=7,
         frame_seq=target_seq,
-        payload=ItemTaskPayload(target_seq, 2, 3, 0, 0, 0),
+        payload=ItemTaskPayload(target_seq, 2, 3, 0, 0, 0, None, None),
     )
 
 
@@ -86,7 +86,7 @@ class FakeDisplayRendererTests(unittest.TestCase):
         self.assertEqual(content.crc32, receipt.content_crc32)
 
     def test_class_id_comes_from_task_payload_not_view(self) -> None:
-        task = ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 9, 3, 0, 0, 0))
+        task = ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 9, 3, 0, 0, 0, None, None))
         view = DisplayViewModel(1, "电池", 3, 4, 0)
 
         receipt = FakeDisplayRenderer(task).present(view).complete()

@@ -1,0 +1,40 @@
+#!/bin/sh
+# 2026-09-22 DSH: 转盘脉宽常驻输出（链的必需搭档）—— 开机自动起
+#
+# 【为什么需要它】
+#   链（方案C）走的是 `PwFileBackend`（rpi/turntable_guard.py:283）：
+#     链只把脉宽**写进 /home/pi/pw.txt**，并**不直接驱动 GPIO18**。
+#   真正把 pw.txt 的内容持续输出到 GPIO18（转盘舵机信号）的是 /home/pi/pi_pw.py（pigpio）。
+#   ⇒ 没有它：转盘一格都不会动 ✗（而且链不会报错，只会"看起来转了"）
+#   ⇒ 2026-09-22 实测教训：它此前**不在任何自启里**，重启后必须人工起，属比赛级漏洞。
+#
+# 【纪律】
+#   · 平时保持本进程运行 ✓（它与链不冲突：链写文件、它输出脉宽）
+#   · 若做台架实验（直接 echo 脉宽 > pw.txt），跑链前务必确认 pw.txt 是链要的值
+#   · 中位 = 1500µs（rpi/turntable.py 的 zero_pulse_us；"线 0"）
+#   · 2026-09-22 事故：pw.txt 被留成 2155µs ⇒ 舵机被持续驱到极限、一直动 ✗
+#     ⇒ 所以：**本脚本 start 时若 pw.txt 缺失会补 1500**；链启动时也会写 1500 清场。
+PW=/home/pi/pw.txt
+LOG=/var/log/pi_pw.log
+
+start_it() {
+    if pgrep -f 'pi_pw.py' >/dev/null 2>&1; then
+        echo "already running"; exit 0
+    fi
+    [ -f "$PW" ] || echo 1500 > "$PW"
+    setsid nohup python3 /home/pi/pi_pw.py >> "$LOG" 2>&1 &
+    echo "started"
+}
+
+stop_it() {
+    for p in $(pgrep -f 'pi_pw.py' 2>/dev/null); do kill "$p" 2>/dev/null; done
+    echo "stopped"
+}
+
+case "$1" in
+    start)   start_it ;;
+    stop)    stop_it ;;
+    restart) stop_it; sleep 1; start_it ;;
+    status)  pgrep -f 'pi_pw.py' >/dev/null 2>&1 && echo running || echo "not running" ;;
+    *)       echo "usage: $0 {start|stop|restart|status}"; exit 1 ;;
+esac

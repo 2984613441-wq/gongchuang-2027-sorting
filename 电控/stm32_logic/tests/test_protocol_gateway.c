@@ -86,6 +86,10 @@ static ec_transition_t feed_item_task(ec_gateway_t *g, uint16_t task_id,
     payload[5] = 0x00U;
     payload[6] = 0x00U;
     payload[7] = EC_PROTO_ITEM_TASK_ANGLE_NONE;
+    payload[8] = 0x00U;  /* pick X high (P3: 12-byte payload) */
+    payload[9] = 0x00U;  /* pick X low */
+    payload[10] = 0x00U; /* pick Y high */
+    payload[11] = 0x00U; /* pick Y low */
     frame.payload = payload;
     frame.payload_len = (uint16_t)sizeof(payload);
     return feed_frame(g, &frame);
@@ -141,7 +145,9 @@ static void test_boot_and_frame_assembly(void)
     ec_gateway_t g;
     ec_proto_frame_t frame;
     ec_transition_t t;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
 
     ec_gateway_init(&g);
     EXPECT_EQ_U32(EC_STATE_FAULT_LOCK, ec_gateway_state(&g));
@@ -193,7 +199,9 @@ static void test_full_cycle(void)
     ec_proto_frame_t frame;
     ec_gateway_event_t ev;
     ec_transition_t t;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
     ec_proto_display_ack_t ack;
     uint8_t ack_payload[EC_DISPLAY_ACK_PAYLOAD_LEN];
 
@@ -274,7 +282,9 @@ static void test_display_ack_rejection(void)
     ec_proto_frame_t frame;
     ec_gateway_event_t ev;
     ec_transition_t t;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
     ec_proto_display_ack_t ack;
     uint8_t ack_payload[EC_DISPLAY_ACK_PAYLOAD_LEN];
 
@@ -354,7 +364,9 @@ static void test_crc_rejection_and_round_gate(void)
     ec_gateway_t g;
     ec_proto_frame_t frame;
     ec_transition_t t;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
     uint8_t buf[EC_GATEWAY_RX_MAX];
     size_t written;
     size_t i;
@@ -409,7 +421,9 @@ static void test_result_idempotency(void)
     ec_proto_frame_t frame;
     ec_gateway_event_t ev;
     ec_transition_t t;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
 
     ec_gateway_init(&g);
     boot_to_wait_task(&g);
@@ -461,7 +475,9 @@ static void test_new_round_guards(void)
     ec_gateway_event_t ev;
     ec_transition_t t;
     ec_proto_frame_t frame;
-    uint8_t payload[8];
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+
+    (void)memset(payload, 0, sizeof(payload));
 
     ec_gateway_init(&g);
     boot_to_wait_task(&g);
@@ -813,6 +829,105 @@ static void test_cache_cleared_on_new_round(void)
     EXPECT_EQ_U8(0xFFU, nack_target);
 }
 
+/* P3 (2026-09-16): grasp point (ITEM_TASK offsets 8-11) latch + fail-closed. */
+static void test_pick_latch_and_fail_closed(void)
+{
+    ec_gateway_t g;
+    ec_gateway_event_t ev;
+    ec_transition_t t;
+    ec_proto_frame_t frame;
+    ec_proto_item_task_t item;
+    uint8_t payload[EC_PROTO_ITEM_TASK_PAYLOAD_LEN];
+    int16_t x;
+    int16_t y;
+
+    TEST_CASE_BEGIN("C-GW-PICK-001");
+    /* No ITEM_TASK yet: no grasp point may be reported, and the out-params must
+     * be left untouched (a caller that ignores the return value cannot be
+     * handed a fabricated (0,0)). */
+    ec_gateway_init(&g);
+    boot_to_wait_task(&g);
+    x = 777;
+    y = -777;
+    EXPECT_FALSE(ec_gateway_item_pick(&g, &x, &y));
+    EXPECT_EQ_I16(777, x);
+    EXPECT_EQ_I16(-777, y);
+
+    /* Feed one ITEM_TASK carrying a real grasp point (123, -456) and a drop
+     * point (0, 0), i.e. the two pairs must stay independent. */
+    (void)memset(&item, 0, sizeof(item));
+    item.target_seq = 0x01U;
+    item.class_id = 0x02U;
+    item.image_id = 0x02U;
+    item.grip_angle = EC_PROTO_ITEM_TASK_ANGLE_NONE;
+    item.pick_x_mm10 = 123;
+    item.pick_y_mm10 = -456;
+    EXPECT_TRUE(ec_proto_encode_item_task(&item, payload, sizeof(payload)));
+    (void)memset(&frame, 0, sizeof(frame));
+    frame.version = EC_PROTO_VERSION;
+    frame.sender = EC_DEVICE_PI;
+    frame.receiver = EC_DEVICE_STM32;
+    frame.task_id = 7U;
+    frame.frame_seq = 11U;
+    frame.command = EC_CMD_ITEM_TASK;
+    frame.payload = payload;
+    frame.payload_len = (uint16_t)sizeof(payload);
+
+    TEST_CASE_BEGIN("C-GW-PICK-002");
+    t = feed_frame(&g, &frame);
+    EXPECT_EQ_U32(EC_STATE_VALIDATE_TASK, t.state);
+    EXPECT_TRUE(g.item_has_pick);
+    x = 0;
+    y = 0;
+    EXPECT_TRUE(ec_gateway_item_pick(&g, &x, &y));
+    EXPECT_EQ_I16(123, x);
+    EXPECT_EQ_I16(-456, y);
+    EXPECT_TRUE(ec_gateway_item_target(&g, &x, &y));
+    EXPECT_EQ_I16(0, x);
+    EXPECT_EQ_I16(0, y);
+
+    TEST_CASE_BEGIN("C-GW-PICK-003");
+    /* A verified new round clears the grasp point together with the drop point
+     * - never "previous grasp point + new drop point". */
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_EMERGENCY_STOP;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_FAULT_LOCK, ec_gateway_state(&g));
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.type = EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED;
+    ev.round_id = 8U;
+    ev.round_closed = true;
+    ev.danger_area_clear = true;
+    ev.estop_released = true;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_POWER_ON, ec_gateway_state(&g));
+    EXPECT_FALSE(g.item_has_pick);
+    EXPECT_EQ_I16(0, g.item_pick_x_mm10);
+    EXPECT_EQ_I16(0, g.item_pick_y_mm10);
+    x = 5;
+    y = 5;
+    EXPECT_FALSE(ec_gateway_item_pick(&g, &x, &y));
+
+    TEST_CASE_BEGIN("C-GW-PICK-004");
+    /* Old 8-byte ITEM_TASK (pre-P3 wire): the exact-length check rejects it, so
+     * nothing is latched and no grasp point is ever reported. Silent by design
+     * (no NACK) - see the P3 diff doc sec. 9.9. */
+    ev.type = EC_EVENT_POST_PASSED;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_HOMING_PASSED;
+    (void)ec_gateway_inject(&g, &ev);
+    ev.type = EC_EVENT_BARRIER_AVOIDANCE_VERIFIED;
+    (void)ec_gateway_inject(&g, &ev);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, ec_gateway_state(&g));
+
+    frame.frame_seq = 12U;
+    frame.payload_len = 8U; /* old length: decode_item_task must refuse */
+    t = feed_frame(&g, &frame);
+    EXPECT_EQ_U32(EC_STATE_WAIT_TASK, t.state);
+    EXPECT_FALSE(g.item_has_pick);
+    EXPECT_FALSE(ec_gateway_item_pick(&g, &x, &y));
+}
+
 void test_protocol_gateway(void)
 {
     test_boot_and_frame_assembly();
@@ -826,4 +941,5 @@ void test_protocol_gateway(void)
     test_display_ack_resend();
     test_conflict_at_gateway();
     test_cache_cleared_on_new_round();
+    test_pick_latch_and_fail_closed();
 }

@@ -20,7 +20,7 @@ def context(target_seq: int, *, round_id: str = "round-new") -> ItemTaskContext:
         round_id=round_id,
         task_id=7,
         frame_seq=target_seq,
-        payload=ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0),
+        payload=ItemTaskPayload(target_seq, 2, target_seq + 10, 0, 0, 0, None, None),
     )
 
 
@@ -147,7 +147,7 @@ class RenderingReceiptTests(unittest.TestCase):
 
     def test_RPI_ACK_CRC_001_known_vector_uses_network_order_integer(self) -> None:
         scheduler = unlocked_scheduler(
-            ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 2, 3, 0, 0, 0))
+            ItemTaskContext("round-new", 7, 1, ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None))
         )
         active = scheduler.next_task()
         accept_motion_done_for(scheduler, active)

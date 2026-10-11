@@ -39,3 +39,9 @@ add_executable(crc32_vector_cli
     tests/crc32_vector_cli.c
 )
 target_link_libraries(crc32_vector_cli PRIVATE ec_stm32_logic)
+
+# P3 cross-language byte check (tools/p3_cross_language_check.py).
+add_executable(item_task_vector_cli
+    tests/item_task_vector_cli.c
+)
+target_link_libraries(item_task_vector_cli PRIVATE ec_stm32_logic)

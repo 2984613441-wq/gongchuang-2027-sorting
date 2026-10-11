@@ -152,6 +152,16 @@ bool ec_proto_encode_item_task(const ec_proto_item_task_t *item,
         (item->y_mm10 > EC_PROTO_ITEM_TASK_X_LIMIT)) {
         return false;
     }
+    /* The grasp point shares the drop point's domain check: both pairs are
+     * turned into pulses, so an out-of-range value in either must be refused. */
+    if ((item->pick_x_mm10 < -EC_PROTO_ITEM_TASK_X_LIMIT) ||
+        (item->pick_x_mm10 > EC_PROTO_ITEM_TASK_X_LIMIT)) {
+        return false;
+    }
+    if ((item->pick_y_mm10 < -EC_PROTO_ITEM_TASK_X_LIMIT) ||
+        (item->pick_y_mm10 > EC_PROTO_ITEM_TASK_X_LIMIT)) {
+        return false;
+    }
     if (item->grip_angle != EC_PROTO_ITEM_TASK_ANGLE_NONE) return false;
 
     payload[0] = item->target_seq;
@@ -162,6 +172,10 @@ bool ec_proto_encode_item_task(const ec_proto_item_task_t *item,
     payload[5] = (uint8_t)((uint16_t)item->y_mm10 >> 8U);
     payload[6] = (uint8_t)item->y_mm10;
     payload[7] = item->grip_angle;
+    payload[8] = (uint8_t)((uint16_t)item->pick_x_mm10 >> 8U);
+    payload[9] = (uint8_t)item->pick_x_mm10;
+    payload[10] = (uint8_t)((uint16_t)item->pick_y_mm10 >> 8U);
+    payload[11] = (uint8_t)item->pick_y_mm10;
     return true;
 }
 
@@ -170,6 +184,8 @@ bool ec_proto_decode_item_task(const uint8_t *payload, uint16_t payload_len,
 {
     int16_t x;
     int16_t y;
+    int16_t pick_x;
+    int16_t pick_y;
 
     if ((payload == NULL) || (out == NULL)) return false;
     if (payload_len != EC_PROTO_ITEM_TASK_PAYLOAD_LEN) return false;
@@ -185,6 +201,16 @@ bool ec_proto_decode_item_task(const uint8_t *payload, uint16_t payload_len,
     if ((y < -EC_PROTO_ITEM_TASK_X_LIMIT) || (y > EC_PROTO_ITEM_TASK_X_LIMIT)) {
         return false;
     }
+    pick_x = (int16_t)(((uint16_t)payload[8] << 8U) | (uint16_t)payload[9]);
+    pick_y = (int16_t)(((uint16_t)payload[10] << 8U) | (uint16_t)payload[11]);
+    if ((pick_x < -EC_PROTO_ITEM_TASK_X_LIMIT) ||
+        (pick_x > EC_PROTO_ITEM_TASK_X_LIMIT)) {
+        return false;
+    }
+    if ((pick_y < -EC_PROTO_ITEM_TASK_X_LIMIT) ||
+        (pick_y > EC_PROTO_ITEM_TASK_X_LIMIT)) {
+        return false;
+    }
 
     out->target_seq = payload[0];
     out->class_id = payload[1];
@@ -192,6 +218,8 @@ bool ec_proto_decode_item_task(const uint8_t *payload, uint16_t payload_len,
     out->x_mm10 = x;
     out->y_mm10 = y;
     out->grip_angle = payload[7];
+    out->pick_x_mm10 = pick_x;
+    out->pick_y_mm10 = pick_y;
     return true;
 }
 

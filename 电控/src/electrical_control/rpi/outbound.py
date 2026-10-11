@@ -29,7 +29,7 @@ def _u16(name: str, value: int) -> int:
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class OutboundConfig:
     round_task_id: int  # 本轮任务号（来自 VerifiedNewRound，u16 范围校验）
 

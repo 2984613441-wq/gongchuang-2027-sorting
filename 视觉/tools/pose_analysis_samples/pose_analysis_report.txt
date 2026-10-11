@@ -1,0 +1,136 @@
+Training Dataset Pose Analysis Report
+============================================================
+
+Dataset root: D:\AAAdesktop1\shijue\yolo_dataset
+Total training images: 511
+Sample size: 30
+
+Sample file list:
+------------------------------------------------------------
+ 1. 0825111825_device_528.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_00_0825111825_device_528.jpg
+
+ 2. 0825105205_device_448.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_01_0825105205_device_448.jpg
+
+ 3. IMG_3087.jpeg_156.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_02_IMG_3087.jpeg_156.jpg
+
+ 4. IMG_3322.jpeg_384.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_03_IMG_3322.jpeg_384.jpg
+
+ 5. IMG_3038.jpeg_109.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_04_IMG_3038.jpeg_109.jpg
+
+ 6. IMG_3216.jpeg_283.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_05_IMG_3216.jpeg_283.jpg
+
+ 7. 0825112728_device_637.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_06_0825112728_device_637.jpg
+
+ 8. 0824172752_device_28.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_07_0824172752_device_28.jpg
+
+ 9. 0825112218_device_565.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_08_0825112218_device_565.jpg
+
+10. 0825112514_device_601.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_09_0825112514_device_601.jpg
+
+11. 0825104906_device_414.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_10_0825104906_device_414.jpg
+
+12. IMG_3102.jpeg_170.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_11_IMG_3102.jpeg_170.jpg
+
+13. 0825105420_device_479.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_12_0825105420_device_479.jpg
+
+14. IMG_3005.jpeg_77.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_13_IMG_3005.jpeg_77.jpg
+
+15. 0824171906_device_10.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_14_0824171906_device_10.jpg
+
+16. IMG_3282.jpeg_343.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_15_IMG_3282.jpeg_343.jpg
+
+17. 0825104850_device_411.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_16_0825104850_device_411.jpg
+
+18. 0825104937_device_423.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_17_0825104937_device_423.jpg
+
+19. 0824172440_device_17.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_18_0824172440_device_17.jpg
+
+20. IMG_3048.jpeg_117.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_19_IMG_3048.jpeg_117.jpg
+
+21. 0824171755_device_4.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_20_0824171755_device_4.jpg
+
+22. 0825104918_device_418.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_21_0825104918_device_418.jpg
+
+23. 0825112719_device_633.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_22_0825112719_device_633.jpg
+
+24. 0825105234_device_456.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_23_0825105234_device_456.jpg
+
+25. IMG_3133.jpeg_200.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_24_IMG_3133.jpeg_200.jpg
+
+26. 0825112017_device_547.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_25_0825112017_device_547.jpg
+
+27. IMG_3083.jpeg_152.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_26_IMG_3083.jpeg_152.jpg
+
+28. IMG_3227.jpeg_292.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_27_IMG_3227.jpeg_292.jpg
+
+29. IMG_3130.jpeg_197.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_28_IMG_3130.jpeg_197.jpg
+
+30. IMG_3211.jpeg_277.jpg
+    Size: 416x416
+    Thumbnail: C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples\sample_29_IMG_3211.jpeg_277.jpg
+
+
+============================================================
+MANUAL INSPECTION REQUIRED:
+Please open C:\Users\29845\Desktop\工创赛\视觉\tools\pose_analysis_samples and check thumbnails to determine:
+1. Are objects ONLY in 'face-up' poses?
+2. Are there side views, tilted, or randomly placed poses?
+3. Are objects touching or occluding each other?

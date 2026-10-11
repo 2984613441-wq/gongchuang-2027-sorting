@@ -1,0 +1,39 @@
+[Unit]
+Description=一键启动服务（赛规 R-R01/R-R02 要求）
+Documentation=https://github.com/your-org/智能分拣装置
+After=network-online.target
+# network-online.target：链要连 MaixCAM 的 TCP (172.20.10.8:8765)
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi
+
+# 绝对路径（避免环境变量依赖）
+ExecStart=/usr/bin/python3 /home/pi/工具/pi_side/pi_onkey.py
+# ⚠️ 注意：部署时需确认 pi_onkey.py 的实际路径（可能在 /home/pi/电控/工具/ 或其他位置）
+
+# 环境变量（链需要 PYTHONPATH）
+Environment="PYTHONPATH=/home/pi/电控/src"
+
+# 标准输出/错误重定向到 journal
+StandardOutput=journal
+StandardError=journal
+
+# 重启策略
+Restart=on-failure
+RestartSec=10s
+# ⚠️ FAULT 状态不会自动恢复（需人工重启服务）；Restart=on-failure 只处理进程崩溃
+
+# 停止超时（给链 30 秒收尾）
+TimeoutStopSec=30
+
+# 进程终止信号（SIGTERM → 优雅停止）
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+# multi-user.target = 多用户模式（有网络、无图形界面）

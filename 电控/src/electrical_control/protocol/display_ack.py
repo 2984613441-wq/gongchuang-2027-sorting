@@ -21,7 +21,7 @@ def crc32_iso_hdlc(data: bytes) -> int:
     return zlib.crc32(bytes(data)) & 0xFFFFFFFF
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayContent:
     target_seq: int
     class_id: int
@@ -45,7 +45,7 @@ class DisplayContent:
         return crc32_iso_hdlc(self.canonical_bytes())
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DisplayAckPayload:
     target_seq: int
     render_result: int

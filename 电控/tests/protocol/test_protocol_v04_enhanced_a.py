@@ -12,19 +12,22 @@ import electrical_control.protocol as protocol
 
 
 class ItemTaskV04PayloadTests(unittest.TestCase):
-    def test_item_task_payload_encodes_frozen_8_byte_wire_format(self) -> None:
+    def test_item_task_payload_encodes_frozen_12_byte_wire_format(self) -> None:
         item = protocol.ItemTaskPayload(
             target_seq=1,
             class_id=2,
-            image_id=3,
+            image_id=2,  # 冻结不变式: image_id == class_id
             x_position=-1000,
             y_position=1000,
             grip_angle=0xFF,
+            # P3: 抓取点在尾部 4 字节（0.1mm，大端）
+            pick_x_position=250,
+            pick_y_position=-250,
         )
 
-        self.assertEqual(3, item.image_id)
+        self.assertEqual(2, item.image_id)
         self.assertEqual(
-            bytes.fromhex("01 02 03 FC 18 03 E8 FF"),
+            bytes.fromhex("01 02 02 FC 18 03 E8 FF 00 FA FF 06"),
             protocol.encode_item_task_payload(item),
         )
 
@@ -115,6 +118,8 @@ class DisplayContentFromItemResultTests(unittest.TestCase):
             x_position=0x1234,
             y_position=0x5678,
             grip_angle=90,
+            pick_x_position=0,
+            pick_y_position=0,
         )
         counter = protocol.RoundSuccessCounter()
         counter.record_item_result(task_id=7, frame_seq=11, result_code=0x00)

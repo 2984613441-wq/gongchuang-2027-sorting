@@ -44,8 +44,8 @@ class ControlFlowGuardTests(unittest.TestCase):
             display_ack_dedup_capacity=2,
             result_dedup_capacity=2,
             validated_item_contexts={
-                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0),
-                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0),
+                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None),
+                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0, None, None),
             },
         )
         self.task = ItemTaskReceived(7, 11, target="BIN_RED")
@@ -240,7 +240,7 @@ class ControlFlowGuardTests(unittest.TestCase):
             task_dedup_capacity=1,
             display_ack_dedup_capacity=1,
             result_dedup_capacity=1,
-            validated_item_contexts={(7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0)},
+            validated_item_contexts={(7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None)},
         )
         guard.consume(self.task, now=11.0)
         guard.consume(self.task, now=11.1)
@@ -264,8 +264,8 @@ class ControlFlowGuardTests(unittest.TestCase):
             display_ack_dedup_capacity=1,
             result_dedup_capacity=2,
             validated_item_contexts={
-                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0),
-                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0),
+                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None),
+                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0, None, None),
             },
         )
         guard.consume(self.task, now=11.0)
@@ -299,8 +299,8 @@ class ControlFlowGuardTests(unittest.TestCase):
             display_ack_dedup_capacity=2,
             result_dedup_capacity=1,
             validated_item_contexts={
-                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0),
-                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0),
+                (7, 11): ItemTaskPayload(1, 2, 3, 0, 0, 0, None, None),
+                (7, 12): ItemTaskPayload(2, 4, 5, 0, 0, 0, None, None),
             },
         )
         guard.consume(self.task, now=11.0)
@@ -333,7 +333,8 @@ class ControlFlowGuardTests(unittest.TestCase):
             result_dedup_capacity=256,
             validated_item_contexts={
                 (7, seq): ItemTaskPayload(
-                    target_of(seq), target_of(seq), target_of(seq), 0, 0, 0
+                    target_of(seq), target_of(seq), target_of(seq), 0, 0, 0,
+                    None, None,
                 )
                 for seq in range(1, 257)
             },

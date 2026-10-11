@@ -55,6 +55,10 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+/* 主链路 = USART2（2026-09-15 用户裁决；与 docs/design/interface-contract.md
+ * V0.8 "主链路 USART2/PA2/PA3" 及电控/deploy/README.md 一致）。
+ * huart3 保留为备用链路句柄。 */
+extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN EV */
 extern TIM_HandleTypeDef htim4;
@@ -202,7 +206,21 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles USART3 global interrupt.
+  * @brief This function handles USART2 global interrupt. (主链路，2026-09-15)
+  */
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
+
+  /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles USART3 global interrupt. (备用链路)
   */
 void USART3_IRQHandler(void)
 {
@@ -215,48 +233,27 @@ void USART3_IRQHandler(void)
   /* USER CODE END USART3_IRQn 1 */
 }
 
+/* USER CODE BEGIN 1 */
+
 /**
-  * @brief This function handles TIM4 global interrupt.
+  * @brief This function handles TIM4 global interrupt. (Y 轴步进脉冲计数)
+  * 2026-09-18 新增：此前只有 extern 声明没有函数体，startup 里的 [WEAK]
+  * 默认实现是死循环，且 NVIC 从未使能 → 步进计数中断永不执行。
+  * 走 HAL_TIM_IRQHandler 才能触达 HAL_TIM_PeriodElapsedCallback
+  * (main.c) → ec_step_port_on_timer_period (ec_board_stm32.c)。
   */
 void TIM4_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM4_IRQn 0 */
-
-  /* USER CODE END TIM4_IRQn 0 */
   HAL_TIM_IRQHandler(&htim4);
-  /* USER CODE BEGIN TIM4_IRQn 1 */
-
-  /* USER CODE END TIM4_IRQn 1 */
 }
 
 /**
-  * @brief This function handles TIM8 update interrupt and TIM13 global interrupt.
+  * @brief This function handles TIM8 update interrupt. (X 轴步进脉冲计数)
+  * F407 上 TIM8 更新中断与 TIM13 共用 TIM8_UP_TIM13_IRQn 这一条向量。
   */
 void TIM8_UP_TIM13_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM8_UP_TIM13_IRQn 0 */
-
-  /* USER CODE END TIM8_UP_TIM13_IRQn 0 */
   HAL_TIM_IRQHandler(&htim8);
-  /* USER CODE BEGIN TIM8_UP_TIM13_IRQn 1 */
-
-  /* USER CODE END TIM8_UP_TIM13_IRQn 1 */
 }
-
-/**
-  * @brief This function handles TIM1 break interrupt and TIM9 global interrupt.
-  */
-void TIM1_BRK_TIM9_IRQHandler(void)
-{
-  /* USER CODE BEGIN TIM1_BRK_TIM9_IRQn 0 */
-
-  /* USER CODE END TIM1_BRK_TIM9_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim9);
-  /* USER CODE BEGIN TIM1_BRK_TIM9_IRQn 1 */
-
-  /* USER CODE END TIM1_BRK_TIM9_IRQn 1 */
-}
-
-/* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */

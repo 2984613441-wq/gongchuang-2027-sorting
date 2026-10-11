@@ -4,9 +4,9 @@
 
 #define EC_SERVO_ARM_WINDOW_MS UINT32_C(10000)
 #define EC_SERVO_RUN_MS        UINT32_C(2000)
-#define EC_SERVO_SAFETY_MASK                                            \
-    (EC_INPUT_X_HOME | EC_INPUT_X_END | EC_INPUT_Y_HOME | EC_INPUT_Y_END | \
-     EC_INPUT_Z_UP | EC_INPUT_Z_DOWN | EC_INPUT_ESTOP_FB)
+/* 2026-09-15 用户裁决：X/Y 不装限位开关 → 遮罩收敛为仅 ESTOP。
+ * 与 ec_axis_driver.c / ec_demo.c / ec_step_test.c 的三处遮罩保持一致。 */
+#define EC_SERVO_SAFETY_MASK  (EC_INPUT_ESTOP_FB)
 
 static ec_servo_test_mode_t mode;
 static uint32_t armed_at_ms;
@@ -20,7 +20,34 @@ static bool has_safety_inhibit(uint16_t active_inputs)
 
 static bool is_allowed_pulse(uint16_t pulse_us)
 {
-    return (pulse_us == UINT16_C(1000)) ||
+    /* 🔴 2026-09-19 新增 900/950：用户实机观察 P1000 时夹爪"还可以再往上开一点点"，
+     * 需要更低脉宽才能探到完全张开的端点。
+     * ⚠️ 往下压脉宽 = 把舵机推向机械端点。越过机械限位会持续堵转、电流拉满、发热甚至
+     *    烧毁舵机。故只用小步（950→900）试探，**听到持续嗡嗡声/异响立刻 SERVO STOP**，
+     *    并把最终取值定在"刚好完全张开"之上，不要贴死机械端点。
+     * ⚠️ 本表与 ec_diag.c 的 servo_pulse_from_command() 命令表必须同步增删，
+     *    否则会出现"命令能解析但被这里拒掉"的不一致。 */
+    /* 2026-09-21 三改：用户现场目视 P750 仍"不够开"，要求继续下探。
+     * 一次开放 650/675/700/725 四档（25us 一步），避免为每一档重烧一次。
+     * 🔴 越往下越贴机械端点：听到持续嗡嗡声/异响立刻 SERVO STOP，
+     *    最终取值定在"刚好完全张开"之上，不要贴死端点。 */
+    /* 2026-09-21 四改：用户继续要求更低（625）⇒ 再追加 550/575/600/625 四档。
+     * 🔴 已连续下探 900→675 全程无堵转；再往下每一步都更贴机械端点，必须逐档听声。 */
+    return (pulse_us == UINT16_C(550)) ||
+           (pulse_us == UINT16_C(575)) ||
+           (pulse_us == UINT16_C(600)) ||
+           (pulse_us == UINT16_C(625)) ||
+           (pulse_us == UINT16_C(650)) ||
+           (pulse_us == UINT16_C(675)) ||
+           (pulse_us == UINT16_C(700)) ||
+           (pulse_us == UINT16_C(725)) ||
+           (pulse_us == UINT16_C(750)) ||   /* 2026-09-21 新增：用户要求张开到 750 */
+           (pulse_us == UINT16_C(800)) ||   /* 2026-09-21 新增：回退扫描档 */
+           (pulse_us == UINT16_C(850)) ||   /* 2026-09-19 二改：900→850，更张开 */
+           (pulse_us == UINT16_C(870)) ||   /* 2026-09-21 新增：回退扫描档 */
+           (pulse_us == UINT16_C(900)) ||
+           (pulse_us == UINT16_C(950)) ||
+           (pulse_us == UINT16_C(1000)) ||
            (pulse_us == UINT16_C(1100)) ||
            (pulse_us == UINT16_C(1200)) ||
            (pulse_us == UINT16_C(1300)) ||

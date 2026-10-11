@@ -65,6 +65,44 @@ ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
     }
 
     if (machine->state == EC_STATE_FAULT_LOCK) {
+        /* 2026-09-18 BU-FIX: ben ji mei jie ren he an jian, wu fa chan sheng
+         * MANUAL_NEW_ROUND_CONFIRMED, lun ci yong yuan jian li bu qi lai.
+         * xian zeng yi tiao: shou dao shu mei pai fa lai de ITEM_TASK shi, zhi jie
+         * CONG ZHEN NEI DE task_id XUE XI lun ci —— ji "shu mei pai shuo di ji lun
+         * jiu shi di ji lun", he xin ceng dui qi, bu zai yi lai ben di ji shu qi.
+         * 🔴 an quan tiao jian reng ran bi xu cheng li (danger_area_clear / estop_released
+         *    you App ceng yong zhen shi active_inputs ji suan hou tui jin, jian shang).
+         * hou xu lun ci reng an != yan ge jiao yan, kua lun chi dao ren wu de fang hu ji xu you xiao. */
+        /* 2026-09-18 ZERO-REPLY-FIX（实机定位，别再改回去）：
+         * 原条件是 (event->round_id != machine->round_id)。问题：轮次号一旦学到
+         * （例如 round_id=1），此后任何一次故障把状态机打回 FAULT_LOCK
+         * （ec_app.c 的 15s 无进展看门狗 → EC_EVENT_DEADLINE_EXPIRED → lock_machine()
+         * **只改 state、不动 round_id**）之后，同轮次号的 ITEM_TASK 会让两个分支
+         * 全部落空，直接落到函数末尾的 return snapshot(machine)：
+         *   · 不改 actions（仍是 SAFE_LOCK）→ consume_and_emit 无分支命中
+         *   · ec_gateway_feed_byte() 每字节先把 tx_len 清 0 → **一个字节都不发**
+         * 现象：板子 1Hz ASCII STATUS 照发、帧字节完全合法，但对 Pi 的每一次重传
+         * 统统装死，Pi 侧连一条 FRAME_REJECTED 都看不到（feed_frame 压根没被调用）。
+         * 实机复现（FAULT_LOCK 下同端口、同一个 PySerialLink）：
+         *   task_id=1（== round_id）→ 4 秒零应答；task_id=2（!= round_id）→ BARRIER_READY。
+         * 故去掉 != 限制：FAULT_LOCK 下只要安全条件成立，收到的 ITEM_TASK 就重新
+         * 学轮次并重跑 POST —— 一次故障之后链路能自愈，不必人工按 RESET。
+         * 安全边界未放宽：ESTOP / MANUAL_RESET 仍然让 danger_area_clear 与
+         * estop_released 为假，分支进不去（fail-closed）；POST 自身还会再查一次
+         * ESTOP 与电源许可（ec_startup_sequence.c:108-140）。
+         * 不会因为重传反复重跑启动序列：本分支一进就把 state 置为 POWER_ON，
+         * 后续重传到的是 POWER_ON/HOMING/... 而不是 FAULT_LOCK。 */
+        if ((event->type == EC_EVENT_ITEM_TASK_ACCEPTED) &&
+            event->danger_area_clear && event->estop_released) {
+            ec_dedup_clear_for_verified_new_round(machine->dedup);
+            machine->round_id = event->round_id;
+            machine->last_accepted_frame_seq = 0U;
+            machine->state = EC_STATE_POWER_ON;
+            machine->fault_reason = EC_FAULT_NONE;
+            machine->actions = EC_ACTION_BEGIN_POST;
+            return snapshot(machine);
+        }
+
         if ((event->type == EC_EVENT_MANUAL_NEW_ROUND_CONFIRMED) &&
             event->round_closed && event->danger_area_clear &&
             event->estop_released && (event->round_id != machine->round_id)) {
@@ -157,6 +195,24 @@ ec_transition_t ec_sm_consume(ec_state_machine_t *machine,
                matches_current_context(machine, event)) {
         machine->state = EC_STATE_WAIT_ITEM_RESULT;
         machine->actions = EC_ACTION_EMIT_MOTION_DONE;
+    } else if ((machine->state == EC_STATE_EXECUTING) &&
+               (event->type == EC_EVENT_ITEM_RESULT_RECORDED) &&
+               matches_current_context(machine, event)) {
+        /* Defect #2 fix: Motion failed to start (ec_axis_driver_start_pick_place
+         * returned error in ec_app.c:186). Skip MOTION_DONE, go directly to
+         * display phase so the failure is shown (interface-contract.md:247). */
+        machine->state = EC_STATE_WAIT_DISPLAY_ACK;
+        machine->actions = EC_ACTION_EMIT_ITEM_RESULT;
+    } else if ((machine->state == EC_STATE_VALIDATE_TASK) &&
+               (event->type == EC_EVENT_ITEM_RESULT_RECORDED) &&
+               matches_current_context(machine, event)) {
+        /* Defect #1 fix: Failed item (e.g. POSITION_UNREACHABLE) detected
+         * during validation. No motion will happen, but failure must still be
+         * displayed (赛规: "本次分拣信息没有显示前而分拣下一件货物不得分").
+         * Go directly to WAIT_DISPLAY_ACK (interface-contract.md:247:
+         * "失败结果仍须显示并完成本件渲染确认流程"). */
+        machine->state = EC_STATE_WAIT_DISPLAY_ACK;
+        machine->actions = EC_ACTION_EMIT_ITEM_RESULT;
     } else if ((machine->state == EC_STATE_WAIT_ITEM_RESULT) &&
                (event->type == EC_EVENT_ITEM_RESULT_RECORDED) &&
                matches_current_context(machine, event)) {
