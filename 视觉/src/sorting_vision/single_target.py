@@ -14,6 +14,12 @@ from math import isfinite
 from typing import Any, Callable, Protocol
 
 from .config import InferenceConfig
+from .constants import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_INPUT_HEIGHT,
+    DEFAULT_INPUT_WIDTH,
+    MAX_DETECTIONS_SINGLE_TARGET,
+)
 from .coordinates import CoordinateTransform, PixelCenterTransform
 from .errors import (
     AmbiguousTargetError,
@@ -50,9 +56,11 @@ class LoopBackend(Protocol):
 class SingleTargetLoopConfig:
     model_path: str
     labels: tuple[str, ...] = ()
-    confidence: float = 0.35
-    input_width: int = 448
-    input_height: int = 448
+    # Was 0.35, which was looser than InferenceConfig's 0.50 default. Unified
+    # on 2026-10-11; see constants.DEFAULT_CONFIDENCE_THRESHOLD for the caveat.
+    confidence: float = DEFAULT_CONFIDENCE_THRESHOLD
+    input_width: int = DEFAULT_INPUT_WIDTH
+    input_height: int = DEFAULT_INPUT_HEIGHT
     hmirror: bool = False
     vflip: bool = False
     rotation: int = 0
@@ -123,9 +131,9 @@ def _backend_name(backend: Any) -> str:
     return name if isinstance(name, str) and name else "unknown"
 
 
-# Must exceed the single-target count; otherwise a multi-target frame is
-# clamped to DUPLICATE_DETECTION before AMBIGUOUS_TARGET can be raised.
-MAX_DETECTIONS = 100
+# Historical module-level name. The literal now lives in ``constants``; this
+# alias is kept so any out-of-tree importer keeps resolving.
+MAX_DETECTIONS = MAX_DETECTIONS_SINGLE_TARGET
 
 
 def _inference_config(config: SingleTargetLoopConfig) -> InferenceConfig:
@@ -135,7 +143,7 @@ def _inference_config(config: SingleTargetLoopConfig) -> InferenceConfig:
         class_names={index: name for index, name in enumerate(config.labels)},
         confidence_threshold=config.confidence,
         input_size=(config.input_width, config.input_height),
-        max_detections=MAX_DETECTIONS,
+        max_detections=MAX_DETECTIONS_SINGLE_TARGET,
         reject_duplicates=True,
     )
 

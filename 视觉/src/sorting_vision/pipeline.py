@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .backends.base import InferenceBackend
 from .config import InferenceConfig
+from .constants import MAX_TASK_ID, MAX_TARGET_SEQ
 from .coordinates import CoordinateTransform, PixelCenterTransform
 from .errors import AmbiguousReacquireError, VisionError
 from .postprocess import postprocess
@@ -17,11 +20,21 @@ from .types import (
 )
 
 
+def _safe_int(value: Any, fallback: int) -> int:
+    """Return ``value`` when it is an int, otherwise ``fallback``.
+
+    Used when echoing a request field back inside a failure result: the caller
+    may have passed a non-integer, and the result schema still needs an int.
+    """
+
+    return value if isinstance(value, int) else fallback
+
+
 def _validate_task_id(task_id: int) -> None:
-    if not isinstance(task_id, int) or not 0 <= task_id <= 65535:
+    if not isinstance(task_id, int) or not 0 <= task_id <= MAX_TASK_ID:
         from .errors import InvalidInputError
 
-        raise InvalidInputError("task_id must be an integer within [0, 65535]")
+        raise InvalidInputError(f"task_id must be an integer within [0, {MAX_TASK_ID}]")
 
 
 class VisionPipeline:
@@ -74,14 +87,14 @@ class VisionPipeline:
             )
         except VisionError as exc:
             return BatchResult(
-                task_id=task_id if isinstance(task_id, int) else -1,
+                task_id=_safe_int(task_id, -1),
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
                 issues=(InferenceIssue(exc.code, str(exc)),),
             )
         except Exception as exc:  # fail closed on an unexpected core failure
             return BatchResult(
-                task_id=task_id if isinstance(task_id, int) else -1,
+                task_id=_safe_int(task_id, -1),
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
                 issues=(InferenceIssue("INTERNAL_CORE_ERROR", str(exc)),),
@@ -95,10 +108,12 @@ class VisionPipeline:
         image: ImageLike,
     ) -> ReacquireResult:
         try:
-            if not isinstance(target_seq, int) or not 1 <= target_seq <= 255:
+            if not isinstance(target_seq, int) or not 1 <= target_seq <= MAX_TARGET_SEQ:
                 from .errors import InvalidInputError
 
-                raise InvalidInputError("target_seq must be an integer within [1, 255]")
+                raise InvalidInputError(
+                    f"target_seq must be an integer within [1, {MAX_TARGET_SEQ}]"
+                )
             if expected_class_id not in self.config.class_names:
                 from .errors import UnknownClassError
 
@@ -138,16 +153,16 @@ class VisionPipeline:
             )
         except VisionError as exc:
             return ReacquireResult(
-                task_id=task_id if isinstance(task_id, int) else -1,
-                target_seq=target_seq if isinstance(target_seq, int) else -1,
+                task_id=_safe_int(task_id, -1),
+                target_seq=_safe_int(target_seq, -1),
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
                 issues=(InferenceIssue(exc.code, str(exc)),),
             )
         except Exception as exc:
             return ReacquireResult(
-                task_id=task_id if isinstance(task_id, int) else -1,
-                target_seq=target_seq if isinstance(target_seq, int) else -1,
+                task_id=_safe_int(task_id, -1),
+                target_seq=_safe_int(target_seq, -1),
                 status=ResultStatus.FAILED,
                 backend=self.backend.name,
                 issues=(InferenceIssue("INTERNAL_CORE_ERROR", str(exc)),),

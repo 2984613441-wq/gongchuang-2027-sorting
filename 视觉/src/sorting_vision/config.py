@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from .constants import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_INPUT_HEIGHT,
+    DEFAULT_INPUT_WIDTH,
+    DEFAULT_MAX_DETECTIONS_BATCH,
+    DEFAULT_NMS_IOU_THRESHOLD,
+)
 from .errors import ConfigurationError
 
 
@@ -14,11 +21,11 @@ class InferenceConfig:
     backend: str = "fake"
     model_path: Path | None = None
     class_names: Mapping[int, str] = field(default_factory=dict)
-    confidence_threshold: float = 0.50
-    nms_iou_threshold: float = 0.45
-    input_size: tuple[int, int] = (448, 448)
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD
+    nms_iou_threshold: float = DEFAULT_NMS_IOU_THRESHOLD
+    input_size: tuple[int, int] = (DEFAULT_INPUT_WIDTH, DEFAULT_INPUT_HEIGHT)
     device: str = "cpu"
-    max_detections: int = 100
+    max_detections: int = DEFAULT_MAX_DETECTIONS_BATCH
     reject_duplicates: bool = True
 
     def __post_init__(self) -> None:

@@ -1,9 +1,9 @@
 """Drop-point table mapping visual box ids to physical coordinates.
 
 The coordinates are mechanical facts that must be measured on site and
-injected here; this module never invents them. Protocol V0.6 limits the
-ITEM_TASK X/Y coordinate to +-145.0 mm (origin = device center), which is
-+-1450 in 0.1 mm units.
+injected here; this module never invents them. The item-task contract V0.9
+limits the ITEM_TASK X/Y coordinate to +-145.0 mm (origin = device center),
+which is +-1450 in 0.1 mm units.
 """
 
 from __future__ import annotations
@@ -11,10 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
+from .constants import COORDINATE_BOUND_MM10
 from .errors import VisionError
 
 
-ITEM_TASK_COORD_LIMIT = 1450
+# Re-exported under its historical name so existing importers keep working;
+# the literal itself lives in ``constants`` (single source of truth).
+ITEM_TASK_COORD_LIMIT = COORDINATE_BOUND_MM10
 MIN_BOX_ID = 1
 MAX_BOX_ID = 6
 
