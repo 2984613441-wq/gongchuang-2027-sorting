@@ -25,6 +25,7 @@
 | 模块 | 职责 |
 |---|---|
 | `config.py` | 模型路径、类别表、阈值、输入尺寸、设备与最大检测数的显式配置和校验 |
+| `constants.py` | 共享数值的单一来源：协议边界（`task_id` 65535、`target_seq` 255、坐标 1450）、置信度、NMS、输入尺寸、检测上限。零依赖，任何模块可安全 import |
 | `types.py` | 原始框、内部检测结果、整批结果、单目标复核结果和错误对象 |
 | `backends/` | Fake、可选 Ultralytics、ONNX Runtime、MaixCAM（`MaixPyYoloBackend` + `MaixCamKmodelBackend` 注入边界） |
 | `postprocess.py` | 置信度过滤、类别感知 NMS 和重复目标关闭失败 |
@@ -35,6 +36,7 @@
 | `benchmark.py` | 两个候选部署端使用同一验证集的可比较基准记录 |
 | `color_quant.py` | MMCQ 主色提取与色相命名，颜色分类的免训练兜底 |
 | `sort_plan.py` | 按 `(颜色, 形状)` 分组并把每组映射到储物盒，初赛主链纯逻辑 |
+| `shape_features.py` | 轮廓几何形状兜底分类（免模型）：**实验性、未接入主链**，见下节 |
 | `info_decode.py` | 决赛“信息”插槽（二维码/文字/图形），当前只有契约与 Fake 实现 |
 
 ## 初赛分类与分箱
@@ -51,6 +53,33 @@
 里标注颜色。`sort_plan.classify_and_plan` 是这条主链的纯逻辑实现，颜色词表
 为起步值，待现场白平衡/补光校准后冻结。决赛的“信息”暂走 `info_decode` 插槽，
 初赛不启用。
+
+### 轮廓形状兜底（`shape_features.py`，未接入）
+
+`shape_features.py` 提供一条**免模型**的备用形状通道：对颜色分割出的轮廓测量几何
+描述子（实心度、圆度、最小外接矩形比值/充满度、四角余弦、椭圆面积比），再按规则
+命名形状。判据可逐条追溯到归档脚本
+`archive/_B档金贵-20261002/视觉V6-03_历史版本与验证/stage1_contour_v3.py` 的
+`shape_from_contour`（第 45–83 行）。
+
+**边界（务必先读）**：
+
+- 只能区分**平面朝上**的 3 类：`cube`、`cylinder`、`triangular_prism`；
+  另外 4 类（`cuboid`、`hexagonal_prism`、`pentagonal_prism`、`square_pyramid`）
+  **不凭空补阈值**，一律返回 `unknown`。`unknown` 不是 7 类词表里的类。
+- ⚠️ **`unknown` 才是可靠的安全输出**。返回 `cube`/`cylinder`/`triangular_prism`
+  **不等于**物件真是这三者之一：实测光滑**正六边形与正八边形都会被判成 `cylinder`**
+  （六边形：圆度 0.824、最小外接矩形比 0.875、椭圆面积比 0.962），而
+  `hexagonal_prism` 是 7 类里的真实类。该错误答案逐字继承自归档脚本，本模块未新造
+  阈值去补——已用测试把这一已知错误钉住（`test_smooth_hexagon_is_currently_named_cylinder`）。
+- 全部阈值是**经验值且未现场标定**，且归档旁的检查自述为
+  "not raw-camera or on-device verification"（主机侧截图检查）；换灯光/机位需重新核验。
+  它是**假设生成器**，不是标定测量，也不能替代 7 类 YOLO 模型或深度信息。
+- 缺少 OpenCV/numpy 时显式抛 `DependencyUnavailableError`，不静默降级。
+- 它**没有**接入 `sort_plan.classify_and_plan` 的分箱决策。原因：主链的形状来自
+  YOLO `class_id`，而 `class_id` 决定箱号＝决定物理落料盒；用几何猜测静默覆盖会改动
+  要求现场冻结的物理映射。接入需要单独定义输入契约、融合/告警策略与回归数据，
+  并按更高风险等级评审。`rgba_roi_to_bgr_array` 是接入所需的那段适配器，已测试。
 
 ## 单目标推理循环
 
