@@ -8,6 +8,7 @@ from .backends.base import InferenceBackend
 from .config import InferenceConfig
 from .constants import MAX_TASK_ID, MAX_TARGET_SEQ
 from .coordinates import CoordinateTransform, PixelCenterTransform
+from .encoding import encode_color_shape
 from .errors import AmbiguousReacquireError, VisionError
 from .postprocess import postprocess
 from .types import (
