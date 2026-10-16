@@ -1,0 +1,214 @@
+# 树莓派无法连接手机热点 - 排查指南
+
+**时间**: 2026-10-11  
+**问题**: 树莓派突然连不上之前能用的手机热点
+
+---
+
+## 🔍 快速排查步骤
+
+### 步骤1: 检查热点是否开启
+- [ ] 手机热点是否已打开
+- [ ] 热点名称（SSID）是否和之前一样
+- [ ] 热点密码是否改过
+
+---
+
+### 步骤2: 检查树莓派WiFi状态
+
+**通过HDMI屏幕操作**（如果屏幕已接好）:
+```bash
+# 打开终端，输入：
+ifconfig wlan0
+# 查看WiFi网卡是否存在
+
+iwconfig
+# 查看无线连接状态
+```
+
+**或通过串口连接**（如果串口已接好）:
+```bash
+# 从电脑串口工具连接树莓派
+# 波特率 115200
+
+# 登录后输入：
+sudo ifconfig wlan0 up
+sudo iwlist wlan0 scan | grep "您的热点名称"
+```
+
+---
+
+### 步骤3: 常见原因排查
+
+#### 原因A: 频段不兼容（最常见）
+**症状**: 能扫描到热点但连不上
+
+**手机热点设置**:
+- 如果开的是5GHz（5G WiFi），树莓派可能不支持
+- **解决**: 手机热点改为2.4GHz频段
+
+**操作**（以Android为例）:
+```
+设置 → 热点与网络共享 → 便携式热点 
+→ 热点配置 → AP频段 → 选择 "2.4GHz"
+```
+
+**操作**（以iPhone为例）:
+```
+设置 → 个人热点 → 兼容性最大化（打开）
+# 这会强制使用2.4GHz
+```
+
+---
+
+#### 原因B: 供电不足导致WiFi模块不工作
+**症状**: WiFi完全扫描不到任何热点
+
+**检查**:
+```bash
+# 树莓派终端输入
+vcgencmd get_throttled
+# 如果返回 throttled=0x50000 或类似，说明欠压
+```
+
+**解决**:
+- 检查DCP3512输出电压（万用表测量，应≥4.8V）
+- 减少USB设备
+- 或用独立5V/3A适配器
+
+---
+
+#### 原因C: WiFi被禁用
+**检查**:
+```bash
+rfkill list
+# 如果WiFi显示 blocked: yes
+
+# 解除禁用：
+sudo rfkill unblock wifi
+```
+
+---
+
+#### 原因D: 网络配置文件损坏
+**重新配置WiFi**:
+```bash
+sudo raspi-config
+# 选择 System Options → Wireless LAN
+# 输入热点名称（SSID）和密码
+```
+
+**或手动编辑**:
+```bash
+sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
+
+# 添加或修改：
+network={
+    ssid="您的热点名称"
+    psk="您的热点密码"
+    key_mgmt=WPA-PSK
+}
+
+# 保存后重启WiFi：
+sudo systemctl restart dhcpcd
+```
+
+---
+
+#### 原因E: 热点客户端数量已满
+**检查**: 手机热点是否已连接多个设备（通常限制8-10个）
+
+**解决**: 断开其他设备，腾出位置
+
+---
+
+#### 原因F: MAC地址过滤
+**检查**: 手机热点是否开启了"允许设备列表"
+
+**解决**: 
+1. 查看树莓派MAC地址：
+   ```bash
+   ifconfig wlan0 | grep ether
+   ```
+2. 在手机热点设置中添加该MAC地址
+
+---
+
+### 步骤4: 强制重新连接
+
+```bash
+# 关闭WiFi
+sudo ifconfig wlan0 down
+
+# 重新打开
+sudo ifconfig wlan0 up
+
+# 扫描可用网络
+sudo iwlist wlan0 scan | grep "ESSID"
+
+# 重启网络服务
+sudo systemctl restart dhcpcd
+
+# 或直接重启树莓派
+sudo reboot
+```
+
+---
+
+## 🎯 最快解决方案（90%有效）
+
+**试试这个顺序**:
+1. **手机热点改为2.4GHz** ← 最常见原因
+2. 树莓派输入 `sudo reboot`
+3. 等待60秒后检查
+
+---
+
+## 🆘 应急方案：用网线直连
+
+如果WiFi实在连不上，临时用网线：
+```
+树莓派RJ45网口 ←→ 网线 ←→ 电脑网口
+# 或
+树莓派 ←→ 路由器 ←→ 电脑
+```
+
+然后SSH连接：
+```bash
+# 电脑上
+ssh pi@raspberrypi.local
+# 或
+ssh pi@192.168.x.x
+```
+
+---
+
+## 📊 完整诊断命令集
+
+**复制粘贴到树莓派终端**:
+```bash
+echo "=== WiFi硬件状态 ==="
+ifconfig wlan0
+
+echo "=== 扫描热点 ==="
+sudo iwlist wlan0 scan | grep -E "ESSID|Quality|Frequency"
+
+echo "=== WiFi配置 ==="
+cat /etc/wpa_supplicant/wpa_supplicant.conf
+
+echo "=== 连接状态 ==="
+iwconfig wlan0
+
+echo "=== 欠压检查 ==="
+vcgencmd get_throttled
+
+echo "=== 系统日志 ==="
+sudo journalctl -u wpa_supplicant -n 20 --no-pager
+```
+
+将输出发给我，我能帮您精准定位问题。
+
+---
+
+**生成时间**: 2026-10-11  
+**下次更新**: 根据实际排查结果
