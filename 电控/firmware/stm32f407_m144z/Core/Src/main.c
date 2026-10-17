@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "ec_app.h"
 #include "ec_board_stm32.h"
+#include "ec_pneumatic_gripper.h"  // 气动夹爪测试
 
 /* USER CODE END Includes */
 
@@ -54,6 +55,7 @@ TIM_HandleTypeDef htim11;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+UART_HandleTypeDef huart4;  // ToF测距
 
 /* USER CODE BEGIN PV */
 
@@ -71,6 +73,7 @@ static void MX_TIM10_Init(void);
 static void MX_TIM11_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_UART4_Init(void);  // ToF测距
 static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -123,9 +126,11 @@ int main(void)
   MX_TIM11_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  MX_UART4_Init();  // ToF测距
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   ec_app_init();
+  ec_pneumatic_gripper_init();  // 初始化气动夹爪PWM
 
   /* USER CODE END 2 */
 
@@ -710,6 +715,39 @@ static void MX_USART3_UART_Init(void)
   /* USER CODE BEGIN USART3_Init 2 */
 
   /* USER CODE END USART3_Init 2 */
+
+}
+
+/**
+  * @brief UART4 Initialization Function (ToF测距)
+  * @param None
+  * @retval None
+  */
+static void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 115200;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
 
 }
 

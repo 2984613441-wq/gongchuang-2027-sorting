@@ -480,6 +480,11 @@
               <FileType>1</FileType>
               <FilePath>../App/Src/ec_demo.c</FilePath>
             </File>
+            <File>
+              <FileName>ec_pneumatic_gripper.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Src/ec_pneumatic_gripper.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
