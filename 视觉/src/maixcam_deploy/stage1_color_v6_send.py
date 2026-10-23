@@ -34,6 +34,35 @@ import numpy as np
 import socket
 import struct
 
+# ────────────────────────────────────────────────────────────────────────────
+# 2026-10-23 新增：几何形状判定（可选，默认关闭）
+#
+# 背景：《2026年智能分拣赛项补充说明》把物料改成 **5 色 × 6 形状解耦**
+#   （正方体/长方体/圆柱/五棱柱/圆锥/正四面体），
+#   而本文件原来的 COLOR_TO_MATERIAL 是「颜色→形状」硬编码查表
+#   （校赛"颜色唯一确定货物"的做法），新规则下 100% 失效。
+#
+# 开关：USE_GEOMETRY_SHAPE = False ⇒ 行为与接入前**逐字节相同**
+#                               = True  ⇒ 形状改由轮廓几何判定，颜色只用于
+#                                          日志/取证，不参与分箱决策
+#
+# ⚠️ 默认 False 是刻意的：本文件跑在 MaixCAM 上，主机测试覆盖不到。
+#    必须先实机验证再开。
+#
+# ⚠️ 开启后 `shape_geometry_lite.py` 必须与本文件**一起**拷到 MaixCAM。
+#    该模块与 `sorting_vision/shape_geometry.py` 由
+#    `视觉/tests/test_shape_geometry_parity.py` 逐一对拍防止漂移。
+# ────────────────────────────────────────────────────────────────────────────
+USE_GEOMETRY_SHAPE = os.environ.get("USE_GEOMETRY_SHAPE", "0") == "1"
+
+_shape_lite = None
+if USE_GEOMETRY_SHAPE:
+    try:
+        import shape_geometry_lite as _shape_lite  # 同目录部署
+    except ImportError:
+        # 找不到模块就退回旧路径，绝不让视觉整个挂掉
+        USE_GEOMETRY_SHAPE = False
+
 # <<<V6-BRIDGE>>> ================= 发送桥开始 =================
 GATEWAY_HOST = "172.20.10.8"   # 树莓派
 GATEWAY_PORT = 8765
@@ -419,7 +448,44 @@ def analyze(pixels, input_rgb=False, detect_size=None, trace=None,
             left, top = round((x+x0)*sx), round((y+y0)*sy)
             right = min(original_w, round((x+x0+w)*sx))
             bottom = min(original_h, round((y+y0+h)*sy))
-            shape, bin_id = COLOR_TO_MATERIAL[color]
+            # ────────────────────────────────────────────────────────────
+            # 2026-10-23：形状来源在这里分叉
+            #
+            # 旧路径（USE_GEOMETRY_SHAPE=False，默认）：
+            #     颜色 → COLOR_TO_MATERIAL 硬编码表 → (形状, 盒号)
+            #     ⚠️ 这是校赛"颜色唯一确定货物"的做法，新赛规下失效。
+            #
+            # 新路径（USE_GEOMETRY_SHAPE=True）：
+            #     轮廓几何 → 形状 → SHAPE_TO_BOX → 盒号
+            #     颜色只留在候选字典里做日志/取证，不参与决策。
+            #
+            # 歧义/未知（圆类 = 圆柱或圆锥未定；或判不出）时**直接跳过该候选**：
+            # 不给 bin ⇒ 本轮不发它。这是刻意的 —— 赛规图4 规定混装任何两类
+            # 计 0 分，宁可漏一件（最多少 2 分）也不能装错（毁掉整盒）。
+            # 调度层应把它们留到最后处理（用户 2026-10-23 裁决）。
+            # ────────────────────────────────────────────────────────────
+            if USE_GEOMETRY_SHAPE and _shape_lite is not None:
+                _gs = _shape_lite.classify_contour_shape(contour)
+                if not _gs.is_decided:
+                    _bump("c10_shape_undecided", color)
+                    _mark(_tr, "c10_shape_undecided",
+                          shape_verdict=_gs.shape, shape_rule=_gs.evidence.get("rule"))
+                    continue
+                shape = _gs.shape
+                bin_id = _shape_lite.shape_to_box(shape)
+                if bin_id is None:            # 理论上 is_decided 时不会是 None，双保险
+                    _bump("c11_shape_no_box", color)
+                    _mark(_tr, "c11_shape_no_box", shape_verdict=shape)
+                    continue
+                _src = "geometry"
+                _mark(_tr, shape_verdict=shape,
+                      shape_rule=_gs.evidence.get("rule"),
+                      rect_fill=_gs.evidence.get("rect_fill"),
+                      circularity=_gs.evidence.get("circularity"),
+                      n_vertices=_gs.evidence.get("n_vertices"))
+            else:
+                shape, bin_id = COLOR_TO_MATERIAL[color]
+                _src = "color"
             # A'(2026-09-21)：只在"测出不是中心对称形状"时才用形心当抓取点。
             # 三角形 ext∈[0.464,0.500]、圆盘 0.785、正方形 1.000 ⇒ 条件天然只命中三角形；
             # 对称形状走原 bbox 中心路径，取值逐字节不变。
@@ -433,7 +499,11 @@ def analyze(pixels, input_rgb=False, detect_size=None, trace=None,
             else:
                 cxl, cyl = x + w / 2.0, y + h / 2.0
             candidates.append({"color": color, "shape": shape, "bin": bin_id,
-                               "classification_source": "color", "reason": "color_mapping",
+                               # 2026-10-23：来源随开关走，便于日志区分走了哪条路径。
+                               # 旧路径保持 "color"/"color_mapping" 原值（逐字节不变）。
+                               "classification_source": _src,
+                               "reason": ("geometry_mapping" if _src == "geometry"
+                                          else "color_mapping"),
                                "color_fraction": fraction, "area": area*sx*sy,
                                "bbox": (left, top, right-left, bottom-top),
                                # F1(2026-09-21)：中心必须**存进候选**，否则上面算的形心当场被丢掉。
