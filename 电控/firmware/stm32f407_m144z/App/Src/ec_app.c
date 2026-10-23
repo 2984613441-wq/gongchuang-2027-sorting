@@ -7,12 +7,14 @@
 #include "ec_diag.h"
 #include "ec_group_test.h"
 #include "ec_inputs.h"
+#include "ec_light_ws2812.h"
 #include "ec_motion_plan.h"
 #include "ec_protocol_gateway.h"
 #include "ec_safety_adapter.h"
 #include "ec_servo_test.h"
 #include "ec_startup_sequence.h"
 #include "ec_step_test.h"
+#include "ec_tof.h"
 
 #include "stm32f4xx_hal.h"
 
@@ -62,6 +64,26 @@ static bool last_progress_token_valid;
 
 /* Power permission monitoring: last known state */
 static bool power_permission_lost;
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2026-10-23 新增：XY 插补生产路径运行时开关
+ *
+ * 默认 false = 保持现状（串行版 ec_motion_plan_build_with_open，12 步），
+ * 与接入前的行为**逐字节相同** ⇒ 上电即安全，不需要先做任何事。
+ *
+ * 置 true 后改用 ec_motion_plan_build_with_open_interp（9 步）：
+ *   三段 XY 移动从「先一个轴、再另一个轴」改为「两轴同时起步」。
+ *   收益：真·同时动 + 耗时由 t_x+t_y 降为 max(t_x,t_y)。
+ *
+ * ⚠️ 轨迹形状：驱动层虽按步数比算了不同 frequency_hz，但板级
+ *    start_axis_counted() 里它只在曲线规划失败时兜底，规划成功时两轴都用全局
+ *    cruise（现 8000Hz）⇒ 实际是「同时起步、短腿先停」的折线，不是几何直线。
+ *    "一起动"的要求已满足；真·直线需给两轴分别指定 cruise（后续工作）。
+ *
+ * ⚠️ 掉电恢复默认 false。切换方式见诊断命令 `INTERP ON|OFF|?`。
+ * ⚠️ 切换只在【下一件】生效：当前正在执行的 program 已经建好了，不受影响。
+ * ──────────────────────────────────────────────────────────────────────────── */
+static bool xy_interp_enabled;
 
 /* 2026-09-22：非 fault 路径的「停轴现场」（见 ec_app.h 的 ec_app_stop_snapshot_t）。
  * ec_axis_driver_diag() 只在 fault() 里写，而「轴被孤立」保护走的是 stop() ⇒ 那份读不到。 */
@@ -246,9 +268,14 @@ static void ec_app_start_motion(void)
      * place locals can be read uninitialised. */
     if (!ec_gateway_item_target(&gateway, &place_x_mm10, &place_y_mm10) ||
         !ec_gateway_item_pick(&gateway, &pick_x_mm10, &pick_y_mm10) ||
-        !ec_motion_plan_build_with_open(&program, pick_x_mm10, pick_y_mm10,
-                                        place_x_mm10, place_y_mm10,
-                                        open_pulse_us)) {
+        !(xy_interp_enabled
+              ? ec_motion_plan_build_with_open_interp(&program, pick_x_mm10,
+                                                      pick_y_mm10, place_x_mm10,
+                                                      place_y_mm10,
+                                                      open_pulse_us)
+              : ec_motion_plan_build_with_open(&program, pick_x_mm10,
+                                               pick_y_mm10, place_x_mm10,
+                                               place_y_mm10, open_pulse_us))) {
         /* No latched coordinates, no pick point, or an out-of-workspace
          * waypoint -> unreachable. */
         ec_app_inject_item_result(EC_RESULT_POSITION_UNREACHABLE);
@@ -767,6 +794,8 @@ void ec_app_init(void)
     last_input_sample_ms = 0U;
     ec_board_poll_inputs(0U);
     ec_board_uart_start_rx();
+    ec_tof_init();   /* 2026-10-17：启动 UART4 的 ToF 接收（MINIF/DVP0501C1） */
+    ec_ws2812_init(); /* 2026-10-18：使能 DWT 并把补光灯数据线（PC0）拉低 */
 
 #if EC_DIAGNOSTIC_BUILD
     ec_diag_port_write("BOOT SAFE HSI=16000000 SAFE_LOCK=1 ENABLES=DISABLED\r\n");
@@ -866,3 +895,22 @@ uint32_t ec_app_test_last_observable_ms(void)
     return last_observable_ms;
 }
 #endif
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * XY 插补生产路径运行时开关（2026-10-23）
+ *
+ * 默认 false ⇒ 串行版（12 步，与接入前逐字节相同）。
+ * 置 true  ⇒ 插补版（9 步，三段 XY 改两轴同时起步）。
+ *
+ * 只在【下一件】生效：ec_app 每件都会重新 build program，正在跑的那件不受影响。
+ * 由诊断命令 `INTERP ON|OFF|?` 调用（ec_diag.c）。
+ * ──────────────────────────────────────────────────────────────────────────── */
+void ec_app_set_xy_interp_enabled(bool enabled)
+{
+    xy_interp_enabled = enabled;
+}
+
+bool ec_app_xy_interp_enabled(void)
+{
+    return xy_interp_enabled;
+}

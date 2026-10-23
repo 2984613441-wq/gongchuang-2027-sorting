@@ -386,6 +386,107 @@ static void test_home_is_inside_the_reach_limits(void)
     TEST_ASSERT(ec_motion_plan_build(NULL, 0, 0, 0, 0) == false);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2026-10-23 新增：XY 插补版计划（ec_motion_plan_build_with_open_interp）
+ *
+ * 这个函数此前【不存在】，插补能力只在一个不参与构建的 6 步简化版里
+ * （ec_motion_plan_interp.c），而那个版本丢了 4 个关键步，不能用。
+ *
+ * 本测试要钉住三件事：
+ *   ① 三段 XY 移动各只占 1 步、kind == EC_AXIS_STEP_XY_INTERP、总步数 12 → 9
+ *   ② 6 个舵机/等待步**一个没丢**，脉宽与串行版逐一对齐
+ *   ③ 有符号增量的方向与大小正确（正值 = EC_AXIS_INTERP_POSITIVE_DIR）
+ *
+ * 坐标约定（与 test_build_program_structure 同一组输入：pick(0,0) place(800,500)）：
+ *   PARK = (-950, +475)
+ *   [1] PARK→PICK  X: 0-(-950)= +950 → +7600 步 ; Y: 0-475 = -475 → -3800 步
+ *   [5] PICK→PLACE X: 800-0   = +800 → +6400 步 ; Y: 500-0 = +500 → +4000 步
+ *   [8] PLACE→PARK X: -950-800= -1750 → -14000 步; Y: 475-500 = -25 → -200 步
+ * ──────────────────────────────────────────────────────────────────────────── */
+static void test_build_interp_structure(void)
+{
+    ec_axis_pick_place_t ser;
+    ec_axis_pick_place_t itp;
+    const int16_t pick_x = 0;
+    const int16_t pick_y = 0;
+    const int16_t place_x = 800;
+    const int16_t place_y = 500;
+
+    TEST_ASSERT(ec_motion_plan_build(&ser, pick_x, pick_y, place_x, place_y));
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(&itp, pick_x, pick_y,
+                                                      place_x, place_y,
+                                                      EC_AXIS_Z_UP_US));
+
+    /* ① [0] 起点先张开 —— 与串行版**完全相同**（缺了它会带着闭合爪撞飞物块） */
+    assert_z(&itp, 0U, EC_AXIS_GRIPPER_STANDBY_US);
+    TEST_ASSERT(itp.step[0].servo_pulse_us == ser.step[0].servo_pulse_us);
+
+    /* ② [1] PARK -> PICK：1 步插补 */
+    TEST_ASSERT(itp.step[1].kind == EC_AXIS_STEP_XY_INTERP);
+    TEST_ASSERT(itp.step[1].target_x_steps == 7600);
+    TEST_ASSERT(itp.step[1].target_y_steps == -3800);
+    /* 串行版同一段是 2 步（先 Y 后 X 或反之），合计步数一致 ⇒ 位移等价 */
+    assert_move(&ser.step[1], EC_AXIS_Y, 3800U,
+                (ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR));
+    assert_move(&ser.step[2], EC_AXIS_X, 7600U, EC_MOTION_POSITIVE_X_DIR);
+
+    /* ③ [2][3][4] 到点降开度 / dwell / 闭合 —— 三个都不能丢 */
+    assert_z(&itp, 2U, EC_AXIS_Z_UP_US);
+    assert_wait(&itp, 3U, (uint16_t)EC_AXIS_PICK_DWELL_MS);
+    assert_z(&itp, 4U, EC_AXIS_Z_DOWN_US);
+    TEST_ASSERT(itp.step[2].servo_pulse_us == ser.step[3].servo_pulse_us);
+    TEST_ASSERT(itp.step[3].servo_pulse_us == ser.step[4].servo_pulse_us);
+    TEST_ASSERT(itp.step[4].servo_pulse_us == ser.step[5].servo_pulse_us);
+
+    /* ④ [5] PICK -> PLACE：1 步插补 */
+    TEST_ASSERT(itp.step[5].kind == EC_AXIS_STEP_XY_INTERP);
+    TEST_ASSERT(itp.step[5].target_x_steps == 6400);
+    TEST_ASSERT(itp.step[5].target_y_steps == 4000);
+
+    /* ⑤ [6] 释放 / [7] 回程前切待机 —— 两个都不能丢 */
+    assert_z(&itp, 6U, EC_AXIS_Z_UP_US);
+    assert_z(&itp, 7U, EC_AXIS_GRIPPER_STANDBY_US);
+    TEST_ASSERT(itp.step[6].servo_pulse_us == ser.step[8].servo_pulse_us);
+    TEST_ASSERT(itp.step[7].servo_pulse_us == ser.step[9].servo_pulse_us);
+
+    /* ⑥ [8] PLACE -> PARK：1 步插补 */
+    TEST_ASSERT(itp.step[8].kind == EC_AXIS_STEP_XY_INTERP);
+    TEST_ASSERT(itp.step[8].target_x_steps == -14000);
+    TEST_ASSERT(itp.step[8].target_y_steps == -200);
+
+    /* ⑦ 尾部干净：插补版用 9 步，10/11 必须为空（串行版用满 12 步）*/
+    assert_tail(&itp, 9U);
+    assert_tail(&ser, 12U);
+
+    /* ⑧ 插补步的 axis/direction/steps 字段必须是中性值（驱动只看 target_*） */
+    TEST_ASSERT(itp.step[1].axis == EC_AXIS_NONE);
+    TEST_ASSERT(itp.step[1].steps == 0U);
+    TEST_ASSERT(itp.step[1].y_steps == 0U);
+    TEST_ASSERT(itp.step[1].servo_pulse_us == 0U);
+
+    /* ⑨ 越界坐标必须同样 fail-closed（与串行版同一组校验）。
+     * ⚠️ 边界值本身是合法的：X 正端 EC_MOTION_REACH_FAR_X_MM10 = 900（= +90.0mm），
+     *    Y 正端 = 925（= +92.5mm）。所以要用 901 / 926 才越界，写 900 / 925 会合法通过。 */
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(&itp, 0, 0, 901, 500,
+                                                       EC_AXIS_Z_UP_US) == false);
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(&itp, 0, 0, 0, 926,
+                                                       EC_AXIS_Z_UP_US) == false);
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(NULL, 0, 0, 800, 500,
+                                                       EC_AXIS_Z_UP_US) == false);
+    /* 边界值本身必须通过（防有人把边界收紧一格）*/
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(&itp, 0, 0,
+                                                       EC_MOTION_REACH_FAR_X_MM10,
+                                                       EC_MOTION_REACH_FAR_Y_MM10,
+                                                       EC_AXIS_Z_UP_US) == true);
+
+    /* ⑩ 零位移（pick == place）时必须被拒绝：插补段增量为 0，驱动会拒收。
+     * 串行版在同一情形下靠 append_axis_move 的"零步省略"处理，两版行为**不同**，
+     * 这里把差异显式钉住，避免日后误以为两者等价。 */
+    TEST_ASSERT(ec_motion_plan_build(&ser, 800, 500, 800, 500));
+    TEST_ASSERT(ec_motion_plan_build_with_open_interp(&itp, 800, 500, 800, 500,
+                                                       EC_AXIS_Z_UP_US) == false);
+}
+
 void test_motion_plan(void)
 {
     test_build_program_structure();
@@ -394,6 +495,7 @@ void test_motion_plan(void)
     test_boundary();
     test_home_is_inside_the_reach_limits();
     test_driver_accepts_plan();
+    test_build_interp_structure();
 }
 
 int main(void)

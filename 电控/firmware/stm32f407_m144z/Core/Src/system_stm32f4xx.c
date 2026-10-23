@@ -48,7 +48,9 @@
 #include "stm32f4xx.h"
 
 #if !defined  (HSE_VALUE) 
-  #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
+  #define HSE_VALUE    ((uint32_t)8000000)  /*!< 2026-10-17 修正：板上晶振 8 MHz（原 25000000）。
+                                   本文件不包含 stm32f4xx_hal_conf.h，若不在此同步修正，
+                                   SystemCoreClockUpdate() 会按 25 MHz 反算出错误的 HCLK。 */
 #endif /* HSE_VALUE */
 
 #if !defined  (HSI_VALUE)

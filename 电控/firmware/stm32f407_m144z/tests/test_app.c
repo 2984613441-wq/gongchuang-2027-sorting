@@ -212,6 +212,21 @@ bool ec_motion_plan_build_with_open(ec_axis_pick_place_t *out,
                                place_x_mm10, place_y_mm10);
 }
 
+/* 2026-10-23：XY 插补版计划（ec_app.c 在 xy_interp_enabled 时调用）。
+ * 真实实现见 ec_motion_plan.c 的 ec_motion_plan_build_with_open_interp；
+ * 本目标不链接 ec_motion_plan.c ⇒ 这里给桩，转发到同一份 ec_motion_plan_build 逻辑。
+ * 默认 xy_interp_enabled == false，正常 test_app 用例走不到这里；
+ * 桩存在只是为了让链接通过，并让 INTERP 开关路径也能被覆盖到。 */
+bool ec_motion_plan_build_with_open_interp(ec_axis_pick_place_t *out,
+                                          int16_t pick_x_mm10, int16_t pick_y_mm10,
+                                          int16_t place_x_mm10, int16_t place_y_mm10,
+                                          uint16_t open_pulse_us)
+{
+    (void)open_pulse_us;
+    return ec_motion_plan_build(out, pick_x_mm10, pick_y_mm10,
+                               place_x_mm10, place_y_mm10);
+}
+
 /* A2-FIX (2026-09-22): ec_axis_driver 诊断接口，ec_diag.c 调用。
  * 真实实现在 ec_axis_driver.c:459-462 返回静态 diag；此处返回零初始化的临时结构。 */
 static ec_axis_driver_diag_t fake_diag;

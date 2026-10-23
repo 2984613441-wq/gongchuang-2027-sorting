@@ -31,6 +31,16 @@ bool ec_step_port_enable_xy(void) { enable_xy_count++; return true; }
 uint32_t ec_step_port_counted_remaining_for(ec_axis_t axis) { return (axis == EC_AXIS_X) ? fake_x_remaining : fake_y_remaining; }
 uint32_t ec_step_port_counted_target_for(ec_axis_t axis) { return (axis == EC_AXIS_X) ? fake_x_target : fake_y_target; }
 bool ec_step_port_counted_all_done(void) { return (fake_x_remaining == 0U) && (fake_y_remaining == 0U); }
+/* 2026-10-23：巡航频率运行时可设。桩保留真实校验逻辑（区间 + >200Hz + 采样周期），
+ * 这样 ec_diag 的 SPEED 命令边界测试才有意义；成功才更新 fake 值（fail-closed）。 */
+static uint32_t fake_cruise_hz = EC_STEP_CRUISE_HZ_DEFAULT;
+bool ec_step_port_set_cruise_hz(uint32_t cruise_hz) {
+    if ((cruise_hz < EC_STEP_MIN_HZ) || (cruise_hz > EC_STEP_MAX_HZ)) return false;
+    if (cruise_hz <= 200U) return false;
+    fake_cruise_hz = cruise_hz;
+    return true;
+}
+uint32_t ec_step_port_get_cruise_hz(void) { return fake_cruise_hz; }
 void test_step_test(void) {
   start_count = stop_count = direction_count = enable_count = 0U;
   counted_start_count = 0U;

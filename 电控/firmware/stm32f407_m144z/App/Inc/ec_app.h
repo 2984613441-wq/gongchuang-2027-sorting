@@ -99,4 +99,20 @@ bool ec_app_last_stop_snapshot(ec_app_stop_snapshot_t *out);
  * 形参 which = 1 取上次。返回 false 表示没有更早的记录。 */
 bool ec_app_stop_snapshot_at(uint8_t which, ec_app_stop_snapshot_t *out);
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * XY 插补生产路径运行时开关（2026-10-23）
+ *
+ * false（默认）= 串行版 ec_motion_plan_build_with_open（12 步，与接入前逐字节相同）
+ * true         = 插补版 ec_motion_plan_build_with_open_interp（9 步）
+ *                三段 XY 移动改「两轴同时起步」⇒ 真·同时动，耗时 max(t_x,t_y)
+ *
+ * ⚠️ 只在【下一件】生效（每件都会重新 build program）。
+ * ⚠️ 掉电恢复 false。
+ * ⚠️ 轨迹是「同时起步、短腿先停」的折线，不是几何直线（原因见头文件
+ *    ec_motion_plan.h 的 build_with_open_interp 注释）。
+ * 由诊断命令 `INTERP ON|OFF|?` 调用。
+ * ──────────────────────────────────────────────────────────────────────────── */
+void ec_app_set_xy_interp_enabled(bool enabled);
+bool ec_app_xy_interp_enabled(void);
+
 #endif

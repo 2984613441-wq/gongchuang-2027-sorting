@@ -165,8 +165,21 @@ class BatchSender:
 
 
 # ============ 以下为 V6 原文，未作任何修改 ============
-FRAME_SIZE = 320
-DETECT_SIZE = 224  # 160 更快；320 更精细。
+# 🔴 2026-10-18 改动：相机从 320×320（正方形，会裁掉传感器左右 44%）改为 1280×720（16:9 全视野）。
+#   · 原因：MaixPy 请求 1:1 时会从传感器 2560×1440 里裁剪出中间 1440×1440 再缩放，
+#     水平方向只用 56%，导致托盘外的物料完全看不到（识别区 184.5mm < 抓取区 190×195mm）。
+#   · 原调定值见 archive/相机16比9升级前-20261018/。
+#   · 坐标系随之从「320 系」变为「1280×720 系」——树莓派侧 calibration_config.ini
+#     的仿射参数必须同步换算，换算公式见
+#     docs/reports/2026-10-18-相机视野升级与重训方案.md §6。
+#   · 环境变量可覆盖，便于现场回退：FRAME_W / FRAME_H / DETECT_SIZE。
+FRAME_W = int(os.environ.get("FRAME_W", "1280"))   # 原来是 FRAME_SIZE = 320（正方形）
+FRAME_H = int(os.environ.get("FRAME_H", "720"))
+# DETECT_SIZE 必须按「每像素毫米数」同步放大，否则 MIN_BBOX_SIDE_DET / MIN_AREA_DET_PX
+# 等阈值全部失效：
+#   旧：0.5766 mm/px ÷ (224/320) = 0.824 mm/px(检测缓冲)
+#   新：0.2563 mm/px ÷ (400/1280) = 0.820 mm/px(检测缓冲)  ← 基本一致，阈值可沿用
+DETECT_SIZE = int(os.environ.get("DETECT_SIZE", "400"))  # 原 224
 TARGET_FPS = 6.0  # 最高显示节奏；计算较慢时不会强行达到该帧率。
 CONFIRM_FRAMES = 2
 SMOOTH_TIME = 0.22  # 秒，越大越平稳，但移动时跟随更慢。
@@ -572,11 +585,11 @@ def main():
     from maix import app, camera, display, image
 
     cv2.setNumThreads(1)
-    print("V6 STABLE + BRIDGE: 颜色定形状；显示=%d，检测=%d；物料分开放且完整位于黄框内。"
-          % (FRAME_SIZE, DETECT_SIZE))
+    print("V6 STABLE + BRIDGE: 颜色定形状；显示=%dx%d，检测=%d；物料分开放且完整位于黄框内。"
+          % (FRAME_W, FRAME_H, DETECT_SIZE))
     if hasattr(display, "set_trans_image_quality"):
         display.set_trans_image_quality(PREVIEW_JPEG_QUALITY)
-    cam = camera.Camera(FRAME_SIZE, FRAME_SIZE, image.Format.FMT_RGB888)
+    cam = camera.Camera(FRAME_W, FRAME_H, image.Format.FMT_RGB888)
     # AE/AWB 锁定（2026-09-21，API 真名已在设备上实测确认，MaixPy 4.12.5）：
     #   camera.AeMode/AwbMode members = [Invalid, Auto, Manual]
     #   Camera.exposure(us) / gain / iso / luma(0..100) / exp_mode(AeMode) [deprecated]

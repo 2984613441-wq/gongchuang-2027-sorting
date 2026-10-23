@@ -164,13 +164,28 @@ bool ec_motion_test_start_steps(ec_axis_t axis, ec_direction_t direction,
     return true;
 }
 
-bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
-                                   ec_direction_t y_direction, uint32_t y_steps,
-                                   uint32_t frequency_hz,
-                                   uint16_t active_inputs)
+/* ────────────────────────────────────────────────────────────────────────────
+ * XY 双轴计步移动的内部共用实现（2026-10-22 提取）
+ *
+ * 与旧实现的唯一区别：**允许两轴使用不同频率**。
+ *
+ * 为什么需要不同频率：
+ *   底层 ec_step_port_start_counted_xy() 本来就是"两轴同时启动、各自独立计数、
+ *   各自独立频率"，并不做几何插补。要走出**直线**，只需让
+ *       freq_x / freq_y == steps_x / steps_y
+ *   两轴就同时到达 ⇒ 合成轨迹是直线（CNC 的常速合成法）。
+ *   若两轴同频，短的那条腿先停，轨迹是"先斜后直"的折线。
+ *
+ * 超时按"较慢那条腿"算（t = steps/freq 取较大者）；同频时与旧实现结果完全一致。
+ * ──────────────────────────────────────────────────────────────────────────── */
+static bool start_steps_xy_impl(ec_direction_t x_direction, uint32_t x_steps,
+                                ec_direction_t y_direction, uint32_t y_steps,
+                                uint32_t x_frequency_hz, uint32_t y_frequency_hz,
+                                uint16_t active_inputs)
 {
     uint32_t now_ms = ec_step_port_now_ms();
-    uint32_t major_steps;
+    uint32_t t_x_ms;
+    uint32_t t_y_ms;
 
     if (((x_direction != EC_DIRECTION_0) && (x_direction != EC_DIRECTION_1)) ||
         ((y_direction != EC_DIRECTION_0) && (y_direction != EC_DIRECTION_1))) {
@@ -182,8 +197,10 @@ bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
         (y_steps == 0U) || (y_steps > EC_STEP_MAX_STEPS)) {
         return false;
     }
-    if ((frequency_hz < EC_STEP_MIN_HZ) ||
-        (frequency_hz > EC_STEP_MAX_HZ)) {
+    if ((x_frequency_hz < EC_STEP_MIN_HZ) ||
+        (x_frequency_hz > EC_STEP_MAX_HZ) ||
+        (y_frequency_hz < EC_STEP_MIN_HZ) ||
+        (y_frequency_hz > EC_STEP_MAX_HZ)) {
         return false;
     }
     if ((motion_armed == 0U) ||
@@ -195,17 +212,17 @@ bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
 
     motion_armed = 0U;
     counted_result = EC_STEP_RESULT_NONE;
-    /* The slower (larger) leg sets the deadline: 400 steps @ 500 Hz =
-     * 800 ms + 1000 ms margin = 1800 ms. */
-    major_steps = (x_steps > y_steps) ? x_steps : y_steps;
-    counted_timeout_ms = ((major_steps * UINT32_C(1000)) / frequency_hz) +
+    /* 较慢那条腿决定超时线。同频时等价于旧的 "major_steps/freq + margin"。 */
+    t_x_ms = (x_steps * UINT32_C(1000)) / x_frequency_hz;
+    t_y_ms = (y_steps * UINT32_C(1000)) / y_frequency_hz;
+    counted_timeout_ms = ((t_x_ms > t_y_ms) ? t_x_ms : t_y_ms) +
                          EC_MOTION_COUNTED_TIMEOUT_MARGIN_MS;
     stop_active_test();
     if (!ec_step_port_set_direction(EC_AXIS_X, x_direction) ||
         !ec_step_port_set_direction(EC_AXIS_Y, y_direction) ||
         !ec_step_port_enable_xy() ||
-        !ec_step_port_start_counted_xy(x_steps, frequency_hz, y_steps,
-                                       frequency_hz)) {
+        !ec_step_port_start_counted_xy(x_steps, x_frequency_hz, y_steps,
+                                       y_frequency_hz)) {
         stop_active_test();
         return false;
     }
@@ -217,6 +234,27 @@ bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
     counted_y_steps = y_steps;
     mode = EC_STEP_TEST_MOTION_COUNTED_XY;
     return true;
+}
+
+bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
+                                   ec_direction_t y_direction, uint32_t y_steps,
+                                   uint32_t frequency_hz,
+                                   uint16_t active_inputs)
+{
+    /* 原行为保持不变：两轴同频。既有测试依赖这个入口，签名与语义都不动。 */
+    return start_steps_xy_impl(x_direction, x_steps, y_direction, y_steps,
+                               frequency_hz, frequency_hz, active_inputs);
+}
+
+bool ec_motion_test_start_steps_xy2(ec_direction_t x_direction, uint32_t x_steps,
+                                    ec_direction_t y_direction, uint32_t y_steps,
+                                    uint32_t x_frequency_hz,
+                                    uint32_t y_frequency_hz,
+                                    uint16_t active_inputs)
+{
+    /* 新增：两轴各自频率。用于"直线合成"（freq 比 = 步数比）。 */
+    return start_steps_xy_impl(x_direction, x_steps, y_direction, y_steps,
+                               x_frequency_hz, y_frequency_hz, active_inputs);
 }
 
 void ec_motion_test_on_counted_done(void)

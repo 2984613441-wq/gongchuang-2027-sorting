@@ -1,0 +1,427 @@
+[
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_app.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_app.h",
+    "sha256": "9318779F50E592A97BF3C718B2BC137C672014224820873655FE4BCA883A7BB1"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_axis_driver.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_axis_driver.h",
+    "sha256": "9BBD51DC37C79B7EFBC2C74E98282A8BA97FB6B371C09D77414BE47D986A7140"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_barrier_test.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_barrier_test.h",
+    "sha256": "5825C36E6CC0957764397DC6A512F9604081C951390AC9AEE976C767486BB64A"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_board_stm32.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_board_stm32.h",
+    "sha256": "8175121B2552230A3EF4B94E3DFE3B3DF8D191C5E473F7A4557BDD6A0BE9C74E"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_board.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_board.h",
+    "sha256": "2A8EC6F283F5879D79EB836869A67321C4A283B18432FDF90F57C4F8C5D90169"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_bus_servo.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_bus_servo.h",
+    "sha256": "71EB2BC026B5547503FCD4B8C625E81C4271206CDBB242FDBC94EA2AA2D9E353"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_demo.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_demo.h",
+    "sha256": "F0B794657106987AF6C3496052FDEE6BE1912C2E128F159065A64241BC206DCB"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_diag.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_diag.h",
+    "sha256": "E3194853D68B3AA1C5D3DB91704228CEBC8B0177649228F7029A4C5976B211A8"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_drop_servo.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_drop_servo.h",
+    "sha256": "E484A9C08F5EE5435958B9219C3E365FA90F336C32E8CD1FC7265EC649EFF2BD"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_group_test.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_group_test.h",
+    "sha256": "F2ADF04BD1E5A6BCFD27BAD0BBF761FDA196E2D05AD1D04380F6F7DB19EE2631"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_inputs.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_inputs.h",
+    "sha256": "BB12D03B7775B57AA937BD3ADB228472DD0F5CF7121C8C500F3AB5627F6AFB3D"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_interp.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_interp.h",
+    "sha256": "00D3DB9AEA6C7A01E3AAE7F6C4E7B4E3F0D452DCA6B434540E6A903463F475E0"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_light_ws2812.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_light_ws2812.h",
+    "sha256": "231B9EC4B795FED646F2C069626F83B6597D33CA66933398B4ADAC9C935DBA15"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_motion_plan.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_motion_plan.h",
+    "sha256": "2A57D9C38D38146F508A2F0B9139B8284DCC23C3368B8787032B7B8B4E8F175A"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_pneumatic_gripper.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_pneumatic_gripper.h",
+    "sha256": "F284572CFAE4F9F4645E7707FF89595B29B232173CEB599507FE775E1D452EFE"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_safety_adapter.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_safety_adapter.h",
+    "sha256": "D6F552889C50148118D6A6856D02B44524F45128EA33268E5F00CB3BF4BF35AC"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_servo_test.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_servo_test.h",
+    "sha256": "88A667B1BCB4CD4DB36FFF224CE490DE4160B508A08202888F22A2EF006F8EA3"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_startup_sequence.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_startup_sequence.h",
+    "sha256": "43F62193F7CC7B4A24FD26D46E18907B3C6C07C8174D2A8F35F93384304E2A81"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_step_test.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_step_test.h",
+    "sha256": "FC420583452C1B7A161BEB5B58C82CE1D0482EE015E39BC9CB92AC6EA59EF6FD"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Inc\\ec_tof.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Inc\\ec_tof.h",
+    "sha256": "7DB5F57FB971827CF4211A5DF96896E3D9E63757BD26C629B59540B931A5D82E"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_app.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_app.c",
+    "sha256": "C668D38B0D205B7BA6B844E4AE68E827A14D22C83CEC5130ED186B9B65EF7F06"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_axis_driver.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_axis_driver.c",
+    "sha256": "DA9B4142D9972485B0698546C1F08F93EDEC67A90ADD849B41C36DD83F1AD8B1"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_barrier_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_barrier_test.c",
+    "sha256": "251B14E2F04D01A2B880815C5DAC4E948C0C35175E6C708C0F27082322ABB5F2"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_board_stm32.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_board_stm32.c",
+    "sha256": "AE7629201E56AA1355DD19148ADD27EE2663FB7287E8A064D3A49F38AAD3C287"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_bus_servo.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_bus_servo.c",
+    "sha256": "4E72A8F9CDC15E9E80C230FC5A201EDC78FB5BCA5DE85A515BF551C7B231D9C8"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_demo.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_demo.c",
+    "sha256": "A19D7F454BE8259B58CDB52EF0D0E71FA4EFD94AAFF4FD86CDB7C27ACDB9CA03"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_diag.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_diag.c",
+    "sha256": "30D7661C4FC0B141F8FB1377DCD4E59AA34DA94E82D105166B486BDF826CE4BC"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_drop_servo.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_drop_servo.c",
+    "sha256": "F5689AE3CEFEFB6CFE5D403D2A7DC5B4257C08B256B6DB38D1C8523810B6C451"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_group_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_group_test.c",
+    "sha256": "60655831FEE4C330470D195C3872DA0348272A119B7779224CD7ACD0071798A6"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_inputs.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_inputs.c",
+    "sha256": "2D411D87C799B32BCF16CD5BD082E9472A05934EDEDC5931B59F158EB28CF5E9"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_interp.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_interp.c",
+    "sha256": "540CB1CAA19A6C5C629998FD9420DB8D8EFD8D87AED8F582EC576A40FBA197F5"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_light_ws2812.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_light_ws2812.c",
+    "sha256": "57D681DD0D3A269CB70AC74BF91B00241ECFB452628066F3606375621C9B0769"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_motion_plan_interp.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_motion_plan_interp.c",
+    "sha256": "220DBBAE46C6377FD9036E31BD7E5FC70182B60EDA94636B50706A42974D23DA"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_motion_plan.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_motion_plan.c",
+    "sha256": "2D48CC469E7A5936ED5DD5093D587FFB0341A18E3599A1B45A52D5D72B664C5E"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_pneumatic_gripper.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_pneumatic_gripper.c",
+    "sha256": "F53823CBE516841CD3D01E9CBE8F072A38462D50E76C1696773B9FEA62D624FF"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_safety_adapter.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_safety_adapter.c",
+    "sha256": "666F0C6D02F1B948389C248BC7ACCA083302AD288659EB1C75C20BD5D1A33F66"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_servo_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_servo_test.c",
+    "sha256": "41E48247F3FADFE6FFB53747F7E34436631B9090AA111D93428127DDBD26DE92"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_startup_sequence.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_startup_sequence.c",
+    "sha256": "2ACDE0F49DB52EF7E1C0DE3597984AF0B0DC88512DE4F5D046F7787CB84E1DDC"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_step_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_step_test.c",
+    "sha256": "C90950FD5E4270ECF9D6C9C2C52436542DFC48D3CA4204121D4D533B80DBCF17"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\App\\Src\\ec_tof.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\App\\Src\\ec_tof.c",
+    "sha256": "E95D1675C15A340662D13ABA8D57B3571522DF0996FA1A651CDDBB7F59B94E0A"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\Core\\Inc\\main.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\Core\\Inc\\main.h",
+    "sha256": "C1E06A0C0938D6AE2B2EE900311D349BA3B9151ADF4B1329F01EB22A819EC99E"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\Core\\Inc\\stm32f4xx_hal_conf.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\Core\\Inc\\stm32f4xx_hal_conf.h",
+    "sha256": "13D7E2C54667F7331EEF4E762E762C4D2949A0F842E31F666EF5298F4A3E1E62"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\Core\\Inc\\stm32f4xx_it.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\Core\\Inc\\stm32f4xx_it.h",
+    "sha256": "29D6813CB6AE7E28C483ED65BBA2716542E630B17062DCE81E0F98A21F54FE64"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\CMakeLists.txt",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\CMakeLists.txt",
+    "sha256": "01AA966A83FD218292A50FD9DC1517A5DD6BA1D9995DC695479DA443AD2860FD"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\mp_dump.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\mp_dump.c",
+    "sha256": "6D453AA7F422ED1B8B12AC598C1D9A0C9CBB29187F760D380B73B30426257297"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\profile_probe_codex.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\profile_probe_codex.c",
+    "sha256": "69355A41A0794D4435457C5AFA83E017B6B96BA9DF9C7243A1818881D356D699"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_app.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_app.c",
+    "sha256": "B3C34658DDA690BFA91ED6091AA8307A023B3A9CB05BF4F6C40A13BBB9C08D45"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_axis_driver.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_axis_driver.c",
+    "sha256": "94C25B6D59F2D6F080CEC918D1710F2717824CA4097FFCA94900AA6572914AEF"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_barrier_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_barrier_test.c",
+    "sha256": "F6CAEADD224054E6E7A5729640CFA59E7183D0F846ECA6BD1CF2A795F8A67C19"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_bus_servo.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_bus_servo.c",
+    "sha256": "F194ED6C5601F2EE0D93A9B62EAAD7BD558BF16057CED187A204B293EFBB8313"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_demo.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_demo.c",
+    "sha256": "A56650A942CC4E0D82B71849AF0908781AC78B127186D7661EA19E52DC204842"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_diag_disabled.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_diag_disabled.c",
+    "sha256": "0DAEB7380906FB20FB64FBC121E2076E4B606B72F630EB07E48D2BC87F2DC6DE"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_diag.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_diag.c",
+    "sha256": "745B74FAED6398B9859018AFD698931F1254F70C31C3BA3AB1B7D7FD74B598BB"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_ec_interp.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_ec_interp.c",
+    "sha256": "241640664C4B7B5EDD1303821A3AEAFB040401A1D2944F4414D297C97CCFB703"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_group_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_group_test.c",
+    "sha256": "5455B0D355D042A9E062EFC16F873B457D849A409F055867B8923E313718CF60"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_inputs.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_inputs.c",
+    "sha256": "0E3B23E119C974CB6450129235EF9302EC373CA34F1A4909380B66483774A114"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_main.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_main.c",
+    "sha256": "2A065650A31BD6949B0FF349006FCA319C3331F1F949B635C255D28561B4E321"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_motion_completion.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_motion_completion.c",
+    "sha256": "E32E606B50FEE30F556DB33068734D3630B523F39E61204E145F642768714A19"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_motion_plan.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_motion_plan.c",
+    "sha256": "7CC9F348CF02949A560FB8EFFF4570B2F7F7F9936473AAC0D6462216367E1593"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_progress_disabled.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_progress_disabled.c",
+    "sha256": "F89515F71ED117D91210007F2963854108B7B6793DBEDD437E81617143D83E24"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_protocol.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_protocol.c",
+    "sha256": "D1FEBE1011535B55C5AD305C44F8301DB3C294A1351D55205394518FCF69F3CE"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_safety_adapter.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_safety_adapter.c",
+    "sha256": "DEFF03072B0ECDFD12A9E9D3D5B30FE37385F57C5F636CFFF0155E35198A16A4"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_servo_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_servo_test.c",
+    "sha256": "AD61FB3CE160CCBE3D5B0ED2E0F69DC4514D5D64581649D49828901E19D7EEDC"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_step_only.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_step_only.c",
+    "sha256": "37980F2BA7A1DBAFA572E5F400C3436493248DD1D6B430A6F20D778B21BD3BB0"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_step_test.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_step_test.c",
+    "sha256": "0B2186EE87D78326ABF4E61444F5EB8F05D8A63C5B7F608889191336E22544D7"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\test_support.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\test_support.h",
+    "sha256": "AABB87C72D949C98292CBA57C4A9C5EB669532AA30944B953A32706F21103046"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\host_stubs\\hal_stub.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\host_stubs\\hal_stub.c",
+    "sha256": "F7817D21973E659E9FCFDAC930761E13E6469081E4CBF20A0B22E386C004FDD4"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\host_stubs\\stm32f4xx_hal.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\host_stubs\\stm32f4xx_hal.h",
+    "sha256": "1A25C522ADDF21EA99A0908CF84F883D4F5D4B6AC29AA662445CE134E329208F"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\tests\\motion_completion_hal\\stm32f4xx_hal.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\tests\\motion_completion_hal\\stm32f4xx_hal.h",
+    "sha256": "18BDEEE0AFFC361DBDAB061197C27061C922EBE023DD02ABCA56521885D376B2"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_crc32.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_crc32.h",
+    "sha256": "AEB1E6DA8DF2992F6106E0F3C519B2393F474FE5E2F7E6E61AC2B301FBA2A599"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_dedup.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_dedup.h",
+    "sha256": "F2548950A2500496020A6CF5E4AB6CEFDD8F077CD74F0298BB4BEFC15A15DB38"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_protocol_gateway.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_protocol_gateway.h",
+    "sha256": "A286FCEC56A8AE1A278B9B6B92A5445270B381E9EAE075A5D905699A6BEC5563"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_protocol.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_protocol.h",
+    "sha256": "1FBC67BFBA495B9C615F78CE0C662C49AE6158F3A05F08620B118BD64425DB56"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_state_machine.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_state_machine.h",
+    "sha256": "CEEAE3FC459853ED6F1EA0E511BAF51B81AEFAD5405F6A1D3C15DF830837E8C6"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\include\\ec_step_profile.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\include\\ec_step_profile.h",
+    "sha256": "97FEF7BEF4914B371E4EE9BF8C371FB5613FDECDB56BED17C20EF59A4779BBAD"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_crc32.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_crc32.c",
+    "sha256": "73A77F943AA44E7EA9ECF73925FFF1D37EA1B6329DF01EF75CAFC2E885983524"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_dedup.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_dedup.c",
+    "sha256": "BE70319BFDDF5A872180837623A33481B2B478FF6909F1D88C676D030353D587"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_protocol_gateway.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_protocol_gateway.c",
+    "sha256": "4FF0F95CE80EE3DF252AEFA9CCE597122483D55EFEB23D0A0D7DD5E28E276E68"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_protocol.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_protocol.c",
+    "sha256": "0FEA5FF9B869E54ED6D50474939FCA130A50DF6729FF4C41A74F34E369B9F761"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_state_machine.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_state_machine.c",
+    "sha256": "2D321B1BBFB860CF14A1BF620A3F41EA0DFE454E4291DBCB5B994C5418E477DF"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\stm32_logic\\src\\ec_step_profile.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\stm32_logic\\src\\ec_step_profile.c",
+    "sha256": "7DBE3F06F07A0081BB6FDD2A8275C16CCB242927BB2D600FF0C45F82B34EFDC7"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\电控\\firmware\\stm32f407_m144z\\MDK-ARM\\diankongv1.0.uvprojx",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\project\\firmware\\stm32f407_m144z\\MDK-ARM\\diankongv1.0.uvprojx",
+    "sha256": "4B811252E6107412D8F957881A572A32B869AC2F2008DFFB2E609791CBB17AF0"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\evidence\\codex-t7-t8-20261022\\probe.c",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\probe.c",
+    "sha256": "E7BA80C75D5727B8F5236EA6592F73D70C0817BC50C4DFA04F236855DC674C75"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\evidence\\codex-t7-t8-20261022\\probe_hal_extensions.h",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\probe_hal_extensions.h",
+    "sha256": "A853BC357ED4BC382BCA8BAE76B6E95FD48F20043D1F491A05D62354026041A7"
+  },
+  {
+    "source": "C:\\Users\\29845\\Desktop\\工创赛\\docs\\reports\\evidence\\codex-t7-t8-20261022\\verify.ps1",
+    "snapshot": "C:\\Users\\29845\\AppData\\Local\\Temp\\ct78-5747fd5a\\verify.ps1",
+    "sha256": "39227E520EC827B9F9B883808187B2D6FE995DA38C8CB8941660683750384D37"
+  }
+]

@@ -24,6 +24,8 @@
 #include "ec_app.h"
 #include "ec_board_stm32.h"
 #include "ec_pneumatic_gripper.h"  // 气动夹爪测试
+#include "ec_tof.h"                // ToF 测距（MINIF/DVP0501C1, UART4）
+#include "ec_drop_servo.h"
 
 /* USER CODE END Includes */
 
@@ -122,6 +124,15 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM8_Init();
   MX_TIM9_Init();
+  /* 2026-10-22 修复：落料舵机初始化失败【绝不能】进 Error_Handler()。
+   * 原实现是 `if (!ec_drop_servo_init()) { Error_Handler(); }`，而
+   *   Error_Handler() = __disable_irq(); while(1){}
+   * 且本调用位于 MX_USART2_UART_Init() 之前 ⇒ 一旦失败，
+   * UART 永远起不来，板子**静默死锁**，外部完全无响应（连 PING 都不回）。
+   * 而落料舵机型号未定、可能没接，属于"可缺席"外设 —— 缺席不应拖垮整机。
+   * 处置：失败只记标志，继续初始化；DROP? 会回 ready=0，
+   *       DROP 动作全部返回 ERR DROP_NOT_READY（fail-closed，不会误动）。 */
+  (void)ec_drop_servo_init();
   MX_TIM10_Init();
   MX_TIM11_Init();
   MX_USART2_UART_Init();
@@ -132,12 +143,30 @@ int main(void)
   ec_app_init();
   ec_pneumatic_gripper_init();  // 初始化气动夹爪PWM
 
+  /* 气动夹爪测试：1秒吸附，1秒松开 */
+  uint32_t gripper_test_last_toggle = 0;
+  uint8_t gripper_test_state = 0;  // 0=松开, 1=吸附
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    uint32_t now = HAL_GetTick();
+
+    /* 气动夹爪测试：每1000ms切换一次 */
+    if (now - gripper_test_last_toggle >= 1000) {
+      gripper_test_last_toggle = now;
+      if (gripper_test_state == 0) {
+        ec_pneumatic_gripper_close();  // 吸附
+        gripper_test_state = 1;
+      } else {
+        ec_pneumatic_gripper_open();   // 松开
+        gripper_test_state = 0;
+      }
+    }
+
     ec_app_poll(HAL_GetTick());
     HAL_IWDG_Refresh(&hiwdg);
     /* USER CODE END WHILE */
@@ -184,7 +213,10 @@ void SystemClock_Config(void)
    *      ⇒ 高度疑似"某次改动没改回去"的遗留（**现场若要确认，见下方回退说明**）。
    *
    * 【改了什么（算例，全部整除）】
-   *   HSE 25 MHz ÷ PLLM(25) = 1 MHz  × PLLN(336) = 336 MHz(VCO)  ÷ PLLP(2) = 168 MHz
+   *   HSE  8 MHz ÷ PLLM( 8) = 1 MHz  × PLLN(336) = 336 MHz(VCO)  ÷ PLLP(2) = 168 MHz
+   *   （2026-10-17 修正：原按 25 MHz 晶振配置，但板上实为 8 MHz ⇒ 实际 SYSCLK 只有
+   *     53.76 MHz，实测 USART2 波特率 38400、HAL_GetTick 慢 3.125 倍。改 PLLM=8 后
+   *     整除关系不变，其余 PLLN/PLLP/PLLQ/APB 分频全部无需改动。）
    *   PLLQ(7) → 48 MHz（本项目未用 USB/SDIO，保守取值）
    *   HCLK  = 168 MHz（AHB DIV1）
    *   PCLK1 =  42 MHz（APB1 DIV4，F407 的 APB1 上限就是 42 MHz）
@@ -229,7 +261,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;          /* IWDG 仍用 LSI，与主频无关 */
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 25U;                 /* 25 MHz / 25 = 1 MHz */
+  RCC_OscInitStruct.PLL.PLLM = 8U;                  /* 8 MHz / 8 = 1 MHz（2026-10-17 修正，原 25U） */
   RCC_OscInitStruct.PLL.PLLN = 336U;                /* 1 MHz × 336 = 336 MHz (VCO) */
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;       /* 336 / 2 = 168 MHz (SYSCLK) */
   RCC_OscInitStruct.PLL.PLLQ = 7U;                  /* 336 / 7 = 48 MHz（未用） */
@@ -238,7 +270,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
+  /** Initializes the CPU, A HB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
@@ -536,9 +568,9 @@ static void MX_TIM9_Init(void)
 
   /* USER CODE END TIM9_Init 1 */
   htim9.Instance = TIM9;
-  htim9.Init.Prescaler = 839;     /* 2026-09-28: 16MHz→168MHz。APB1定时器钟=84MHz, /840 = 100kHz（预留PWM，当前未用）*/
+  htim9.Init.Prescaler = 167;     /* TIM9/APB2: 168MHz/168 = 1MHz, 1us tick */
   htim9.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim9.Init.Period = 9999;
+  htim9.Init.Period = 19999;      /* 1MHz/20000 = 50Hz (20ms period) */
   htim9.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim9.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim9) != HAL_OK)
@@ -857,6 +889,11 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
+  /* 2026-10-17：UART4 留给 ToF 测距（MINIF/DVP0501C1，ASCII 协议） */
+  if (huart->Instance == UART4) {
+    ec_tof_uart_rx_cplt(huart);
+    return;
+  }
   ec_board_uart_rx_callback(huart);
 }
 
@@ -867,6 +904,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
  * 直接死因。这里只负责把接收重新武装；字节仍由环形缓冲兜住。 */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
+  /* 2026-10-17：UART4 的 ToF 链路同样需要重新武装，否则 ToF 会永久静默 */
+  if (huart->Instance == UART4) {
+    ec_tof_uart_error(huart);
+    return;
+  }
   ec_board_uart_error_callback(huart);
 }
 

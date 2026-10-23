@@ -60,6 +60,7 @@
  * huart3 保留为备用链路句柄。 */
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
+extern UART_HandleTypeDef huart4;  // ToF测距
 /* USER CODE BEGIN EV */
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim8;

@@ -312,7 +312,11 @@ def load_fixed_pick_point(path: str | Path) -> tuple[int, int] | None:
     p = Path(path)
     if not p.exists():
         return None
-    cfg = configparser.ConfigParser()
+    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
     cfg.read(p, encoding="utf-8")
     if not cfg.has_section("PickPoint"):
         return None
@@ -340,7 +344,11 @@ def config_has_section(path: str | Path, section: str) -> bool:
     p = Path(path)
     if not p.exists():
         return False
-    cfg = configparser.ConfigParser()
+    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
     try:
         cfg.read(p, encoding="utf-8-sig")
     except (configparser.Error, UnicodeDecodeError, OSError):
@@ -358,7 +366,11 @@ def load_drop_points(path: str | Path) -> dict[int, tuple[int, int]]:
     p = Path(path)
     if not p.exists():
         return {}
-    cfg = configparser.ConfigParser()
+    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
     cfg.read(p, encoding="utf-8")
     if not cfg.has_section("DropPoints"):
         return {}
@@ -382,7 +394,11 @@ def load_box_map(path: str | Path) -> dict[tuple[int, int], int]:
     p = Path(path)
     if not p.exists():
         return {}
-    cfg = configparser.ConfigParser()
+    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
     cfg.read(p, encoding="utf-8")
     if not cfg.has_section("BoxMap"):
         return {}
@@ -1279,12 +1295,20 @@ def run(args: argparse.Namespace) -> int:
         #    中位 1500 = turntable.TurntableConfig.zero_pulse_us（盘面「线 0」）。
         if not demo:
             try:
-                from pathlib import Path as _Path
-                from electrical_control.rpi.turntable import DEFAULT_PW_FILE
-                _Path(DEFAULT_PW_FILE).write_text("1500\n", encoding="utf-8")
-                logger.info("转盘已置中位 1500µs（清掉 %s 的遗留值）", DEFAULT_PW_FILE)
+                # 2026-10-17：转盘已从「PWM 写 pw.txt」改为「ST-3215 总线舵机（UART2）」。
+                # 这里改成走统一的 make_backend()，不再直接写文件 —— 否则新后端下写
+                # pw.txt 是空操作（已没有进程读它），中位归零会静默失效。
+                # 中位 1500µs = TurntableConfig.zero_pulse_us（盘面「线 0」）。
+                from electrical_control.rpi.turntable import make_backend
+
+                _be = make_backend()
+                try:
+                    _be.set_pulse_us(1500)
+                    logger.info("转盘已置中位 1500µs（后端=%s）", type(_be).__name__)
+                finally:
+                    _be.close()
             except Exception as exc:  # noqa: BLE001 - 加固失败不阻断开工（会记警告）
-                logger.warning("写转盘中位失败（不阻断）：%s", exc)
+                logger.warning("转盘中位置中失败（不阻断）：%s", exc)
         # 方案C 靠 payload.class_id 当货格号（校赛模式：BATCH_TARGETS 的 id 字节就
         # 承载 box_id，见 vision_ingest.BATCH_ID_BYTE_IS_BOX_ID）。形状模式下没有这个
         # 等价关系，转盘就不知道该不该翻 ⇒ 拒绝启动，而不是把每件都投到 A 侧。
@@ -1429,7 +1453,7 @@ def run(args: argparse.Namespace) -> int:
     nack_retry_backoff_s = 0.5
     # 🔴 2026-09-22 修复（F3）：NACK 重试**必须有上限**（原因码判别见 _nack_is_retryable）。
     #   旧行为无上限 ⇒ 见该函数上方的说明。上限按"每件"计，派件时清零。
-    nack_retry_max = 12
+    nack_retry_max = 50   # 2026-09-23：25s 窗口，等板子跑完上一件
     nack_retries = 0
     # 🔴 2026-09-22 新增（N2 / F6）：**两支钟**的整轮收场看门狗。
     #   空闲钟 idle_since：只在【没有运动在飞】时走 ⇒ 只有"台面没件了"才会到点。

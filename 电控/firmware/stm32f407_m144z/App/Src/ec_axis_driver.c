@@ -53,8 +53,15 @@ uint32_t ec_axis_mm10_to_steps(ec_axis_t axis, int16_t delta_mm10)
 }
 
 /* Sign convention of EC_AXIS_STEP_XY_INTERP's signed step targets: a positive
- * target maps to EC_DIRECTION_0. Same convention as ec_motion_plan.h
- * EC_MOTION_POSITIVE_X_DIR / EC_MOTION_POSITIVE_Y_DIR (= EC_DIRECTION_0). */
+ * target maps to EC_DIRECTION_0.
+ *
+ * 🔴 2026-10-18：本宏一直是 EC_DIRECTION_0（X、Y 共用），
+ *    而 ec_motion_plan.h 的 EC_MOTION_POSITIVE_Y_DIR 当时是 EC_DIRECTION_1
+ *    ⇒ **两条路径对 +Y 的定义相反**，是历史遗留的隐患。
+ *    2026-10-18 现场实测（从最内侧原点发 MOVE Y DIR1 会顶到内壁堵转、
+ *    发 MOVE Y DIR0 才正确朝 +Y 离开）证明 **DIR0 才是 +Y**，
+ *    故 ec_motion_plan.h 的 EC_MOTION_POSITIVE_Y_DIR 已改为 EC_DIRECTION_0，
+ *    与本宏统一。 */
 #define EC_AXIS_INTERP_POSITIVE_DIR EC_DIRECTION_0
 
 static uint32_t axis_steps_from_signed(int32_t target)

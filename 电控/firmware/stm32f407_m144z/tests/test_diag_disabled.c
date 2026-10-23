@@ -32,10 +32,55 @@ ec_input_snapshot_t ec_board_read_inputs(void)
 
 /* 2026-09-18：LIGHT ON|OFF 命令的桩（该命令不受 test-build 开关影响）。 */
 void ec_board_light_set(bool on) { (void)on; }
+/* 2026-10-18：补光灯改为 WS2812 后，ec_diag.c 的 LIGHT LV / LIGHT RGB / LIGHT?
+ * 会调用下面这些函数。主机测试不编译 HAL 代码，故提供最小桩。 */
+void ec_ws2812_init(void) { }
+uint8_t ec_ws2812_white_level(void) { return 0U; }
+bool ec_ws2812_set_white_level(uint8_t level) { (void)level; return true; }
+void ec_ws2812_fill(uint8_t r, uint8_t g, uint8_t b)
+{
+    (void)r; (void)g; (void)b;
+}
+/* 2026-10-18：TOF 命令的桩（主机测试不编译 ec_tof.c）。 */
+void ec_tof_init(void) { }
+bool ec_tof_latest(uint16_t *dist_mm, uint8_t *conf, uint32_t *age_ms,
+                   uint32_t now_ms)
+{
+    (void)now_ms;
+    if (dist_mm != NULL) { *dist_mm = 0U; }
+    if (conf != NULL) { *conf = 0U; }
+    if (age_ms != NULL) { *age_ms = 0U; }
+    return false;
+}
+bool ec_tof_have_frame(void) { return false; }
+uint32_t ec_tof_frames(void) { return 0U; }
+uint32_t ec_tof_errors(void) { return 0U; }
+uint32_t ec_tof_raw_bytes(void) { return 0U; }
+uint32_t ec_tof_uart_errors(void) { return 0U; }
+void ec_tof_send_test(void) { }
+
+/* 2026-10-18 新增：TOFRAW 命令的桩 */
+uint8_t ec_tof_raw_ring(uint8_t *out, uint8_t max)
+{
+    (void)out; (void)max; return 0U;
+}
+uint8_t ec_tof_last_reject(char *line, uint8_t max)
+{
+    if ((line != NULL) && (max > 0U)) { line[0] = '\0'; }
+    return 0U;
+}
 /* 2026-09-18：GRIP 命令的桩（该命令不受 test-build 开关影响）。 */
 bool ec_grip_port_move(uint16_t position, uint16_t time_ms)
 {
     (void)position; (void)time_ms; return true;
+}
+/* 2026-10-22：DROP 命令（落料舵机 PE5/TIM9_CH1）的板级桩。 */
+bool ec_board_drop_servo_set_us(uint16_t pulse_us)
+{
+    (void)pulse_us; return true;
+}
+void ec_board_drop_servo_stop(void)
+{
 }
 
 ec_step_test_mode_t ec_step_test_mode(void) { return EC_STEP_TEST_IDLE; }
@@ -58,6 +103,14 @@ bool ec_motion_test_start_steps_xy(ec_direction_t x_direction, uint32_t x_steps,
                                    uint32_t frequency_hz, uint16_t active_inputs)
 { (void)x_direction; (void)x_steps; (void)y_direction; (void)y_steps;
   (void)frequency_hz; (void)active_inputs; return false; }
+/* 2026-10-22：MOVE XY 命令改为调用双频率版本，本目标也要提供桩。 */
+bool ec_motion_test_start_steps_xy2(ec_direction_t x_direction, uint32_t x_steps,
+                                    ec_direction_t y_direction, uint32_t y_steps,
+                                    uint32_t x_frequency_hz,
+                                    uint32_t y_frequency_hz,
+                                    uint16_t active_inputs)
+{ (void)x_direction; (void)x_steps; (void)y_direction; (void)y_steps;
+  (void)x_frequency_hz; (void)y_frequency_hz; (void)active_inputs; return false; }
 uint32_t ec_motion_test_step_target(void) { return 0U; }
 uint32_t ec_motion_test_step_remaining(void) { return 0U; }
 ec_step_result_t ec_motion_test_step_result(void)
@@ -94,6 +147,14 @@ ec_axis_result_t ec_axis_driver_result(void) { return EC_AXIS_RESULT_OK; }
 uint32_t ec_axis_driver_progress(void) { return 0U; }
 uint32_t ec_axis_driver_completed_move_count(void) { return 0U; }
 uint32_t ec_step_port_now_ms(void) { return 0U; }
+/* 2026-10-23：SPEED 命令用到的巡航频率接口（本目标只需能链接）。 */
+bool ec_step_port_set_cruise_hz(uint32_t cruise_hz)
+{ (void)cruise_hz; return false; }
+uint32_t ec_step_port_get_cruise_hz(void) { return EC_STEP_CRUISE_HZ_DEFAULT; }
+/* 2026-10-23：INTERP 命令用到的 XY 插补开关（本目标不链接 ec_app.c ⇒ 给桩）。 */
+static bool fake_xy_interp;
+void ec_app_set_xy_interp_enabled(bool enabled) { fake_xy_interp = enabled; }
+bool ec_app_xy_interp_enabled(void) { return fake_xy_interp; }
 const ec_axis_driver_diag_t *ec_axis_driver_diag(void)
 {
     /* 真实实现只在 fault() 时填；这里给全零 = "没有锁存任何故障现场"。 */

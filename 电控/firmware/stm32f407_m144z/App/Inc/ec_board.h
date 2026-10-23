@@ -22,6 +22,9 @@ void ec_board_light_set(bool on);
  * USART3_TX 已由 PD8 迁至 PB10（见 stm32f4xx_hal_msp.c）；
  * 舵机信号线物理上即接在 PB10，接线未改。位置/时间越界返回 false。 */
 bool ec_grip_port_move(uint16_t position, uint16_t time_ms);
+/* Drop gate PWM on PE5/TIM9_CH1. */
+bool ec_board_drop_servo_set_us(uint16_t pulse_us);
+void ec_board_drop_servo_stop(void);
 ec_input_snapshot_t ec_board_read_inputs(void);
 void ec_board_uart_start_rx(void);
 /* TX path used by ec_app_flush_tx(). */

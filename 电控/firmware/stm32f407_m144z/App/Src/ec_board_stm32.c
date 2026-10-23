@@ -6,6 +6,7 @@
 #include "ec_diag.h"
 #include "ec_group_test.h"
 #include "ec_inputs.h"
+#include "ec_light_ws2812.h"
 #include "ec_safety_adapter.h"
 #include "ec_servo_test.h"
 #include "ec_step_test.h"
@@ -18,6 +19,7 @@ extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim8;
+extern TIM_HandleTypeDef htim9;
 extern TIM_HandleTypeDef htim10;
 extern TIM_HandleTypeDef htim11;
 extern UART_HandleTypeDef huart2;
@@ -26,6 +28,18 @@ extern UART_HandleTypeDef huart2;
  * Coupled to main.c SystemClock_Config + MX_TIMx_Init: if the system clock or
  * PSC changes, this value must be updated or the step frequency shifts. */
 #define EC_STEP_TIMER_HZ UINT32_C(100000)
+
+/* 2026-10-23：巡航频率从硬编码改为运行时可设（T8 安全速度实测）。
+ *
+ * 原实现把 5000U 直接写在 start_axis_counted() 的 ec_step_profile_plan() 调用里，
+ * 想试其它速度必须改代码重烧。现在改成这个变量，可用诊断命令 `SPEED <hz>` 改。
+ *
+ * ⚠️ 语义：这是【轨迹曲线的巡航上限】，不是最终速度。若运动步数不足以跑完
+ *    加速段+减速段，曲线会走"三角形"把峰值降到更低 —— 见 ec_step_profile.c。
+ * ⚠️ 真正的上限受电机/驱动能力限制，且**丢步无硬件可发现**（X/Y 无限位开关）。
+ *    提档后必须用方框测试验证复位（/home/pi/square_clear.py）。
+ */
+static uint32_t step_cruise_hz = EC_STEP_CRUISE_HZ_DEFAULT;
 
 static ec_input_filter_t input_filter;
 static ec_input_snapshot_t input_snapshot;
@@ -198,11 +212,13 @@ static TIM_HandleTypeDef *start_axis_counted(ec_axis_t axis, uint32_t steps,
      *    四条腿首尾相接，**不闭合即丢步**；再用尺复核四边是否各 50mm。
      *    4000Hz 已用此方法验证通过；改到 5000Hz 后**必须重做同一验证**。
      *    EC_STEP_MAX_HZ 为 10000（ec_step_test.h:8），5000 在合法域内。 */
-    if (ec_step_profile_plan(profile, steps, 200U, 5000U, 200U, 10000U, 10000U)) {
+    if (ec_step_profile_plan(profile, steps, 200U, step_cruise_hz, 200U,
+                             10000U, 10000U)) {
         period = ec_step_profile_reload_at(profile, 0U, EC_STEP_TIMER_HZ);
     }
     if (period == 0U) {
-        /* Fallback: constant frequency (very short moves / degenerate params). */
+        /* Fallback: constant frequency (very short moves / degenerate params).
+         * 注意：只有曲线规划失败时才用到 frequency_hz。 */
         period = (EC_STEP_TIMER_HZ / frequency_hz) - 1U;
     }
 
@@ -227,16 +243,25 @@ void ec_board_enter_safe_state(void)
     (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_4);
 
     ec_step_port_disable_all();
-    HAL_GPIO_WritePin(LIGHT_EN_GPIO_Port, LIGHT_EN_Pin, GPIO_PIN_RESET);
+    /* 2026-10-18：补光灯是 WS2812，单纯拉低引脚不会熄灭（灯珠内部已锁存），
+     * 必须发送一帧全 0 的 GRB 数据。代价约 1.1ms（含前后复位低电平）。 */
+    ec_ws2812_off();
 }
 
 /* 2026-09-18 新增：补光灯直控。低 = 关（与初始化及安全态一致）。
  * 加这个函数的原因：全工程此前只有两处写 LIGHT_EN，且都是 RESET，
- * 也就是说补光灯从来没有被打开过 —— 没有任何代码路径能点亮它。 */
+ * 也就是说补光灯从来没有被打开过 —— 没有任何代码路径能点亮它。
+ *
+ * 🔴 2026-10-18 变更（用户确认）：实物补光灯是 **WS2812**（16 颗 × 0.3W，
+ *   单总线 800kHz 协议）。单纯把 PC0 拉高**不会点亮**，必须按位发送 GRB 帧。
+ *   ⇒ 改为调用 ec_light_ws2812 位模拟驱动；对外语义不变（true=亮 / false=灭）。 */
 void ec_board_light_set(bool on)
 {
-    HAL_GPIO_WritePin(LIGHT_EN_GPIO_Port, LIGHT_EN_Pin,
-                      on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    if (on) {
+        ec_ws2812_white_on();
+    } else {
+        ec_ws2812_off();
+    }
 }
 
 /* 2026-09-18 L4 批准：总线舵机（自适应夹爪）发送。
@@ -359,8 +384,9 @@ bool ec_step_port_start_counted(ec_axis_t axis, uint32_t frequency_hz,
 bool ec_step_port_enable_xy(void)
 {
     ec_step_port_disable_all();
-    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
+    /* PD42S1 EN极性：高有效（2026-10-11手册确认） */
+    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_SET);
     return true;
 }
 
@@ -539,6 +565,7 @@ void ec_step_port_on_timer_period(TIM_HandleTypeDef *htim)
  * 为什么不用 HAL 的 TIM_CHANNEL_STATE_GET 判断 —— 见
  * ec_servo_port_start() 下方 2026-09-19 那段加固说明。 */
 static bool servo_ch3_started = false;
+static bool drop_servo_started = false;
 
 bool ec_servo_port_start(uint16_t pulse_us)
 {
@@ -694,6 +721,28 @@ void ec_servo_port_stop_z(void)
     }
 }
 
+bool ec_board_drop_servo_set_us(uint16_t pulse_us)
+{
+    if (pulse_us == 0U || pulse_us > htim9.Init.Period) return false;
+
+    __HAL_TIM_SET_COUNTER(&htim9, 0U);
+    __HAL_TIM_SET_COMPARE(&htim9, TIM_CHANNEL_1, pulse_us);
+    if (drop_servo_started) return true;
+
+    if (HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_1) != HAL_OK) return false;
+    drop_servo_started = true;
+    return true;
+}
+
+void ec_board_drop_servo_stop(void)
+{
+    if (drop_servo_started) {
+        (void)HAL_TIM_PWM_Stop(&htim9, TIM_CHANNEL_1);
+        drop_servo_started = false;
+    }
+    __HAL_TIM_SET_COMPARE(&htim9, TIM_CHANNEL_1, 0U);
+}
+
 uint32_t ec_servo_port_now_ms(void)
 {
     return HAL_GetTick();
@@ -721,10 +770,11 @@ bool ec_step_port_enable_axis(ec_axis_t axis)
     ec_step_port_disable_all();
     switch (axis) {
     case EC_AXIS_X:
-        HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
+        /* PD42S1 EN极性：高有效 */
+        HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_SET);
         return true;
     case EC_AXIS_Y:
-        HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_SET);
         return true;
     default:
         return false;
@@ -740,13 +790,51 @@ void ec_step_port_stop_all(void)
 
 void ec_step_port_disable_all(void)
 {
-    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_SET);
+    /* PD42S1 EN极性：高有效，失能时输出低电平 */
+    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
 }
 
 uint32_t ec_step_port_now_ms(void)
 {
     return HAL_GetTick();
+}
+
+/* 2026-10-23：巡航频率运行时可设（T8 安全速度实测）。
+ *
+ * 校验：
+ *   1) [EC_STEP_MIN_HZ, EC_STEP_MAX_HZ]     —— 与 MOVE 的 HZ 同域
+ *   2) > 曲线起止频率 200Hz                 —— 否则 ec_step_profile_plan 直接拒绝
+ *      （它要求 cruise_hz >= start_hz 且 cruise_hz >= end_hz）
+ *   3) 采样周期必须 >= 2（AUTORELOAD = 100000/hz - 1，若 hz > 50000 会算出 1 或 0，
+ *      虽然被 EC_STEP_MAX_HZ=10000 挡住，这里再显式挡一次防以后放宽上限）
+ *
+ * 只在【下一条运动开始规划时】生效；正在进行的运动不受影响。
+ * 失败时不改动原值（fail-closed）。
+ */
+bool ec_step_port_set_cruise_hz(uint32_t cruise_hz)
+{
+    uint32_t reload;
+
+    if ((cruise_hz < EC_STEP_MIN_HZ) || (cruise_hz > EC_STEP_MAX_HZ)) {
+        return false;
+    }
+    /* 曲线起止频率固定 200Hz（见 start_axis_counted 的 plan 调用）*/
+    if (cruise_hz <= 200U) {
+        return false;
+    }
+    reload = (EC_STEP_TIMER_HZ / cruise_hz);
+    if (reload < 2U) {
+        return false;
+    }
+
+    step_cruise_hz = cruise_hz;
+    return true;
+}
+
+uint32_t ec_step_port_get_cruise_hz(void)
+{
+    return step_cruise_hz;
 }
 
 uint32_t ec_step_port_counted_remaining(void)
@@ -839,8 +927,9 @@ bool ec_group_port_set_direction(ec_axis_t axis, ec_direction_t direction)
 bool ec_group_port_enable_xy(void)
 {
     ec_step_port_disable_all();
-    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_RESET);
+    /* PD42S1 EN极性：高有效 */
+    HAL_GPIO_WritePin(ENABLE_X_GPIO_Port, ENABLE_X_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(ENABLE_Y_GPIO_Port, ENABLE_Y_Pin, GPIO_PIN_SET);
     return true;
 }
 

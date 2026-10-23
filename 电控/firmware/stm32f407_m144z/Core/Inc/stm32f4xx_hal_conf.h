@@ -96,7 +96,10 @@
   *        (when HSE is used as system clock source, directly or through the PLL).
   */
 #if !defined  (HSE_VALUE)
-  #define HSE_VALUE    25000000U /*!< Value of the External oscillator in Hz */
+  #define HSE_VALUE    8000000U  /*!< 2026-10-17 修正：板上晶振实为 8 MHz。
+                                     原值 25000000U 与实物不符，导致 SYSCLK 只有
+                                     168×(8/25)=53.76 MHz（实测波特率 38400 而
+                                     非 115200、HAL_GetTick 慢 3.125 倍）。 */
 #endif /* HSE_VALUE */
 
 #if !defined  (HSE_STARTUP_TIMEOUT)

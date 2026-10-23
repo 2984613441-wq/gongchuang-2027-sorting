@@ -3,13 +3,21 @@
 #include "ec_axis_driver.h"
 #include "ec_board.h"
 #include "ec_barrier_test.h"
+#include "ec_drop_servo.h"
 #include "ec_group_test.h"
+#include "ec_light_ws2812.h"
 #include "ec_servo_test.h"
 #include "ec_step_test.h"
+#include "ec_tof.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* TOF 命令需要 HAL_GetTick()（算 age_ms）。
+ * 真机构建解析到真实 HAL；主机测试解析到 tests/host_stubs/stm32f4xx_hal.h
+ * （它只声明 HAL_GetTick，由 host_stubs/hal_stub.c 实现）。 */
+#include "stm32f4xx_hal.h"
 
 #ifndef EC_DIAGNOSTIC_BUILD
 #define EC_DIAGNOSTIC_BUILD 0
@@ -364,9 +372,13 @@ void ec_diag_process_line(const char *line)
 
     if (strcmp(line, "HELP") == 0) {
         ec_diag_port_write(
-            "HELP PING STATUS INPUTS LIGHT ON|OFF GRIP n t "
+            "HELP PING STATUS INPUTS TOF TOFDBG TOFRAW TOFSEND "
+            "LIGHT ON|OFF LIGHT LV 0-255 LIGHT RGB r g b LIGHT? GRIP n t "
+            "DROP OPEN|CLOSE|MID|POS us|? "
             "STEP X|Y STEP STOP MOTION ARM "
             "MOVE X|Y DIR0|DIR1 MOVE X|Y DIR0|DIR1 STEPS n HZ f "
+            "MOVE XY XDIR0|XDIR1 STEPS n YDIR0|YDIR1 STEPS m HZ f "
+            "SPEED hz|? " "INTERP ON|OFF|? "
             "SERVO ARM SERVO PB10 "
             "P1000|P1100|P1200|P1300|P1500|P1700|P1900 "
             "SERVO STOP GROUP ARM GROUP START XDIR0|XDIR1 "
@@ -376,12 +388,41 @@ void ec_diag_process_line(const char *line)
     } else if (strcmp(line, "PING") == 0) {
         ec_diag_port_write("OK PONG\r\n");
     } else if (strcmp(line, "LIGHT ON") == 0) {
-        /* 2026-09-18 新增：台架直控补光灯。PC0 拉高 = 开。 */
+        /* 2026-09-18 新增：台架直控补光灯。
+         * 2026-10-18 变更：实物为 WS2812（16 颗），改为发送 GRB 帧点亮白光。 */
         ec_board_light_set(true);
         ec_diag_port_write("OK LIGHT ON\r\n");
     } else if (strcmp(line, "LIGHT OFF") == 0) {
         ec_board_light_set(false);
         ec_diag_port_write("OK LIGHT OFF\r\n");
+    } else if (strncmp(line, "LIGHT LV ", 9U) == 0) {
+        /* 2026-10-18 新增：设白光亮度 0-255（16 颗 × 0.3W，全白约 1A @5V）。 */
+        unsigned lv = 0U;
+        if ((sscanf(line, "LIGHT LV %u", &lv) == 1) &&
+            (lv <= EC_WS2812_LEVEL_MAX)) {
+            (void)ec_ws2812_set_white_level((uint8_t)lv);
+            ec_diag_port_write("OK LIGHT LV\r\n");
+        } else {
+            ec_diag_port_write("ERR LIGHT_USAGE LIGHT LV <0-255>\r\n");
+        }
+    } else if (strncmp(line, "LIGHT RGB ", 10U) == 0) {
+        /* 2026-10-18 新增：设任意颜色（调试/状态指示用）。 */
+        unsigned r = 0U;
+        unsigned g = 0U;
+        unsigned b = 0U;
+        if ((sscanf(line, "LIGHT RGB %u %u %u", &r, &g, &b) == 3) &&
+            (r <= 255U) && (g <= 255U) && (b <= 255U)) {
+            ec_ws2812_fill((uint8_t)r, (uint8_t)g, (uint8_t)b);
+            ec_diag_port_write("OK LIGHT RGB\r\n");
+        } else {
+            ec_diag_port_write("ERR LIGHT_USAGE LIGHT RGB <r> <g> <b> 0-255\r\n");
+        }
+    } else if (strcmp(line, "LIGHT?") == 0) {
+        char output[48];
+        (void)snprintf(output, sizeof(output), "OK LIGHT LV=%u LED=%u\r\n",
+                       (unsigned)ec_ws2812_white_level(),
+                       (unsigned)EC_WS2812_LED_COUNT);
+        ec_diag_port_write(output);
     } else if (strncmp(line, "GRIP ", 5U) == 0) {
         /* 2026-09-18 新增：台架直控自适应夹爪总线舵机（HX-06L，USART3/PB10）。
          * 用法：GRIP <位置 0-1000> <时间 ms>
@@ -399,6 +440,158 @@ void ec_diag_process_line(const char *line)
         } else {
             ec_diag_port_write("ERR GRIP_USAGE GRIP <pos 0-1000> <time_ms>\r\n");
         }
+    } else if (strncmp(line, "DROP", 4U) == 0) {
+        /* 2026-10-22 新增：XY 最远端【落料舵机】台架直控（PE5 / TIM9_CH1 / 50Hz）。
+         * 用法：
+         *   DROP OPEN       放行（脉宽 = EC_DROP_SERVO_OPEN_US）
+         *   DROP CLOSE      挡住（脉宽 = EC_DROP_SERVO_CLOSE_US）
+         *   DROP MID        中位（1500µs，上电安全位）
+         *   DROP POS <us>   任意脉宽（500~2500，越界 ERR）
+         *   DROP?           查询当前已下发脉宽与就绪状态
+         *
+         * ⚠️ 舵机型号未知（用户 2026-10-22：暂时不知道）。
+         *    OPEN / CLOSE / MID 三个值目前都是 1500µs 占位，
+         *    **发 OPEN/CLOSE 不会有任何动作**，必须等型号确定后
+         *    在 ec_drop_servo.h 里填实测脉宽再试。
+         *    本命令只用于验证通道通了、脉宽可下发。 */
+        if (strcmp(line, "DROP?") == 0) {
+            char output[96];
+            (void)snprintf(output, sizeof(output),
+                           "OK DROP ready=%u current_us=%u open_us=%u close_us=%u\r\n",
+                           (unsigned)(ec_drop_servo_is_ready() ? 1U : 0U),
+                           (unsigned)ec_drop_servo_current_us(),
+                           (unsigned)EC_DROP_SERVO_OPEN_US,
+                           (unsigned)EC_DROP_SERVO_CLOSE_US);
+            ec_diag_port_write(output);
+        } else if (strcmp(line, "DROP OPEN") == 0) {
+            ec_diag_port_write(ec_drop_servo_open() ?
+                               "OK DROP MOVING\r\n" :
+                               "ERR DROP_NOT_READY\r\n");
+        } else if (strcmp(line, "DROP CLOSE") == 0) {
+            ec_diag_port_write(ec_drop_servo_close() ?
+                               "OK DROP MOVING\r\n" :
+                               "ERR DROP_NOT_READY\r\n");
+        } else if (strcmp(line, "DROP MID") == 0) {
+            ec_diag_port_write(ec_drop_servo_mid() ?
+                               "OK DROP MOVING\r\n" :
+                               "ERR DROP_NOT_READY\r\n");
+        } else if (strncmp(line, "DROP POS ", 9U) == 0) {
+            unsigned us = 0U;
+            if ((sscanf(line, "DROP POS %u", &us) == 1) &&
+                (us >= EC_DROP_SERVO_MIN_US) && (us <= EC_DROP_SERVO_MAX_US)) {
+                if (ec_drop_servo_set_us((uint16_t)us)) {
+                    char output[64];
+                    (void)snprintf(output, sizeof(output),
+                                   "OK DROP POS %u\r\n", us);
+                    ec_diag_port_write(output);
+                } else {
+                    ec_diag_port_write("ERR DROP_NOT_READY\r\n");
+                }
+            } else {
+                /* 2026-10-22：文案改为引用常量，避免日后改范围时文案失同步。
+                 * 当前范围 = EC_DROP_SERVO_MIN_US..MAX_US（MG996R 270° 量程，留端点余量）。 */
+                char output[72];
+                (void)snprintf(output, sizeof(output),
+                               "ERR DROP_RANGE DROP POS %u-%u\r\n",
+                               (unsigned)EC_DROP_SERVO_MIN_US,
+                               (unsigned)EC_DROP_SERVO_MAX_US);
+                ec_diag_port_write(output);
+            }
+        } else {
+            ec_diag_port_write("ERR DROP_USAGE DROP OPEN|CLOSE|MID|POS us|?\r\n");
+        }
+    } else if (strcmp(line, "TOF") == 0) {
+        /* 2026-10-17 新增：读取 ToF（MINIF/DVP0501C1, UART4）最新一帧。
+         * 2026-10-18 增加 raw / uart_err 两个诊断字段：
+         *   raw=0              ⇒ 物理层没信号（查供电/接线/引脚）
+         *   raw>0 但 frames=0  ⇒ 字节到了，但协议或波特率不对 */
+        char output[192];
+        uint16_t dist_mm = 0U;
+        uint8_t conf = 0U;
+        uint32_t age_ms = 0U;
+        bool fresh = ec_tof_latest(&dist_mm, &conf, &age_ms, HAL_GetTick());
+
+        (void)snprintf(output, sizeof(output),
+                       "%s TOF valid=%u dist_mm=%u conf=%u age_ms=%lu frames=%lu "
+                       "errors=%lu raw=%lu uart_err=%lu\r\n",
+                       fresh ? "OK" : "STALE",
+                       fresh ? 1U : 0U,
+                       (unsigned)dist_mm,
+                       (unsigned)conf,
+                       (unsigned long)age_ms,
+                       (unsigned long)ec_tof_frames(),
+                       (unsigned long)ec_tof_errors(),
+                       (unsigned long)ec_tof_raw_bytes(),
+                       (unsigned long)ec_tof_uart_errors());
+        ec_diag_port_write(output);
+    } else if (strcmp(line, "TOFDBG") == 0) {
+        /* 2026-10-18 新增：UART4 硬件状态。
+         * CR1: bit5=RXNEIE(接收中断使能) bit13=UE(串口使能) bit2=RE(接收使能)
+         * SR : bit5=RXNE(收到字节) bit3=ORE(溢出) bit1=FE(帧错) bit2=NE(噪声)
+         * 若 CR1 里 UE/RE/RXNEIE 没开 ⇒ 软件没在收，不是硬件问题。
+         *
+         * ⚠️ 寄存器直读依赖真实的 STM32 HAL。主机测试用的
+         * tests/host_stubs/stm32f4xx_hal.h 只提供 HAL_GetTick()，
+         * 没有 UART_HandleTypeDef，也没有 huart4 的定义。
+         * USE_HAL_DRIVER 只由 Keil 工程定义，故用它区分真机与主机测试：
+         *   真机 → 输出完整寄存器快照
+         *   主机测试 → 输出提示串，保持可编译、可链接 */
+#if defined(USE_HAL_DRIVER)
+        char output[192];
+        extern UART_HandleTypeDef huart4;
+        (void)snprintf(output, sizeof(output),
+                       "TOFDBG gState=0x%02X RxState=0x%02X CR1=0x%08lX SR=0x%08lX "
+                       "raw=%lu uart_err=%lu\r\n",
+                       (unsigned)huart4.gState,
+                       (unsigned)huart4.RxState,
+                       (unsigned long)huart4.Instance->CR1,
+                       (unsigned long)huart4.Instance->SR,
+                       (unsigned long)ec_tof_raw_bytes(),
+                       (unsigned long)ec_tof_uart_errors());
+        ec_diag_port_write(output);
+#else
+        ec_diag_port_write("TOFDBG UNAVAILABLE (host build)\r\n");
+#endif
+    } else if (strcmp(line, "TOFRAW") == 0) {
+        /* 2026-10-18 新增：ToF 原始字节快照 + 最近一次被拒行的现场。
+         * 用途：出现「errors 狂涨、frames 不动」时，直接看 ToF 到底在发什么。
+         * 输出：
+         *   TOFRAW n=64 hex=20 33 32 37 2C ...
+         *   TOFREJ reason=4 line=[327, 61]
+         * 原因码：1=无逗号 2=距离解析失败 3=置信度解析失败 4=超范围 5=行超长 */
+        char out[384];
+        uint8_t buf[EC_TOF_RAW_RING];
+        uint8_t n = ec_tof_raw_ring(buf, (uint8_t)sizeof(buf));
+        uint8_t i;
+        size_t pos;
+        int w;
+
+        w = snprintf(out, sizeof(out), "TOFRAW n=%u hex=", (unsigned)n);
+        pos = (w > 0) ? (size_t)w : 0U;
+        if (pos > sizeof(out) - 1U) {
+            pos = sizeof(out) - 1U;
+        }
+        for (i = 0U; (i < n) && (pos + 4U < sizeof(out)); i++) {
+            w = snprintf(&out[pos], sizeof(out) - pos, "%02X ", (unsigned)buf[i]);
+            if (w > 0) {
+                pos += (size_t)w;
+            }
+        }
+        ec_diag_port_write(out);
+
+        {
+            char rej_line[EC_TOF_LINE_MAX];
+            uint8_t reason = ec_tof_last_reject(rej_line, (uint8_t)sizeof(rej_line));
+            (void)snprintf(out, sizeof(out), "TOFREJ reason=%u line=[%s]\r\n",
+                           (unsigned)reason, rej_line);
+            ec_diag_port_write(out);
+        }
+    } else if (strcmp(line, "TOFSEND") == 0) {
+        /* 2026-10-18 新增：UART4 自环测试。把 PC10 与 PC11 短接后执行本命令，
+         * 再发 TOF：raw 从 0 变成 8 就证明 STM32 侧收发链路完好。 */
+        ec_tof_send_test();
+        ec_diag_port_write(
+            "OK TOFSEND sent=8 (short PC10-PC11, then TOF.raw should +8)\r\n");
     } else if (strcmp(line, "STATUS") == 0) {
         char output[512];
         (void)snprintf(output, sizeof(output),
@@ -570,6 +763,109 @@ void ec_diag_process_line(const char *line)
                            (ec_motion_test_arm(inputs.active_mask) ?
                            "OK MOTION ARMED 10S\r\n" :
                            "ERR MOTION_INHIBITED\r\n"));
+    } else if (strcmp(line, "INTERP?") == 0) {
+        /* 2026-10-23：查生产路径是否走 XY 插补（R3 生产接入开关）*/
+        ec_diag_port_write(ec_app_xy_interp_enabled() ?
+                           "OK INTERP on\r\n" : "OK INTERP off\r\n");
+    } else if (strcmp(line, "INTERP ON") == 0) {
+        /* 切到插补版计划：三段 XY 移动改「两轴同时起步」（12 步 → 9 步）。
+         * 只在【下一件】生效 —— 当前正在执行的那件 program 已建好，不受影响。
+         * ⚠️ 掉电恢复 off。默认就是 off（串行版，与接入前逐字节相同）。 */
+        ec_app_set_xy_interp_enabled(true);
+        ec_diag_port_write("OK INTERP on\r\n");
+    } else if (strcmp(line, "INTERP OFF") == 0) {
+        ec_app_set_xy_interp_enabled(false);
+        ec_diag_port_write("OK INTERP off\r\n");
+    } else if (strcmp(line, "SPEED?") == 0) {
+        /* 2026-10-23：查当前巡航频率（T8 安全速度实测用）*/
+        char output[64];
+        (void)snprintf(output, sizeof(output), "OK SPEED cruise_hz=%lu\r\n",
+                       (unsigned long)ec_step_port_get_cruise_hz());
+        ec_diag_port_write(output);
+    } else if (strncmp(line, "SPEED ", 6U) == 0) {
+        /* 2026-10-23：设巡航频率。烧一次固件后可任意扫档，不用反复重烧。
+         *
+         * 与 MOVE 的 HZ 的区别：
+         *   MOVE ... HZ f  → f **基本无效**（只在轨迹规划失败时兜底）
+         *   SPEED hz       → 真正改轨迹曲线的巡航上限，**下一条运动生效**
+         *
+         * 合法域 201..10000（必须高于曲线起止频率 200Hz）。
+         * 提档后必须用方框测试验证复位，见 /home/pi/square_clear.py。 */
+        unsigned long hz = 0UL;
+        if (sscanf(line, "SPEED %lu", &hz) != 1) {
+            ec_diag_port_write("ERR SPEED_USAGE SPEED hz|?\r\n");
+        } else if (!ec_step_port_set_cruise_hz((uint32_t)hz)) {
+            ec_diag_port_write("ERR SPEED_RANGE SPEED 201-10000\r\n");
+        } else {
+            char output[64];
+            (void)snprintf(output, sizeof(output), "OK SPEED cruise_hz=%lu\r\n", hz);
+            ec_diag_port_write(output);
+        }
+    } else if (strncmp(line, "MOVE XY ", 8U) == 0) {
+        /* 2026-10-22 新增：XY 双轴联动【直线合成】。
+         *
+         * 用法：MOVE XY XDIR0|XDIR1 STEPS nx YDIR0|YDIR1 STEPS ny HZ f
+         *
+         * HZ f 是【较长那条腿】的频率；较短那条腿按步数比降频，
+         * 使两轴**同时到达** ⇒ 合成轨迹是直线，而不是"先走完短腿再走长腿"的折线。
+         *
+         * 例：X 4000 步 / Y 2000 步 / HZ 500
+         *     → freq_x = 500, freq_y = 250
+         *     → 两轴都恰好 8.0s 走完 ⇒ 斜线（不是折线）
+         *
+         * ⚠️ 底层 ec_step_port_start_counted_xy() 不做几何插补，只保证"同时启动、
+         *    各自独立频率、各自计数到 0"。所以直线效果完全靠上面的频率比实现。
+         * ⚠️ 降频后若低于 EC_STEP_MIN_HZ 会被抬到下限，此时两轴不再同时到达，
+         *    轨迹会略微偏离直线（在步数比极端时才会发生）。
+         *
+         * 安全：与单轴 MOVE 一样需要先 MOTION ARM（10 秒窗口），消费一次窗口。 */
+        unsigned xd = 0U;
+        unsigned yd = 0U;
+        unsigned long xs = 0UL;
+        unsigned long ys = 0UL;
+        unsigned long hz = 0UL;
+
+        if (sscanf(line, "MOVE XY XDIR%u STEPS %lu YDIR%u STEPS %lu HZ %lu",
+                   &xd, &xs, &yd, &ys, &hz) != 5) {
+            ec_diag_port_write("ERR MOVE_XY_USAGE "
+                               "MOVE XY XDIR0|XDIR1 STEPS n YDIR0|YDIR1 STEPS m HZ f\r\n");
+        } else if ((xd > 1U) || (yd > 1U) ||
+                   (xs == 0UL) || (xs > (unsigned long)EC_STEP_MAX_STEPS) ||
+                   (ys == 0UL) || (ys > (unsigned long)EC_STEP_MAX_STEPS) ||
+                   (hz < (unsigned long)EC_STEP_MIN_HZ) ||
+                   (hz > (unsigned long)EC_STEP_MAX_HZ)) {
+            ec_diag_port_write("ERR MOVE_XY_RANGE\r\n");
+        } else {
+            unsigned long major = (xs > ys) ? xs : ys;
+            /* steps*hz 最大 16000*10000 = 1.6e8，32 位 unsigned long 足够 */
+            uint32_t fx = (uint32_t)((xs * hz) / major);
+            uint32_t fy = (uint32_t)((ys * hz) / major);
+
+            if (fx < (uint32_t)EC_STEP_MIN_HZ) {
+                fx = (uint32_t)EC_STEP_MIN_HZ;
+            }
+            if (fy < (uint32_t)EC_STEP_MIN_HZ) {
+                fy = (uint32_t)EC_STEP_MIN_HZ;
+            }
+
+            if (barrier_test_busy() || group_test_busy()) {
+                ec_diag_port_write("ERR TEST_BUSY\r\n");
+            } else if (ec_motion_test_start_steps_xy2(
+                           (xd == 0U) ? EC_DIRECTION_0 : EC_DIRECTION_1,
+                           (uint32_t)xs,
+                           (yd == 0U) ? EC_DIRECTION_0 : EC_DIRECTION_1,
+                           (uint32_t)ys,
+                           fx, fy,
+                           ec_board_read_inputs().active_mask)) {
+                char output[96];
+                (void)snprintf(output, sizeof(output),
+                               "OK MOTION XY STARTING fx=%lu fy=%lu\r\n",
+                               (unsigned long)fx, (unsigned long)fy);
+                ec_diag_port_write(output);
+            } else {
+                ec_diag_port_write("ERR MOTION_NOT_ARMED_OR_INHIBITED\r\n");
+            }
+        }
     } else if (parse_move_steps_command(line, &move_axis, &move_direction,
                                         &move_steps, &move_hz)) {
         ec_input_snapshot_t inputs = ec_board_read_inputs();

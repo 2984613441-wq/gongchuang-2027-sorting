@@ -39,6 +39,7 @@ from electrical_control.rpi.turntable import (
     Turntable,
     TurntableError,
     TurntableUncalibrated,
+    make_backend,
 )
 
 logger = logging.getLogger(__name__)
@@ -280,7 +281,10 @@ def build_turn_guard(strategy, *, demo: bool = False) -> TurntableGuard | None:
 
         index_reader: IndexReader | None = FakeIndexReader(_level)
     else:
-        turntable = Turntable(config, PwFileBackend())
+        # 2026-10-17：转盘改为 ST-3215 总线舵机（走 UART2 /dev/ttyAMA1）。
+        # make_backend() 默认返回 SerialServoBackend；旧的 PWM 方案仍可用
+        # 环境变量 TURNTABLE_BACKEND=pw 临时回退。
+        turntable = Turntable(config, make_backend())
         index_reader = PigpioIndexReader(strategy.index_pin) if index_side else None
 
     return TurntableGuard(
@@ -328,7 +332,9 @@ index_pin = 17
 
     def _mk(index_side: str):
         # ⚠️ 内存解析，**不碰文件系统**：不需要临时目录，也不往 CWD 落文件。
-        cfg = configparser.ConfigParser()
+        # 2026-10-23：与 load_strategy_from_config 对齐，剥行内注释
+        # （否则自检里带注释的值会被静默丢弃，测出假失败/假通过）。
+        cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
         cfg.read_string(INI.format(idx=index_side))
         return load_strategy_from_cfg(cfg, "<selftest>")
 

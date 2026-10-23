@@ -1,8 +1,9 @@
-/* 气动夹爪测试代码 - STM32侧
+/* 气动夹爪控制代码 - STM32侧
  * 文件位置：电控/firmware/stm32f407_m144z/App/Src/ec_pneumatic_gripper.c
  *
- * 功能：控制PB11 (TIM2_CH4) 输出50Hz PWM，驱动气动电磁阀
+ * 功能：控制PB11 (TIM2_CH4) 驱动气动电磁阀（开关控制）
  * 日期：2026-10-11
+ * 逻辑来源：朋友的f407测试气泵代码
  */
 
 #include "ec_pneumatic_gripper.h"
@@ -11,83 +12,67 @@
 /* 外部定时器句柄（在main.c或tim.c中定义） */
 extern TIM_HandleTypeDef htim2;
 
-/* PWM频率：50Hz（与舵机共享TIM2） */
-#define PNEUMATIC_PWM_FREQ_HZ  50U
-
-/* 脉宽范围（微秒），待实测调整 */
-#define PNEUMATIC_PULSE_OPEN_US   1000U  /* 张开 */
-#define PNEUMATIC_PULSE_CLOSE_US  2000U  /* 闭合 */
-#define PNEUMATIC_PULSE_NEUTRAL_US 1500U /* 中位（如果支持） */
-
-/* TIM2工作频率（168MHz主频下，PSC=83，计数钟=1MHz）
- * ARR = 20000 - 1 → 周期20ms = 50Hz
- * CCR单位：1us
+/* 气动电磁阀：开关控制（不是舵机）
+ * 占空比 100% = 吸附（电磁阀通电）
+ * 占空比 0%   = 释放（电磁阀断电）
+ *
+ * 我们的TIM2配置：
+ * PSC = 83, ARR = 19999 (20000-1)
+ * 频率 = 84MHz / 84 / 20000 = 50Hz
+ * CCR范围：0~20000
  */
-#define TIM2_COUNTER_FREQ_HZ  1000000U  /* 1MHz计数钟 */
+#define PNEUMATIC_DUTY_OFF   0U      /* 释放：0%占空比 */
+#define PNEUMATIC_DUTY_ON    20000U  /* 吸附：100%占空比 */
 
 /**
  * @brief 初始化气动夹爪（启动PWM通道）
- * @note  TIM2已在main.c中初始化，这里只启动CH4通道
+ * @note  TIM2已在main.c中初始化，这里只启动CH4通道并设为释放状态
  */
 void ec_pneumatic_gripper_init(void)
 {
-    /* 启动TIM2_CH4 PWM输出（PB11引脚） */
+    /* 初始状态：释放（0%占空比） */
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, PNEUMATIC_DUTY_OFF);
+
+    /* 启动PWM输出 */
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
-
-    /* 初始状态：中位或张开 */
-    ec_pneumatic_gripper_set_pulse(PNEUMATIC_PULSE_NEUTRAL_US);
 }
 
 /**
- * @brief 设置气动夹爪脉宽（微秒）
- * @param pulse_us 脉宽，范围1000-2000us（根据实际气动阀调整）
- */
-void ec_pneumatic_gripper_set_pulse(uint16_t pulse_us)
-{
-    /* 限幅保护 */
-    if (pulse_us < 500U) {
-        pulse_us = 500U;
-    }
-    if (pulse_us > 2500U) {
-        pulse_us = 2500U;
-    }
-
-    /* 计算CCR值：pulse_us * (计数钟频率 / 1,000,000)
-     * TIM2计数钟=1MHz，所以CCR=pulse_us
-     */
-    uint32_t compare_value = (uint32_t)pulse_us;
-
-    /* 设置TIM2_CH4比较值 */
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, compare_value);
-}
-
-/**
- * @brief 气动夹爪张开
+ * @brief 气动夹爪张开（释放）
  */
 void ec_pneumatic_gripper_open(void)
 {
-    ec_pneumatic_gripper_set_pulse(PNEUMATIC_PULSE_OPEN_US);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, PNEUMATIC_DUTY_OFF);
 }
 
 /**
- * @brief 气动夹爪闭合
+ * @brief 气动夹爪闭合（吸附）
  */
 void ec_pneumatic_gripper_close(void)
 {
-    ec_pneumatic_gripper_set_pulse(PNEUMATIC_PULSE_CLOSE_US);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, PNEUMATIC_DUTY_ON);
 }
 
 /**
- * @brief 气动夹爪中位（如果支持）
+ * @brief 气动夹爪中位（气动阀不支持，调用open）
  */
 void ec_pneumatic_gripper_neutral(void)
 {
-    ec_pneumatic_gripper_set_pulse(PNEUMATIC_PULSE_NEUTRAL_US);
+    ec_pneumatic_gripper_open();
 }
 
 /**
- * @brief 获取当前脉宽（微秒）
- * @return 当前PWM脉宽
+ * @brief 设置气动夹爪占空比
+ * @param pulse_us 占空比值（0~2000，兼容旧接口）
+ */
+void ec_pneumatic_gripper_set_pulse(uint16_t pulse_us)
+{
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, (uint32_t)pulse_us);
+}
+
+/**
+ * @brief 获取当前占空比值
+ * @return 当前CCR值（0=释放, 2000=吸附）
  */
 uint16_t ec_pneumatic_gripper_get_pulse(void)
 {

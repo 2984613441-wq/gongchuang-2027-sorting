@@ -197,6 +197,177 @@ class PigpioBackend:
             self._pi.stop()
 
 
+class SerialServoBackend:
+    """通过 UART2 驱动 ST-3215 总线舵机（微雪 Bus Servo Adapter A）。
+
+    2026-10-17 实测打通。本后端把上层给的**脉宽**换算成舵机**位置值**再发串行
+    指令，因此 `TurntableConfig` / `Turntable` / `run_chain.py` **全部无需改动**，
+    配置文件里的 `center_us` / `us_per_90deg` 也继续有效。
+
+    标定换算（实测）::
+
+        position = center_pos + (pulse_us - center_us) * counts_per_90 / us_per_90deg
+
+        默认 center_us=1500, us_per_90deg=655, center_pos=2048, counts_per_90=1024
+        ⇒ pulse  845 → 1024 (= A 侧)
+          pulse 1500 → 2048 (= 中位)
+          pulse 2155 → 3072 (= B 侧)
+
+    硬件与协议要点（踩过的坑，改之前务必看）
+    ----------------------------------------
+    * 转换板 UART 口是 **同名直连**：Pi TX→板 TX、Pi RX→板 RX（**不是交叉**！
+      交叉接会完全无响应，0 字节）。
+    * `/boot/config.txt` 需要 `dtoverlay=uart2` 才有 `/dev/ttyAMA1`（GPIO0/1）。
+    * 舵机 ID=1，波特率 **1,000,000**（1 Mbps）。
+    * 帧：``FF FF ID LEN INST PARAM... CS``；``LEN = 参数数 + 2``；
+      ``CS = ~(ID+LEN+INST+PARAM...) & 0xFF``。
+    * 寄存器：目标位置 0x2A、目标时间 0x2C、当前位置 0x38（均 2 字节小端）。
+
+    环境变量：``TURNTABLE_SERIAL_PORT``（默认 /dev/ttyAMA1）
+              ``TURNTABLE_SERIAL_BAUD``（默认 1000000）
+              ``TURNTABLE_SERVO_ID``（默认 1）
+              ``TURNTABLE_MOVE_MS``（默认 1500，移动耗时=限速）
+    """
+
+    ADDR_GOAL_POS = 0x2A
+    ADDR_GOAL_TIME = 0x2C
+    ADDR_PRESENT_POS = 0x38
+
+    INST_PING = 0x01
+    INST_READ = 0x02
+    INST_WRITE = 0x03
+
+    def __init__(
+        self,
+        port: str | None = None,
+        baud: int | None = None,
+        servo_id: int | None = None,
+        *,
+        center_us: int = 1500,
+        us_per_90: int = 655,
+        center_pos: int = 2048,
+        counts_per_90: int = 1024,
+        move_ms: int | None = None,
+    ) -> None:
+        import serial  # 延迟导入：主机上没有 pyserial 也能 import 本模块做离线测试
+
+        self.port = port or os.environ.get("TURNTABLE_SERIAL_PORT", "/dev/ttyAMA1")
+        self.baud = int(baud or os.environ.get("TURNTABLE_SERIAL_BAUD", "1000000"))
+        self.sid = int(servo_id or os.environ.get("TURNTABLE_SERVO_ID", "1"))
+        self.center_us = int(center_us)
+        self.us_per_90 = int(us_per_90)
+        self.center_pos = int(center_pos)
+        self.counts_per_90 = int(counts_per_90)
+        self.move_ms = int(move_ms or os.environ.get("TURNTABLE_MOVE_MS", "1500"))
+        try:
+            self._ser = serial.Serial(self.port, self.baud, timeout=0.12)
+        except Exception as exc:  # noqa: BLE001
+            raise TurntableError(
+                "转盘串口打不开 %s@%d：%s" % (self.port, self.baud, exc)
+            ) from exc
+        # 实测：开串口后约需 0.2s 总线才稳定，否则紧接着的前几次 PING 会失败
+        time.sleep(0.2)
+        try:
+            self._ser.reset_input_buffer()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # -- 协议 ------------------------------------------------------------
+    @staticmethod
+    def _checksum(body):
+        return (~sum(body)) & 0xFF
+
+    def _frame(self, body):
+        return bytes([0xFF, 0xFF] + list(body) + [self._checksum(body)])
+
+    def _read_packet(self):
+        buf = self._ser.read(32)
+        i = buf.find(b"\xff\xff")
+        if i < 0 or len(buf) < i + 4:
+            return None
+        ln = buf[i + 3]
+        need = i + 4 + ln
+        if len(buf) < need:
+            buf += self._ser.read(need - len(buf))
+        if len(buf) < need:
+            return None
+        return {"err": buf[i + 4], "data": buf[i + 5:i + 4 + ln - 1]}
+
+    def _txn(self, body, wait: float = 0.06):
+        self._ser.reset_input_buffer()
+        self._ser.write(self._frame(body))
+        self._ser.flush()
+        time.sleep(wait)
+        return self._read_packet()
+
+    def _write16(self, addr: int, value: int) -> bool:
+        v = int(value) & 0xFFFF
+        r = self._txn([self.sid, 5, self.INST_WRITE, addr, v & 0xFF, v >> 8])
+        return r is not None and r["err"] == 0
+
+    # -- 对外 ------------------------------------------------------------
+    def ping(self) -> bool:
+        r = self._txn([self.sid, 2, self.INST_PING])
+        return r is not None and r["err"] == 0
+
+    def read_pos(self) -> int | None:
+        r = self._txn([self.sid, 4, self.INST_READ, self.ADDR_PRESENT_POS, 2])
+        if r is None or len(r["data"]) < 2:
+            return None
+        return r["data"][0] | (r["data"][1] << 8)
+
+    def pos_for_pulse(self, pulse_us: int) -> int:
+        """脉宽（µs）→ 舵机位置值（0~4095）。"""
+        raw = self.center_pos + (
+            (int(pulse_us) - self.center_us)
+            * self.counts_per_90
+            / float(self.us_per_90)
+        )
+        return int(round(max(0.0, min(4095.0, raw))))
+
+    def set_pulse_us(self, pulse_us: int) -> None:
+        pulse_us = int(pulse_us)
+        if pulse_us == PULSE_RELEASE_US:
+            # 总线舵机会保持最后位置；不做「失力」，避免转盘被外力自由转动
+            logger.debug("SerialServoBackend：忽略释放指令，保持当前位置")
+            return
+        if not (PULSE_MIN_US <= pulse_us <= PULSE_MAX_US):
+            raise TurntableError(
+                "拒绝下发 %dµs：超出 [%d,%d]"
+                % (pulse_us, PULSE_MIN_US, PULSE_MAX_US)
+            )
+        pos = self.pos_for_pulse(pulse_us)
+        if not self._write16(self.ADDR_GOAL_TIME, self.move_ms):
+            raise TurntableError("转盘舵机无响应（写目标时间失败，%s）" % self.port)
+        if not self._write16(self.ADDR_GOAL_POS, pos):
+            raise TurntableError("转盘舵机无响应（写目标位置失败，%s）" % self.port)
+        logger.debug("转盘 %dµs → 位置 %d", pulse_us, pos)
+
+    def close(self) -> None:
+        try:
+            self._ser.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def make_backend(kind: str | None = None) -> PulseBackend:
+    """按环境变量 ``TURNTABLE_BACKEND`` 选择后端。
+
+    ``serial``（默认）→ `SerialServoBackend`（ST-3215 总线舵机，2026-10-17 起）
+    ``pw``            → `PwFileBackend`（旧 PWM 方案，已作废，仅作兼容）
+    ``pigpio``        → `PigpioBackend`（直连 pigpiod）
+    """
+    kind = (kind or os.environ.get("TURNTABLE_BACKEND", "serial")).strip().lower()
+    if kind in ("pw", "pwfile"):
+        logger.warning(
+            "TURNTABLE_BACKEND=pw：使用**已作废**的 PWM 方案，ST-3215 不会转动"
+        )
+        return PwFileBackend()
+    if kind == "pigpio":
+        return PigpioBackend()
+    return SerialServoBackend()
+
+
 # ---------------------------------------------------------------------------
 # 驱动
 # ---------------------------------------------------------------------------

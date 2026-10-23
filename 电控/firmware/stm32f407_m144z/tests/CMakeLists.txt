@@ -5,6 +5,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_executable(ec_firmware_host_tests
     test_main.c test_inputs.c test_step_test.c test_servo_test.c test_group_test.c test_barrier_test.c test_diag.c test_safety_adapter.c test_app.c test_protocol.c
     ../App/Src/ec_inputs.c ../App/Src/ec_step_test.c ../App/Src/ec_servo_test.c ../App/Src/ec_group_test.c ../App/Src/ec_barrier_test.c ../App/Src/ec_diag.c
+    ../App/Src/ec_drop_servo.c
     ../App/Src/ec_demo.c ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c ../App/Src/ec_startup_sequence.c
     ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c ../../../stm32_logic/src/ec_crc32.c ../../../stm32_logic/src/ec_protocol.c ../../../stm32_logic/src/ec_protocol_gateway.c
     host_stubs/hal_stub.c)
@@ -31,6 +32,7 @@ add_executable(ec_progress_source_disabled_tests
     test_safety_adapter.c
     ../App/Src/ec_inputs.c ../App/Src/ec_step_test.c ../App/Src/ec_servo_test.c
     ../App/Src/ec_group_test.c ../App/Src/ec_barrier_test.c ../App/Src/ec_diag.c
+    ../App/Src/ec_drop_servo.c
     ../App/Src/ec_demo.c ../App/Src/ec_safety_adapter.c ../App/Src/ec_app.c
     ../App/Src/ec_startup_sequence.c
     ../../../stm32_logic/src/ec_state_machine.c ../../../stm32_logic/src/ec_dedup.c
@@ -59,9 +61,10 @@ target_include_directories(ec_bus_servo_tests PRIVATE
 add_test(NAME ec_bus_servo_tests COMMAND ec_bus_servo_tests)
 
 add_executable(ec_diag_disabled_tests
-    test_diag_disabled.c ../App/Src/ec_diag.c)
+    test_diag_disabled.c ../App/Src/ec_diag.c ../App/Src/ec_drop_servo.c
+    host_stubs/hal_stub.c)
 target_include_directories(ec_diag_disabled_tests PRIVATE
-    ../App/Inc ../../../stm32_logic/include)
+    ../App/Inc ../../../stm32_logic/include host_stubs)
 target_compile_definitions(ec_diag_disabled_tests PRIVATE
     EC_DIAGNOSTIC_BUILD=1 EC_MOTION_TEST_BUILD=1 EC_SERVO_TEST_BUILD=1
     EC_GROUP_TEST_BUILD=0)

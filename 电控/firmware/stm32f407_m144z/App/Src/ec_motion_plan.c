@@ -106,6 +106,66 @@ static bool within_limits(int16_t x_mm10, int16_t y_mm10,
            (y_mm10 >= y_min) && (y_mm10 <= y_max);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2026-10-23 新增：XY 插补腿（两轴同时起步，取代 append_ordered_xy 的两步序列）
+ *
+ * 与 append_ordered_xy 的区别：
+ *   append_ordered_xy  → 生成 2 个 EC_AXIS_STEP_MOVE（先一个轴走完，再另一个）
+ *   append_xy_interp   → 生成 1 个 EC_AXIS_STEP_XY_INTERP（两轴同时启动、各自计数）
+ *
+ * 收益：① 真·同时动（不再是 X 走完 Y 才走）
+ *       ② 耗时由 t_x + t_y 降为 max(t_x, t_y)
+ *       ③ 步数从 2 步降为 1 步 ⇒ 整个计划从 12 步降到 9 步，容量更宽裕
+ *
+ * ⚠️ 轨迹形状的诚实说明（2026-10-23 读驱动确认）：
+ *   ec_axis_driver.c 的 XY_INTERP 分支会调 interp_axis_hz() 按【步数比】给两轴
+ *   不同频率，看上去像要合成直线；但那条频率最终只作为
+ *   ec_step_port_start_counted_xy() 的 frequency_hz 传入，而
+ *   ec_board_stm32.c:start_axis_counted() 里它**只在曲线规划失败时兜底**，
+ *   规划成功时两轴都用全局 cruise（现 8000Hz）。
+ *   ⇒ **实际效果 = 两轴同时起步、各自按步数走完、短腿先停**（折线，不是几何直线）。
+ *   ⇒ 若要真·直线，需给两轴分别指定 cruise（后续工作，见 T8 报告"未验证"节）。
+ *   ⇒ 但本函数的收益①②③与"一起动"的要求**不受影响**。
+ *
+ * 符号约定：target_x_steps / target_y_steps 是**有符号增量**，
+ *   正值 → EC_AXIS_INTERP_POSITIVE_DIR（当前 = DIR0，与 EC_MOTION_POSITIVE_*_DIR 一致）。
+ *   两处宏必须保持同向，否则插补腿方向会整体翻转。
+ * ──────────────────────────────────────────────────────────────────────────── */
+static bool append_xy_interp(ec_axis_pick_place_t *out, uint8_t *next_step,
+                             int16_t from_x, int16_t from_y,
+                             int16_t to_x, int16_t to_y)
+{
+    ec_axis_step_t *step;
+    int32_t delta_x;
+    int32_t delta_y;
+
+    if (*next_step >= EC_AXIS_PICK_PLACE_STEP_COUNT) {
+        return false;
+    }
+
+    delta_x = (int32_t)to_x - (int32_t)from_x;
+    delta_y = (int32_t)to_y - (int32_t)from_y;
+
+    /* 两轴增量为零 ⇒ 空移动，驱动会拒绝（ec_axis_driver.c 检查 x==0 && y==0）。
+     * 计划里不该出现，直接 fail-closed，避免把非法步交给驱动。 */
+    if ((delta_x == 0) && (delta_y == 0)) {
+        return false;
+    }
+
+    step = &out->step[*next_step];
+    (void)memset(step, 0, sizeof(*step));
+    step->kind = EC_AXIS_STEP_XY_INTERP;
+    step->axis = EC_AXIS_NONE;
+    step->steps = 0U;
+    step->direction = EC_DIRECTION_0;
+    step->servo_pulse_us = 0U;
+    step->target_x_steps = (delta_x * (int32_t)EC_AXIS_STEPS_PER_MM_X) / 10;
+    step->target_y_steps = (delta_y * (int32_t)EC_AXIS_STEPS_PER_MM_Y) / 10;
+
+    *next_step += 1U;
+    return true;
+}
+
 static void set_z_servo(ec_axis_step_t *step, uint16_t pulse_us)
 {
     step->kind = EC_AXIS_STEP_Z_SERVO;
@@ -347,4 +407,128 @@ bool ec_motion_plan_build(ec_axis_pick_place_t *out,
     return ec_motion_plan_build_with_open(out, pick_x_mm10, pick_y_mm10,
                                           place_x_mm10, place_y_mm10,
                                           EC_AXIS_Z_UP_US);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2026-10-23 新增：XY 插补版计划（与 ec_motion_plan_build_with_open 的**唯一区别**
+ * 是把三段 XY 移动从「先一个轴、再另一个轴」改成「两轴同时起步」）
+ *
+ * 逐条对照 ec_motion_plan_build_with_open（12 步 → 9 步）：
+ *
+ *   #  串行版（12 步）                        插补版（9 步）
+ *   -- --------------------------------------  ----------------------------------
+ *   0  舵机 625（起点先张开）                 舵机 625（**相同，不可省**）
+ *   1  PARK→PICK   2 步（先 Y 后 X）          PARK→PICK   1 步 XY_INTERP
+ *   2  舵机 = 类别开度                        舵机 = 类别开度（**相同**）
+ *   3  WAIT(PICK_DWELL_MS)                    WAIT(PICK_DWELL_MS)（**相同**）
+ *   4  舵机 = 闭合                            舵机 = 闭合（**相同**）
+ *   5  PICK→PLACE  2 步（强制先 Y）           PICK→PLACE  1 步 XY_INTERP
+ *   6  舵机 = 类别开度（释放）                舵机 = 类别开度（**相同**）
+ *   7  舵机 625（回程前切回待机）             舵机 625（**相同，不可省**）
+ *   8  PLACE→PARK  2 步                       PLACE→PARK  1 步 XY_INTERP
+ *
+ * 🔴 刻意【不】采用 ec_motion_plan_interp.c 的 6 步版：
+ *    那个版本丢了 [0] 起点先张开、[2] 到点降开度、[3] dwell、[7] 回程前切待机
+ *    这 4 个关键步。缺 [0] 会让上电后可能带着闭合爪走到取料点把物块撞飞
+ *    （2026-09-19 的原始事故原因，见 build_with_open 里的说明）。
+ *
+ * 前面那三组「双域 + HOME + PARK」坐标校验与串行版**完全一致**（照抄，改任何一处
+ * 都会让两个版本对同一输入给出不同结论）。这里调用串行版来做校验是**不可行**的
+ * （它会生成 12 步的串行计划），所以只能复制校验逻辑 —— 两处必须同步改。
+ * ──────────────────────────────────────────────────────────────────────────── */
+bool ec_motion_plan_build_with_open_interp(ec_axis_pick_place_t *out,
+                                           int16_t pick_x_mm10, int16_t pick_y_mm10,
+                                           int16_t place_x_mm10, int16_t place_y_mm10,
+                                           uint16_t open_pulse_us)
+{
+    uint8_t next_step = 0U;
+
+    if (out == NULL) {
+        return false;
+    }
+
+    /* ── 坐标校验：与 ec_motion_plan_build_with_open 逐字一致 ── */
+    if (!within_limits(pick_x_mm10, pick_y_mm10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10) ||
+        !within_limits(place_x_mm10, place_y_mm10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10) ||
+        !within_limits(pick_x_mm10, pick_y_mm10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10) ||
+        !within_limits(place_x_mm10, place_y_mm10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10)) {
+        return false;
+    }
+    if (!within_limits(EC_MOTION_HOME_X_MM10, EC_MOTION_HOME_Y_MM10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10)) {
+        return false;
+    }
+    if (!within_limits(EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10)) {
+        return false;
+    }
+
+    (void)memset(out, 0, sizeof(*out));
+
+    /* [0] 起点先张开（待机 625）—— 不可省，理由同串行版 */
+    if (!append_z_servo(out, &next_step, EC_AXIS_GRIPPER_STANDBY_US)) {
+        return false;
+    }
+
+    /* [1] PARK -> PICK：两轴同时起步 */
+    if (!append_xy_interp(out, &next_step,
+                          EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10,
+                          pick_x_mm10, pick_y_mm10)) {
+        return false;
+    }
+
+    /* [2] 到达取料点后降到该件类别开度（必须在 WAIT 之前）*/
+    if (!append_z_servo(out, &next_step, open_pulse_us)) {
+        return false;
+    }
+
+    /* [3] 到位先停一段让操作员目视确认，[4] 再闭合夹住 */
+    if (!append_wait(out, &next_step, (uint16_t)EC_AXIS_PICK_DWELL_MS) ||
+        !append_z_servo(out, &next_step, EC_AXIS_Z_DOWN_US)) {
+        return false;
+    }
+
+    /* [5] PICK -> PLACE：两轴同时起步 */
+    if (!append_xy_interp(out, &next_step,
+                          pick_x_mm10, pick_y_mm10,
+                          place_x_mm10, place_y_mm10)) {
+        return false;
+    }
+
+    /* [6] 落料：张开释放 */
+    if (!append_z_servo(out, &next_step, open_pulse_us)) {
+        return false;
+    }
+
+    /* [7] 回程前切回待机 625（否则回程爪片会刮走托盘上其他物块）*/
+    if (!append_z_servo(out, &next_step, EC_AXIS_GRIPPER_STANDBY_US)) {
+        return false;
+    }
+
+    /* [8] PLACE -> PARK：两轴同时起步 */
+    return append_xy_interp(out, &next_step,
+                            place_x_mm10, place_y_mm10,
+                            EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10);
 }

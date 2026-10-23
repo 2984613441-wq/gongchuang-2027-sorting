@@ -485,6 +485,21 @@
               <FileType>1</FileType>
               <FilePath>../App/Src/ec_pneumatic_gripper.c</FilePath>
             </File>
+            <File>
+              <FileName>ec_tof.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Src/ec_tof.c</FilePath>
+            </File>
+            <File>
+              <FileName>ec_light_ws2812.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Src/ec_light_ws2812.c</FilePath>
+            </File>
+            <File>
+              <FileName>ec_drop_servo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Src/ec_drop_servo.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

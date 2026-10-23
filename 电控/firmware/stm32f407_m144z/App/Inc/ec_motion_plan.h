@@ -31,18 +31,35 @@
  *   delta_mm10 >= 0 -> EC_MOTION_POSITIVE_*_DIR
  *   delta_mm10 <  0 -> the opposite direction.
  *
- * ✅ 2026-09-18 实机标定（用户最终裁定，以此为准）：
- *      X：正方向 = DIR0  → EC_DIRECTION_0
- *      Y：正方向 = DIR1  → EC_DIRECTION_1   ← **Y 要反一下才是正方向**
- *    标定方式：树莓派经 USART2 发 `MOVE X|Y DIR0|DIR1 STEPS 1600 HZ 1000`
- *    （1600 步 = 20mm = 半圈；1 圈 = 40mm = 3200 步），由用户目视判定。
- *    ⚠️ 标定过程中此宏曾反复改动（0→1→0→1），**最终以本节为准**。
+ * 🔴 2026-10-18 用户现场裁定（**以本节为准，覆盖下面 09-18 那条**）：
+ *      X：正方向 = DIR0  → EC_DIRECTION_0   （不变）
+ *      Y：正方向 = DIR0  → EC_DIRECTION_0   （**从 DIR1 改为 DIR0**）
+ *
+ *    改的依据（2026-10-18 实机复测）：
+ *      机械臂停在最内侧角落（= 坐标最负处 = 原点），
+ *      发 `MOVE Y DIR1` → 继续往内壁顶 → **堵转**；
+ *      发 `MOVE Y DIR0` → 正确离开内壁朝 +Y 走。
+ *      ⇒ DIR0 才是 +Y，09-18 那次记反了。
+ *
+ *    后果与影响：
+ *      · ec_motion_plan.c 里所有 Y 腿的 DIRECTION 由本宏推导，
+ *        改宏后 Y 方向整体翻转，运动规划与实际一致。
+ *      · tests/test_motion_plan.c 用的是
+ *        `(ec_direction_t)(1U - EC_MOTION_POSITIVE_Y_DIR)` 这类符号式断言，
+ *        **会自动跟着翻转，无需逐条改断言**。
+ *      · 本改动属「运动方向/IO 级别」变更 ⇒ 需重新烧录固件后才生效。
+ *
+ * 沿革（保留以免后人重走）：
+ *    2026-09-18 曾裁定 "Y：正方向 = DIR1"，标定方式是
+ *      发 `MOVE X|Y DIR0|DIR1 STEPS 1600 HZ 1000`（1600 步 = 20mm）
+ *      由用户目视判定；当时此宏曾反复改动（0→1→0→1）。
+ *      2026-10-18 现场复测证明那次的最终结论是反的。
  *
  * ⚠️ 若日后电机线被对调，要跟着翻修正方向的那一个轴。
  *    规律：换【某一相】的两根线 → 该轴方向反转；两相都换 → 方向不变。
  */
 #define EC_MOTION_POSITIVE_X_DIR EC_DIRECTION_0
-#define EC_MOTION_POSITIVE_Y_DIR EC_DIRECTION_1
+#define EC_MOTION_POSITIVE_Y_DIR EC_DIRECTION_0
 
 /* —— 坐标域的两个边界（2026-09-15 用户裁决后必须区分）———————
  *
@@ -324,6 +341,37 @@ bool ec_motion_plan_build(ec_axis_pick_place_t *out,
                           int16_t pick_x_mm10, int16_t pick_y_mm10,
                           int16_t place_x_mm10, int16_t place_y_mm10);
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2026-10-23 新增：XY 插补版（**实现在 ec_motion_plan.c 内，因此必然参与构建**）
+ *
+ * 与 ec_motion_plan_build_with_open() 的唯一区别：
+ *   三段 XY 移动从「先一个轴、再另一个轴」（每段 2 步）改成
+ *   「两轴同时起步」（每段 1 步 EC_AXIS_STEP_XY_INTERP）。
+ *   其余 7 个舵机/等待步**一字不动**，顺序也完全相同。
+ *
+ * 步数：12 → 9（容量 EC_AXIS_PICK_PLACE_STEP_COUNT=12，更宽裕）。
+ *
+ * 收益：真·同时动（不再是 X 走完 Y 才走）+ 耗时由 t_x+t_y 降为 max(t_x,t_y)。
+ *
+ * ⚠️ 轨迹形状的诚实说明：驱动层的 interp_axis_hz() 虽然按步数比算了不同的
+ *    frequency_hz，但板级 start_axis_counted() 里该值只在曲线规划失败时兜底，
+ *    规划成功时两轴都用全局 cruise（现 8000Hz）。
+ *    ⇒ **实际是「同时起步、各自按步数走完、短腿先停」的折线，不是几何直线。**
+ *    ⇒ 要真·直线需给两轴分别指定 cruise（后续工作）。但"一起动"的要求已满足。
+ *
+ * 🔴 与 ec_motion_plan_interp.c 的关系：那个文件是 6 步简化版，**丢了 4 个关键步**
+ *    （起点先张开 / 到点降类别开度 / dwell / 回程前切待机），**不要用它**。
+ *    本函数才是可用的插补版。ec_motion_plan_interp.c 保持不参与构建。
+ *
+ * ⚠️ 坐标校验（双域 + HOME + PARK）与串行版逐字一致；改一处必须两处同改。
+ * ⚠️ 目前**生产路径仍在用串行版**（ec_axis_driver 调用 ec_motion_plan_build_with_open）。
+ *    本函数是待接入的候选实现，接入前应先跑主机回归对比。
+ * ──────────────────────────────────────────────────────────────────────────── */
+bool ec_motion_plan_build_with_open_interp(ec_axis_pick_place_t *out,
+                                           int16_t pick_x_mm10, int16_t pick_y_mm10,
+                                           int16_t place_x_mm10, int16_t place_y_mm10,
+                                           uint16_t open_pulse_us);
+
 /* Interpolated variant (ec_motion_plan_interp.c): same pick-place sequence,
  * but the waypoint moves are EC_AXIS_STEP_XY_INTERP steps with signed
  * target_x_steps/target_y_steps instead of counted MOVE_XY steps.
@@ -335,7 +383,9 @@ bool ec_motion_plan_build(ec_axis_pick_place_t *out,
  *   没有收 `App/Src/ec_motion_plan_interp.c`（只收了 `ec_motion_plan.c`），7 个主机
  *   测试目标也都不编它 ⇒ **板子上跑的不是这条路线，改动它不会被任何测试跑到**。
  *   只有显式切到 XY 插补时才生效（`docs/XY插补-快速启动.md:84`）。要改它，请同时改
- *   `ec_motion_plan.c`（串行版是唯一在跑的那份），并单独 gcc -c 验证语法。 */
+ *   `ec_motion_plan.c`（串行版是唯一在跑的那份），并单独 gcc -c 验证语法。
+ * ⚠️ 2026-10-23：本函数是**6 步简化版，丢了 4 个关键步，不要用**。
+ *   请改用上面的 ec_motion_plan_build_with_open_interp()。 */
 bool ec_motion_plan_build_interp(ec_axis_pick_place_t *out,
                                  int16_t pick_x_mm10, int16_t pick_y_mm10,
                                  int16_t place_x_mm10, int16_t place_y_mm10);

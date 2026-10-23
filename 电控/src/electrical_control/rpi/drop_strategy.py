@@ -219,11 +219,81 @@ def _read_drop_points(
     return drop_points
 
 
+# ============================================================================
+# 可达域校验（2026-10-22 T3 新增）
+# ============================================================================
+# 数值来源：电控/firmware/stm32f407_m144z/App/Inc/ec_motion_plan.h
+#   EC_MOTION_HOME_X_MM10       = -950   原点 X（最负角，上电手工推到这里）
+#   EC_MOTION_HOME_Y_MM10       = -975   原点 Y
+#   EC_MOTION_REACH_FAR_X_MM10  = +900   正端（相对 ±950 极限留 5mm 余量）
+#   EC_MOTION_REACH_FAR_Y_MM10  = +925   正端（相对 ±975 极限留 5mm 余量）
+#
+# 🔴 为什么必须校验：
+#    X/Y **没有限位开关**，超出可达域会持续堵转 → 电流拉满、发热
+#    → 把主控带挂（历史实测已发生 3 次，见 sorting_config.ini [DropPoints] 注释）。
+#    固件侧自己没法发现越界（它只会闷头走完），所以必须在**启动期**拦住。
+#
+# ⚠️ 坐标系：滑台记账坐标（与固件同口径），单位 0.1mm。
+#    原点 = 装置最负角 = HOME，所以范围是 [-950, +900] 而不是 [0, +1850]。
+REACH_X_MIN_MM10 = -950
+REACH_X_MAX_MM10 = 900
+REACH_Y_MIN_MM10 = -975
+REACH_Y_MAX_MM10 = 925
+
+
+def _check_within_reach(strategy: DropStrategy, config_path: str | Path) -> None:
+    """启动期校验：所有落料点必须落在可达域内。
+
+    fail-closed：任一货格越界 → SystemExit（**拒绝启动**，绝不带着越界配置跑）。
+
+    只由 `load_strategy_from_config`（读真实文件）调用；
+    `load_strategy_from_cfg`（自检/单测用）**不受影响** —— 那些自检用的是
+    任意构造的坐标，不代表物理可达域。
+    """
+    violations: list[str] = []
+    for box_id in range(1, 7):
+        point = strategy.get_drop_point(box_id)
+        if point is None:
+            continue  # 未知货格（fail-closed 由各 strategy 自行处理）
+        x_mm10, y_mm10 = point
+        if not (REACH_X_MIN_MM10 <= x_mm10 <= REACH_X_MAX_MM10) or not (
+            REACH_Y_MIN_MM10 <= y_mm10 <= REACH_Y_MAX_MM10
+        ):
+            violations.append(
+                "货格 %d 落点 (%.1f, %.1f)mm 超可达域 "
+                "X[%.1f, %.1f] Y[%.1f, %.1f]"
+                % (
+                    box_id, x_mm10 / 10.0, y_mm10 / 10.0,
+                    REACH_X_MIN_MM10 / 10.0, REACH_X_MAX_MM10 / 10.0,
+                    REACH_Y_MIN_MM10 / 10.0, REACH_Y_MAX_MM10 / 10.0,
+                )
+            )
+    if violations:
+        raise SystemExit(
+            "落料点越界（X/Y 无限位开关，超程会堵转并把主控带挂，实测已发生 3 次）：\n"
+            "  配置：%s\n  %s" % (config_path, "\n  ".join(violations))
+        )
+
+
 def load_strategy_from_config(config_path: str | Path) -> DropStrategy:
-    """从 sorting_config.ini **文件**加载落料策略（A/B/C 自动识别）。"""
-    cfg = configparser.ConfigParser()
+    """从 sorting_config.ini **文件**加载落料策略（A/B/C 自动识别）。
+
+    与 `load_strategy_from_cfg` 的唯一区别：
+    **本函数额外做可达域校验**（`_check_within_reach`），因为只有它代表"要真跑"。
+    """
+    # 🔴 2026-10-23：必须剥行内注释。configparser 默认**不**剥，于是
+    #      `1 = -112.5   # 脉宽 681µs`
+    #    解出来的 value 是 `-112.5   # 脉宽 681µs`，float() 抛 ValueError 后被
+    #    load_strategy_from_cfg 里的 `except ValueError: continue` **静默跳过**，
+    #    最后报 "方案B 转盘角度表不完整：缺货格 [1,2,3,4,5,6]"
+    #    —— 真正原因（行内注释）在错误信息里完全看不出来。2026-10-23 实际踩过。
+    # ⚠️ 与 pixel_to_device.py:210 保持同一行为（那里早就加了，本处遗漏）。
+    # ⚠️ 已核对：现行 sorting_config.ini 的所有值里都没有 `#`，加此参数安全。
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
     cfg.read(config_path, encoding="utf-8")
-    return load_strategy_from_cfg(cfg, config_path)
+    strategy = load_strategy_from_cfg(cfg, config_path)
+    _check_within_reach(strategy, config_path)
+    return strategy
 
 
 def load_strategy_from_cfg(
@@ -394,7 +464,9 @@ if __name__ == "__main__":
     from io import StringIO
 
     def _selftest_load(text: str) -> DropStrategy:
-        _cfg = configparser.ConfigParser()
+        # 2026-10-23：自检必须用与 load_strategy_from_config 同一种解析器，
+        # 否则测的行为和真实路径不一致（行内注释在那边会被剥、在这边不会）。
+        _cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
         _cfg.read_string(text)
         return load_strategy_from_cfg(_cfg, "<selftest>")
 
@@ -434,6 +506,59 @@ turntable_drop_point = 0, 0
     assert strategy_b.requires_turntable_control()
     assert not strategy_b.uses_drop_points()
     print("✅ TurntableStrategy 自检通过")
+
+    # 自检 2b（2026-10-23）：**行内注释必须被正确剥掉**。
+    #
+    # 历史：configparser 默认不剥行内注释，于是
+    #     1 = -112.5   # 脉宽 681µs
+    # 解出来的 value 是 "-112.5   # 脉宽 681µs"，float() 抛 ValueError，
+    # 被 load_strategy_from_cfg 的 `except ValueError: continue` **静默跳过**，
+    # 最终报 "方案B 转盘角度表不完整：缺货格 [1,2,3,4,5,6]"
+    # —— 真因（行内注释）在错误信息里完全看不出来。2026-10-23 实际踩过。
+    #
+    # 修法：所有 ConfigParser 统一加 inline_comment_prefixes=("#",)
+    #       （与 pixel_to_device.py:210 早就在用的行为对齐）。
+    #
+    # 本断言固定修好后的行为：**带行内注释的角度表必须能正常解析**，
+    # 且值等于注释前面的那个数。若有人把这个参数去掉，这条会立刻红 ——
+    # 这正是我们要的警报，因为去掉它会让配置里的注释变成隐形地雷。
+    cfg_b_inline_comment = StringIO("""[TurntableAngles]
+turntable_drop_point = 90.0, 88.5   # 固定落料点（装置坐标 mm）
+1 = -112.5   # 脉宽 681µs
+2 = -67.5    # 脉宽 1009µs
+3 = -22.5    # 脉宽 1336µs
+4 = 22.5     # 脉宽 1664µs
+5 = 67.5     # 脉宽 1991µs
+6 = 112.5    # 脉宽 2319µs
+""")
+    strategy_b_inline = _selftest_load(cfg_b_inline_comment.getvalue())
+    assert isinstance(strategy_b_inline, TurntableStrategy)
+    assert strategy_b_inline.get_angle(1) == -112.5, "行内注释把值带进 float() 了"
+    assert strategy_b_inline.get_angle(6) == 112.5
+    assert strategy_b_inline.get_drop_point(1) == (900, 885), "落料点的行内注释未被剥掉"
+    for _b in range(1, 7):
+        assert strategy_b_inline.get_angle(_b) is not None, "有格子被静默跳过"
+    print("✅ 行内注释正确剥除自检通过（2026-10-23 修复后行为）")
+
+    # 反向对照：注释单独占行也必须照常工作（两种写法都支持）。
+    cfg_b_own_line_comment = StringIO("""[TurntableAngles]
+turntable_drop_point = 0, 0
+# 这是单独占行的注释，不影响解析
+1 = -112.5
+2 = -67.5
+3 = -22.5
+4 = 22.5
+5 = 67.5
+6 = 112.5
+""")
+    strategy_b2 = _selftest_load(cfg_b_own_line_comment.getvalue())
+    assert isinstance(strategy_b2, TurntableStrategy)
+    assert strategy_b2.get_angle(1) == -112.5
+    assert strategy_b2.get_angle(6) == 112.5
+    for _b in range(1, 7):
+        assert strategy_b2.get_angle(_b) is not None
+    print("✅ 独立注释行自检通过（注释占行也照常工作）")
+
 
     # 自检 3：fail-closed（缺货格）
     cfg_bad = "[DropPoints]\n1 = 0, 0\n"   # 只有 1 号，缺 2-6
