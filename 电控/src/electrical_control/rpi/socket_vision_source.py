@@ -113,6 +113,9 @@ class SocketVisionSource:
         # 为什么需要：排序器只在**同一帧内**比较，而链在视觉线程起来后 ~167ms 就派了第一件
         # （现场 18:55:35,405 → :572），那一帧件不全 ⇒ "Y 最大那件"被排到第三发。
         # 排序键没错，是**输入不全**。
+        # 2026-11-01：排序锚点提供器（返回 0.1mm 记账坐标）。
+        # 传它以后，TSP 与策略排序都用『上一次落料点』而不是固定 (0,0)。
+        current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
         first_dispatch_settle_frames: int = 0,
         # 稳定门的**等待上限（秒）**。必须有：无上限时"操作员还在摆件"会让链在起轮处
         # 无限等，而 15s 失活窗/显示红线是从起轮算起的 ⇒ 那比顺序错严重得多。
@@ -159,6 +162,7 @@ class SocketVisionSource:
         # ponytail: 固定锚点；若实机每件后回零，用上一次落点当锚点更准。
         self._current_position = current_position
         self._payload_orderer = payload_orderer
+        self._current_position_provider = current_position_provider
         self._permitted = False
         self._lock = threading.Lock()
         self._latest: BatchTargets | None = None
@@ -451,10 +455,19 @@ class SocketVisionSource:
             # 否则每帧刷一条告警把真问题淹掉。
             _LOGGER.debug("抓取点缺失（像素→mm 未注入）：跳过 TSP 排序，按原顺序取件")
             return payloads
+        # 2026-11-01（审核 D1）：锚点优先取『上一次落料点』，取不到才用构造时固定锚点。
+        anchor = self._current_position
+        if self._current_position_provider is not None:
+            try:
+                provided = self._current_position_provider()
+                if provided is not None:
+                    anchor = provided
+            except Exception:
+                _LOGGER.warning('取『上一次落料点』作排序锚点失败：沿用固定锚点', exc_info=True)
         try:
             ordered = greedy_tsp(
                 list(payloads),
-                self._current_position,
+                anchor,
                 position=lambda p: (p.pick_x_position, p.pick_y_position),
             )
         except Exception:

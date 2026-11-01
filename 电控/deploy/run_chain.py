@@ -522,6 +522,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
     )
     parser.add_argument(
+        "--order-mode",
+        choices=("legacy", "group", "difficulty", "open_edge", "five_key"),
+        default=_env("ORDER_MODE", "group"),
+        help="夹取策略排序口径（仅 --pick-strategy=order 生效）。"
+             "group=分组→待定→难度→行扫描（现状默认）；"
+             "difficulty=只按难度分层；open_edge=离无壁边最近；"
+             "five_key=停稳→待定→难度→隔离度→落点距离（2026-11-01 新增）；"
+             "legacy=不排序（原顺序）。",
+    )
+    parser.add_argument(
+        "--settle-frames", type=int, default=_env_int("SETTLE_FRAMES", 3),
+        help="five_key 模式：连续多少帧位置不变才算『停稳』（默认 3）",
+    )
+    parser.add_argument(
+        "--settle-shift-mm", type=float, default=float(_env_int("SETTLE_SHIFT_MM", 4)),
+        help="five_key 模式：停稳判据的中心位移阈值 mm（默认 4）",
+    )
+    parser.add_argument(
         "--first-dispatch-settle",
         type=int,
         default=_env_int("FIRST_DISPATCH_SETTLE", 3),
@@ -864,6 +882,7 @@ def build_socket_source(
     fixed_pick_point: tuple[int, int] | None = None,
     # 夹取策略（--pick-strategy=order）注入的「选哪一件」排序器；默认 None ⇒ 行为不变。
     payload_orderer: Callable[[tuple[object, ...]], tuple[object, ...]] | None = None,
+    current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
     # 首件稳定门（见 SocketVisionSource 的注释）。两个默认值 = **关闭**，
     # 由 run_chain 的 --first-dispatch-settle 传下来（默认 3 帧）。
     first_dispatch_settle_frames: int = 0,
@@ -941,6 +960,7 @@ def build_socket_source(
         drop_point_for_box=drop_point_for_box,
         grasp_point_for_target=grasp_point_for_target,
         payload_orderer=payload_orderer,
+        current_position_provider=current_position_provider,
         first_dispatch_settle_frames=first_dispatch_settle_frames,
         first_dispatch_max_wait_s=first_dispatch_max_wait_s,
     )
@@ -1366,12 +1386,46 @@ def run(args: argparse.Namespace) -> int:
     else:
         # 夹取策略（默认 off）：只在启用时构造排序器；构造失败自动退回 off（fail-safe）。
         payload_orderer = None
+        # 2026-11-01（审核 D1）：「上一次落料点」—— 排序锚点与 five_key 落点键共用。
+        last_drop_state: dict[str, object] = {"pt_mm": None}
+
+        def _drop_point_memo(box_id: int):
+            pt = strategy.get_drop_point(box_id)
+            if pt is not None:
+                # strategy.get_drop_point 返回 0.1mm 记账坐标 ⇒ 换算成物料装置坐标 mm
+                last_drop_state["pt_mm"] = (pt[0] / 10.0, pt[1] / 10.0)
+            return pt
+
+        def _current_position_mm10():
+            pt = last_drop_state["pt_mm"]
+            if pt is None:
+                return None
+            return (int(round(pt[0] * 10.0)), int(round(pt[1] * 10.0)))
+
+        def _last_drop_point():
+            from electrical_control.pick_strategy.geometry import Point as _Pt
+            pt = last_drop_state["pt_mm"]
+            return None if pt is None else _Pt(pt[0], pt[1])
+
         if args.pick_strategy == "order":
             from electrical_control.pick_strategy.chain_adapter import (
                 payload_orderer_from_ini,
             )
+            from electrical_control.pick_strategy.orderer import SettleTracker
 
-            payload_orderer = payload_orderer_from_ini(args.pick_strategy_config)
+            settle_tracker = None
+            if args.order_mode == "five_key":
+                settle_tracker = SettleTracker(
+                    settle_frames=max(1, int(args.settle_frames)),
+                    settle_shift_mm=float(args.settle_shift_mm),
+                )
+
+            payload_orderer = payload_orderer_from_ini(
+                args.pick_strategy_config,
+                order_mode=args.order_mode,
+                settle=settle_tracker,
+                last_drop_provider=_last_drop_point,
+            )
             if payload_orderer is None:
                 logger.warning(
                     "夹取策略：--pick-strategy=order 但排序器构造失败 ⇒ 本次退回默认排序"
@@ -1384,10 +1438,11 @@ def run(args: argparse.Namespace) -> int:
         source = build_socket_source(
             round_id=round_id,
             round_task_id=round_task_id,
-            drop_point_for_box=strategy.get_drop_point,
+            drop_point_for_box=_drop_point_memo,
             calibration_config=args.calibration_config,
             fixed_pick_point=fixed_pick_point,
             payload_orderer=payload_orderer,
+            current_position_provider=_current_position_mm10,
             first_dispatch_settle_frames=args.first_dispatch_settle,
             first_dispatch_max_wait_s=args.first_dispatch_max_wait,
         )

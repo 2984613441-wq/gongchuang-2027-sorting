@@ -432,3 +432,45 @@ def test_age_guard_can_be_disabled():
     src.ingest(_batch([1]))
     src._latest_at -= 999.0
     assert src.next_if_permitted() is not None, "关闭后不判年龄"
+
+# ---------------------------------------------------------------------------
+# 2026-11-01 新增（审核报告 D1）：排序锚点改为「上一次落料点」提供器
+# ---------------------------------------------------------------------------
+def _source_with_provider(provider, *, grasp_by_seq, current_position=(0, 0)):
+    return SocketVisionSource(
+        round_id="round-1",
+        task_id=1,
+        image_id_for_class=lambda class_id: class_id,
+        drop_point_for_box=lambda box_id: (100, 200),
+        grasp_point_for_target=lambda target: grasp_by_seq[target.target_seq],
+        current_position=current_position,
+        current_position_provider=provider,
+    )
+
+
+def test_anchor_provider_overrides_fixed_anchor():
+    """provider 返回『上一次落料点』时，排序锚点以它为准（不是固定的 (0,0)）。"""
+    src = _source_with_provider(
+        lambda: (-800, 0), grasp_by_seq={1: (-900, 0), 2: (100, 0)}
+    )
+    ctx = src._expand(_two_target_frame())
+    assert ctx[0].payload.target_seq == 1, "锚点在 (-800,0) ⇒ t1 更近"
+
+
+def test_anchor_provider_none_keeps_fixed_anchor():
+    """provider 返回 None（还没有落料点）⇒ 沿用构造时的固定锚点。"""
+    src = _source_with_provider(
+        lambda: None, grasp_by_seq={1: (-900, 0), 2: (100, 0)}
+    )
+    ctx = src._expand(_two_target_frame())
+    assert ctx[0].payload.target_seq == 2
+
+
+def test_anchor_provider_exception_degrades_to_fixed_anchor():
+    """provider 抛错不能崩：退回固定锚点（本帧照发，不丢件）。"""
+    def boom():
+        raise RuntimeError("boom")
+
+    src = _source_with_provider(boom, grasp_by_seq={1: (-900, 0), 2: (100, 0)})
+    ctx = src._expand(_two_target_frame())
+    assert ctx[0].payload.target_seq == 2

@@ -61,12 +61,20 @@ from electrical_control.pick_strategy.selector import (
     is_pending,
     order_by_difficulty_scan,
     order_by_group_scan,
+    order_by_open_edge,
     order_by_row_scan,
+)
+
+from electrical_control.pick_strategy.orderer import (
+    ORDER_MODES,
+    SettleTracker,
+    order_by_five_key,
 )
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["PayloadOrderer", "make_payload_orderer", "payload_orderer_from_ini"]
+__all__ = ["PayloadOrderer", "make_payload_orderer", "payload_orderer_from_ini",
+           "ORDER_MODES"]
 
 PayloadOrderer = Callable[[Sequence[object]], tuple]
 
@@ -81,9 +89,28 @@ def _device_coords(payload: object, tool_offset: Point) -> tuple[float, float] |
 
 
 def make_payload_orderer(
-    config: StrategyConfig, *, frame_id_base: int = 0
+    config: StrategyConfig,
+    *,
+    frame_id_base: int = 0,
+    order_mode: str = "group",
+    settle: "SettleTracker | None" = None,
+    last_drop_provider=None,
 ) -> PayloadOrderer:
-    """由一份 `StrategyConfig` 造出一个 payload 排序器（α 模式）。"""
+    """由一份 `StrategyConfig` 造出一个 payload 排序器（α 模式）。
+
+    2026-11-01 新增 `order_mode` 灰度开关（见 docs/reports/审核-夹取策略-20261101.md）：
+
+    * ``legacy``     不排序（原顺序）
+    * ``group``      分组→待定→难度→行扫描（**默认**，= 接入前的现状口径）
+    * ``difficulty`` 待定→难度→行扫描
+    * ``open_edge``  离托盘无壁边最近
+    * ``five_key``   停稳→待定→难度→隔离度→落点距离→seq（本次新增）
+
+    ``last_drop_provider``：返回「上一次落料点」``Point``(mm) 的函数；
+    为 None 或返回 None 时按「锚点未知」处理（落点距离键记 0，不惩罚）。
+    """
+    if order_mode not in ORDER_MODES:
+        raise ValueError("order_mode=%r 非法，只能是 %s" % (order_mode, ORDER_MODES))
 
     if config.selection_mode:
         logger.info("夹取策略选择模式=%s；%s",
@@ -163,7 +190,26 @@ def make_payload_orderer(
         #   ⚠️ 前提：class_id 必须是**打包码 code = shape_idx*5 + color_idx + 1**（1..30），
         #   这样按 class_id 分组 == 按 (颜色,形状) 分组，与货格绑定口径一致。
         #   一键回退：换回 order_by_difficulty_scan（只分层不分类）。
-        ordered_dets = order_by_group_scan(frame, config)   # 只按规则排序，不拒识
+        if settle is not None:
+            settle.observe(frame)          # 每帧喂一次，供停稳判据使用
+
+        if order_mode == "legacy":
+            ordered_dets = tuple(dets)
+        elif order_mode == "difficulty":
+            ordered_dets = order_by_difficulty_scan(frame, config)
+        elif order_mode == "open_edge":
+            ordered_dets = order_by_open_edge(frame, config)
+        elif order_mode == "five_key":
+            last_drop = None
+            if last_drop_provider is not None:
+                try:
+                    last_drop = last_drop_provider()
+                except Exception:
+                    logger.warning("取上一次落料点失败：五键排序按锚点未知处理", exc_info=True)
+            ordered_dets = order_by_five_key(
+                frame, config, settle=settle, last_drop=last_drop)
+        else:   # group（默认 = 现状口径）
+            ordered_dets = order_by_group_scan(frame, config)   # 只按规则排序，不拒识
         logger.info(
             "排序分层: %s",
             " → ".join(
@@ -198,7 +244,12 @@ def make_payload_orderer(
 
 
 def payload_orderer_from_ini(
-    ini_path: str | Path, *, frame_id_base: int = 0
+    ini_path: str | Path,
+    *,
+    frame_id_base: int = 0,
+    order_mode: str = "group",
+    settle: "SettleTracker | None" = None,
+    last_drop_provider=None,
 ) -> PayloadOrderer | None:
     """从 `pick_strategy.ini` 造排序器。**任何失败都返回 None**（调用方保持默认行为）。"""
     path = Path(ini_path)
@@ -211,7 +262,10 @@ def payload_orderer_from_ini(
         logger.warning("夹取策略：配置解析失败 %s ⇒ 不启用（保持原顺序）", path, exc_info=True)
         return None
     try:
-        return make_payload_orderer(cfg, frame_id_base=frame_id_base)
+        return make_payload_orderer(
+            cfg, frame_id_base=frame_id_base, order_mode=order_mode,
+            settle=settle, last_drop_provider=last_drop_provider,
+        )
     except Exception:
         logger.warning("夹取策略：排序器构造失败 ⇒ 不启用（保持原顺序）", exc_info=True)
         return None
