@@ -476,3 +476,62 @@ def test_anchor_provider_exception_degrades_to_fixed_anchor():
     src = _source_with_provider(boom, grasp_by_seq={1: (-900, 0), 2: (100, 0)})
     ctx = src._expand(_two_target_frame())
     assert ctx[0].payload.target_seq == 2
+
+# ---------------------------------------------------------------------------
+# 2026-11-01 新增（动态分配）：code 模式下由 resolver 把 code → box_id
+# ---------------------------------------------------------------------------
+def _source_with_resolver(resolver, *, grasp_by_seq=None, drop=None):
+    if grasp_by_seq is None:
+        grasp_by_seq = {1: (-30, 40), 2: (-30, 40)}
+    if drop is None:
+        drop = lambda box_id: (100, 200)
+    return SocketVisionSource(
+        round_id="round-1",
+        task_id=1,
+        image_id_for_class=lambda class_id: class_id,
+        drop_point_for_box=drop,
+        grasp_point_for_target=lambda target: grasp_by_seq[target.target_seq],
+        box_id_resolver=resolver,
+    )
+
+
+def _code_frame(codes):
+    """code 模式帧：VisionTarget 直接带 class_id=code、box_id=None。"""
+    targets = tuple(
+        VisionTarget(i + 1, code, pixel_x=0, pixel_y=0, box_id=None)
+        for i, code in enumerate(codes)
+    )
+    return BatchTargets(task_id=1, targets=targets)
+
+
+def test_resolver_supplies_box_id_for_code_mode():
+    """code 无 box_id 时，resolver 补上 ⇒ 该件能派发（不再被拒识）。"""
+    src = _source_with_resolver(lambda code: {11: 3}.get(code))
+    ctx = src._expand(_code_frame([11]))
+    assert len(ctx) == 1
+    assert ctx[0].payload.class_id == 11     # class_id 仍是 code
+    assert ctx[0].payload.x_position == 100  # 落点来自 box_id=3 的查表结果
+
+
+def test_resolver_none_still_rejects_the_item():
+    src = _source_with_resolver(lambda code: None)
+    assert src._expand(_code_frame([11])) == []
+
+
+def test_resolver_exception_does_not_crash():
+    def boom(code):
+        raise RuntimeError("boom")
+
+    src = _source_with_resolver(boom)
+    assert src._expand(_code_frame([11])) == []
+
+
+def test_resolver_does_not_override_visual_box_id():
+    """box_id 已有真值（box_id 模式）时，resolver 不得改写它。"""
+    src = _source_with_resolver(lambda code: 6)
+    frame = BatchTargets(task_id=1, targets=(
+        VisionTarget(1, 3, pixel_x=0, pixel_y=0, box_id=2),
+    ))
+    ctx = src._expand(frame)
+    assert len(ctx) == 1
+    assert ctx[0].payload.class_id == 3      # class_id 不受影响

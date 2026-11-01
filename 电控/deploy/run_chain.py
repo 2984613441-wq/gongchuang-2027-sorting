@@ -522,6 +522,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
     )
     parser.add_argument(
+        "--slot-mode", choices=("static", "dynamic"), default=_env("SLOT_MODE", "static"),
+        help="货格分配：static=用 [BoxMap] 静态表（默认，行为不变）；"
+             "dynamic=运行时按 code 分配货格（同 code 复用同格、同侧优先少换挡）",
+    )
+    parser.add_argument(
+        "--slot-journal", default=_env("SLOT_JOURNAL", "/home/pi/slot_alloc.json"),
+        help="dynamic 模式的分配台账路径（按 round_id 持久化，重启不丢）",
+    )
+    parser.add_argument(
         "--anchor",
         choices=("last_drop", "fixed"),
         default=_env("SORT_ANCHOR", "last_drop"),
@@ -891,6 +900,7 @@ def build_socket_source(
     # 夹取策略（--pick-strategy=order）注入的「选哪一件」排序器；默认 None ⇒ 行为不变。
     payload_orderer: Callable[[tuple[object, ...]], tuple[object, ...]] | None = None,
     current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
+    box_id_resolver: Callable[[int], int | None] | None = None,
     # 首件稳定门（见 SocketVisionSource 的注释）。两个默认值 = **关闭**，
     # 由 run_chain 的 --first-dispatch-settle 传下来（默认 3 帧）。
     first_dispatch_settle_frames: int = 0,
@@ -969,6 +979,7 @@ def build_socket_source(
         grasp_point_for_target=grasp_point_for_target,
         payload_orderer=payload_orderer,
         current_position_provider=current_position_provider,
+        box_id_resolver=box_id_resolver,
         first_dispatch_settle_frames=first_dispatch_settle_frames,
         first_dispatch_max_wait_s=first_dispatch_max_wait_s,
     )
@@ -1445,6 +1456,30 @@ def run(args: argparse.Namespace) -> int:
                     "配置 [Strategy] order_mode" if args.order_mode == "auto" else args.order_mode,
                     args.pick_strategy_config,
                 )
+        # 2026-11-01（动态分配）：code → box_id。默认 static（走旧静态表，行为不变）。
+        slot_allocator = None
+        box_id_resolver = None
+        if args.slot_mode == "dynamic":
+            from electrical_control.rpi.slot_allocator import SlotAllocator
+
+            side_of_box = {}
+            get_sides = getattr(strategy, "side_of_box", None)
+            if callable(get_sides):
+                try:
+                    side_of_box = dict(get_sides())
+                except Exception:
+                    logger.warning("取转盘侧表失败：动态分配按无侧信息处理", exc_info=True)
+            slot_allocator = SlotAllocator(
+                box_ids=(1, 2, 3, 4, 5, 6),
+                mode="dynamic",
+                side_of_box=side_of_box,
+                journal_path=args.slot_journal,
+                round_id=round_id,
+            )
+            box_id_resolver = slot_allocator.box_for
+            logger.info("货格动态分配：已启用（台账=%s，round=%s）",
+                        args.slot_journal, round_id)
+
         source = build_socket_source(
             round_id=round_id,
             round_task_id=round_task_id,
@@ -1452,6 +1487,7 @@ def run(args: argparse.Namespace) -> int:
             calibration_config=args.calibration_config,
             fixed_pick_point=fixed_pick_point,
             payload_orderer=payload_orderer,
+            box_id_resolver=box_id_resolver,
             current_position_provider=(_current_position_mm10
                                       if args.anchor == "last_drop" else None),
             first_dispatch_settle_frames=args.first_dispatch_settle,

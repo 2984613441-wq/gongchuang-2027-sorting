@@ -36,6 +36,8 @@ Design points (2026-09-05 bridge review; 2026-09-16 修订):
 
 from __future__ import annotations
 
+from dataclasses import replace as _replace
+
 import logging
 import socket
 import threading
@@ -116,6 +118,7 @@ class SocketVisionSource:
         # 2026-11-01：排序锚点提供器（返回 0.1mm 记账坐标）。
         # 传它以后，TSP 与策略排序都用『上一次落料点』而不是固定 (0,0)。
         current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
+        box_id_resolver: Callable[[int], int | None] | None = None,
         first_dispatch_settle_frames: int = 0,
         # 稳定门的**等待上限（秒）**。必须有：无上限时"操作员还在摆件"会让链在起轮处
         # 无限等，而 15s 失活窗/显示红线是从起轮算起的 ⇒ 那比顺序错严重得多。
@@ -163,6 +166,7 @@ class SocketVisionSource:
         self._current_position = current_position
         self._payload_orderer = payload_orderer
         self._current_position_provider = current_position_provider
+        self._box_id_resolver = box_id_resolver
         self._permitted = False
         self._lock = threading.Lock()
         self._latest: BatchTargets | None = None
@@ -268,6 +272,29 @@ class SocketVisionSource:
                     self.note_served(_p.pick_x_position, _p.pick_y_position)
         return contexts[0] if contexts else None
 
+    def _resolve_box_ids(self, batch: BatchTargets) -> BatchTargets:
+        """code 模式下把 `VisionTarget.box_id`（None）补成货格号（2026-11-01 动态分配）。
+
+        只在 box_id 为 None 时补，**绝不覆盖**视觉给出的真值；resolver 抛错 ⇒ 按无格处理
+        （该件随后被 `_expand` 拒识，链路继续，不猜盒）。
+        """
+        if self._box_id_resolver is None:
+            return batch
+        patched = []
+        for target in batch.targets:
+            if target.box_id is None:
+                try:
+                    box = self._box_id_resolver(int(target.class_id))
+                except Exception:
+                    _LOGGER.warning(
+                        "货格分配器抛错（code=%d）：该件按无格处理", target.class_id,
+                        exc_info=True)
+                    box = None
+                if box is not None:
+                    target = _replace(target, box_id=int(box))
+            patched.append(target)
+        return BatchTargets(task_id=batch.task_id, targets=tuple(patched))
+
     # ---- 首件稳定门（2026-09-22）----
 
     def _visibility_signature(self, batch: BatchTargets) -> tuple | None:
@@ -286,6 +313,8 @@ class SocketVisionSource:
         if self._grasp_point_for_target is None:
             return None
         keys = []
+        batch = self._resolve_box_ids(batch)
+
         for target in batch.targets:
             if target.box_id is None:
                 continue
@@ -363,6 +392,7 @@ class SocketVisionSource:
         box_id 缺失（None）= 该件没有颜色真值 → 拒识该件、记 WARNING、链路继续。
         不抛异常（抛出去会冒到 run() 兜底，把整条链带走），也绝不猜盒。
         """
+        batch = self._resolve_box_ids(batch)          # 2026-11-01：code → box_id
         for target in batch.targets:
             if target.box_id is None:
                 _LOGGER.warning(

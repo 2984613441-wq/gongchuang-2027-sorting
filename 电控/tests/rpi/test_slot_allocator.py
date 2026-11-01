@@ -90,6 +90,7 @@ def test_prefers_same_side_to_reduce_turntable_moves():
 # --------------------------------------------------------------------------- #
 def test_journal_round_trip():
     journal = _workspace_tmp("alloc_round_trip.json")
+    journal.unlink(missing_ok=True)      # 上一次运行的台账不能带进来
     alloc = SlotAllocator(mode="dynamic", journal_path=journal, round_id="round-1")
     assert alloc.box_for(11) == 1
     assert alloc.box_for(21) == 2
@@ -102,6 +103,7 @@ def test_journal_round_trip():
 
 def test_journal_from_other_round_is_ignored():
     journal = _workspace_tmp("alloc_other_round.json")
+    journal.unlink(missing_ok=True)
     journal.write_text(json.dumps({
         "round_id": "old-round",
         "code_to_box": {"11": 1},
