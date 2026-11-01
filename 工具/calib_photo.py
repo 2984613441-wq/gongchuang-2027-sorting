@@ -38,7 +38,14 @@ import math
 import sys
 
 # MaixCAM 实际输出帧（视觉链路里 (u,v) 就是这个尺寸下的像素）
-MAIX_FRAME = (320, 320)
+# 🔴 2026-10-29 分辨率迁移：链路从 320x320 改为 1280x720（与 v11 训练/采集一致）。
+#    现场若仍需 320 口径，用环境变量回退：MAIX_FRAME_W=320 MAIX_FRAME_H=320
+import os as _os
+
+MAIX_FRAME = (
+    int(_os.environ.get("MAIX_FRAME_W", "1280")),
+    int(_os.environ.get("MAIX_FRAME_H", "720")),
+)
 
 
 # ===========================================================================

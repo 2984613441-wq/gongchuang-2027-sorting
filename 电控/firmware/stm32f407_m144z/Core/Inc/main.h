@@ -65,6 +65,11 @@ void Error_Handler(void);
 #define MANUAL_RESET_SIG_GPIO_Port GPIOF
 #define LIGHT_EN_Pin GPIO_PIN_0
 #define LIGHT_EN_GPIO_Port GPIOC
+/* 2026-10-30 新增：第二路补光灯数据线（WS2812，独立于 PC0；两灯分别控制）。
+ * 选 PE3 的依据：main.h 里 GPIOE 仅占 PE6(DIR_Z)、PE3 无 TIM 复用、
+ * GPIOE 时钟已在 main.c 的 MX_GPIO_Init 中使能。 */
+#define LIGHT2_EN_Pin GPIO_PIN_3
+#define LIGHT2_EN_GPIO_Port GPIOE
 #define START_SIG_Pin GPIO_PIN_4
 #define START_SIG_GPIO_Port GPIOA
 #define ENABLE_X_Pin GPIO_PIN_5

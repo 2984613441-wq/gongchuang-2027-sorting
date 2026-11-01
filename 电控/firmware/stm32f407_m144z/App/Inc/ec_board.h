@@ -24,6 +24,10 @@ void ec_board_light_set(bool on);
 bool ec_grip_port_move(uint16_t position, uint16_t time_ms);
 /* Drop gate PWM on PE5/TIM9_CH1. */
 bool ec_board_drop_servo_set_us(uint16_t pulse_us);
+
+/* Z 轴舵机 PWM on PB0/TIM3_CH3（2026-11-01 新增：Z 与夹爪拆分，Z 独立舵机） */
+bool ec_board_z_servo_set_us(uint16_t pulse_us);
+void ec_board_z_servo_stop(void);
 void ec_board_drop_servo_stop(void);
 ec_input_snapshot_t ec_board_read_inputs(void);
 void ec_board_uart_start_rx(void);

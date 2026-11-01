@@ -61,6 +61,27 @@ uint8_t ec_tof_last_reject(char *line, uint8_t max)
   }
   return 0U;
 }
+/* 2026-10-26：AIR 命令（气动阀 PB11/TIM2_CH4）的桩。
+ * 主机测试不编译 ec_pneumatic_gripper.c（它依赖 TIM2 HAL），
+ * 这里提供带状态的替身，供"就绪/未就绪"与"吸附/释放"两类断言使用。
+ * 默认就绪；把 fake_air_ready 设为 false 可测 fail-closed 分支。 */
+bool fake_air_ready = true;
+uint8_t fake_air_state = 0U;   /* 1 = 吸附，0 = 释放 */
+bool ec_pneumatic_gripper_is_ready(void) { return fake_air_ready; }
+uint8_t ec_pneumatic_gripper_state(void) { return fake_air_state; }
+void ec_pneumatic_gripper_init(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_open(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_close(void) { fake_air_state = 1U; }
+void ec_pneumatic_gripper_neutral(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_set_pulse(uint16_t pulse_us)
+{
+  (void)pulse_us;
+  fake_air_state = (pulse_us != 0U) ? 1U : 0U;
+}
+uint16_t ec_pneumatic_gripper_get_pulse(void)
+{
+  return (fake_air_state != 0U) ? 20000U : 0U;
+}
 /* 2026-09-18：GRIP 命令的桩。记录最后一次下发的夹爪位置/时间，供断言使用。 */
 uint16_t fake_grip_pos;
 uint16_t fake_grip_time;

@@ -26,6 +26,7 @@
 #include "ec_pneumatic_gripper.h"  // 气动夹爪测试
 #include "ec_tof.h"                // ToF 测距（MINIF/DVP0501C1, UART4）
 #include "ec_drop_servo.h"
+#include "ec_z_servo.h"
 
 /* USER CODE END Includes */
 
@@ -133,6 +134,8 @@ int main(void)
    * 处置：失败只记标志，继续初始化；DROP? 会回 ready=0，
    *       DROP 动作全部返回 ERR DROP_NOT_READY（fail-closed，不会误动）。 */
   (void)ec_drop_servo_init();
+    /* 2026-11-01 新增：Z 独立舵机（PB0/TIM3_CH3）上电回中位 */
+    (void)ec_z_servo_init();
   MX_TIM10_Init();
   MX_TIM11_Init();
   MX_USART2_UART_Init();
@@ -141,9 +144,20 @@ int main(void)
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   ec_app_init();
-  ec_pneumatic_gripper_init();  // 初始化气动夹爪PWM
+  ec_pneumatic_gripper_init();  // 初始化气动阀 PWM（PB11 / TIM2_CH4）
 
-  /* 气动夹爪测试：1秒吸附，1秒松开 */
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 气动阀自测循环
+   *
+   * 🔴 2026-10-26 用户裁决：**已关闭（=0）**。
+   *    原值 1 时上电自动「吸附 5 秒 → 松开 5 秒」循环，那是台架测吸力用的，
+   *    **正式分拣会把抓到的件每 5 秒扔掉一次**，绝对不能留。
+   *    现在改用诊断命令手动控制：AIR ON / AIR OFF / AIR?
+   *
+   * 想再跑自测就把下面改回 1（仅台架调试时临时用，测完必须改回 0）。
+   * ═══════════════════════════════════════════════════════════════════════ */
+  #define GRIPPER_AUTO_TEST_ENABLED  0
+  #define GRIPPER_TEST_INTERVAL_MS   UINT32_C(5000)
   uint32_t gripper_test_last_toggle = 0;
   uint8_t gripper_test_state = 0;  // 0=松开, 1=吸附
 
@@ -155,8 +169,9 @@ int main(void)
   {
     uint32_t now = HAL_GetTick();
 
-    /* 气动夹爪测试：每1000ms切换一次 */
-    if (now - gripper_test_last_toggle >= 1000) {
+#if GRIPPER_AUTO_TEST_ENABLED
+    /* 气动阀自测：每 5 秒切换一次（吸附 ↔ 松开） */
+    if (now - gripper_test_last_toggle >= GRIPPER_TEST_INTERVAL_MS) {
       gripper_test_last_toggle = now;
       if (gripper_test_state == 0) {
         ec_pneumatic_gripper_close();  // 吸附
@@ -166,6 +181,11 @@ int main(void)
         gripper_test_state = 0;
       }
     }
+#else
+    (void)now;
+    (void)gripper_test_last_toggle;
+    (void)gripper_test_state;
+#endif
 
     ec_app_poll(HAL_GetTick());
     HAL_IWDG_Refresh(&hiwdg);
@@ -261,7 +281,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;          /* IWDG 仍用 LSI，与主频无关 */
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 8U;                  /* 8 MHz / 8 = 1 MHz（2026-10-17 修正，原 25U） */
+   RCC_OscInitStruct.PLL.PLLM = 8U;                  /* 8 MHz / 8 = 1 MHz（2026-10-17 修正，原 25U） */
   RCC_OscInitStruct.PLL.PLLN = 336U;                /* 1 MHz × 336 = 336 MHz (VCO) */
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;       /* 336 / 2 = 168 MHz (SYSCLK) */
   RCC_OscInitStruct.PLL.PLLQ = 7U;                  /* 336 / 7 = 48 MHz（未用） */
@@ -821,8 +841,10 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(ENABLE_Z_GPIO_Port, ENABLE_Z_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin : DIR_Z_Pin */
-  GPIO_InitStruct.Pin = DIR_Z_Pin;
+  /*Configure GPIO pins : DIR_Z_Pin + LIGHT2_EN_Pin（2026-10-30 并入第二路补光灯 PE3）*/
+  /* 先置低：补光灯上电必须灭，与安全态一致 */
+  HAL_GPIO_WritePin(LIGHT2_EN_GPIO_Port, LIGHT2_EN_Pin, GPIO_PIN_RESET);
+  GPIO_InitStruct.Pin = DIR_Z_Pin|LIGHT2_EN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

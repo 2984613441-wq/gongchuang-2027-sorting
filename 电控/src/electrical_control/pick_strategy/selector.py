@@ -260,6 +260,237 @@ def row_scan_key(det: Detection) -> tuple[float, float, int]:
     return (-det.y_mm, det.x_mm, det.target_seq)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 抓取难度分层（2026-10-26 用户裁决）
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 用户口径（2026-10-26 现场）：
+#   「我们的这个圆锥和圆柱就最后来分拣，因为俯视图这个不好拍全」
+#   「圆锥和正四面体不好吸」
+#
+# 具体含义：
+#   · **圆柱 / 圆锥**：俯视投影都是「圆」，**光靠俯视相机拍不全、判不准**
+#     （真歧义，需斜置相机或 ToF 二次确认）⇒ 放到最后抓，
+#     这样即使后半场时间不够，损失的是「难判的件」而不是「好判的件」。
+#   · **圆锥 / 正四面体**：尖顶/斜面，**吸盘吸不住**（机械问题，软件解决不了）。
+#     圆锥同时受两条影响 ⇒ 排最后。
+#
+# 分层表（值越小越先抓）：
+#   0 = 容易：正方体 / 长方体 / 五棱柱 / 正四面体（吸盘或夹爪都能稳定抓）
+#   1 = 中等：圆柱（俯视判形有歧义，但吸盘能吸）
+#   2 = 最难：圆锥（判形有歧义 + 尖顶难吸）
+#
+# ⚠️ 前提：`class_id` 必须是**形状编号**（1=正方体 … 6=正四面体），
+#    与 names.json / image_id 的编号一致。
+#    🔴 若将来 wire 上仍是「颜色→货格」的旧 bin_id，本表会错位 ——
+#    届时必须先把视觉输出改成形状编号（见协议 1 字节打包方案）。
+PICK_TIER_BY_CLASS_ID: Mapping[int, int] = {
+    1: 0,   # 正方体 cube
+    2: 0,   # 长方体 cuboid
+    3: 1,   # 圆柱 cylinder      ← 俯视判形有歧义
+    4: 0,   # 五棱柱 pentagonal_prism
+    5: 2,   # 圆锥 cone          ← 判形有歧义 + 尖顶难吸
+    6: 0,   # 正四面体 tetrahedron
+}
+
+#: 未登记的 class_id 当作最容易（保守：先抓，避免被永远跳过）
+PICK_TIER_DEFAULT: int = 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 「待定」机制（2026-10-26 用户裁决）
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 用户原话：「难的件是指判别不清的，越到后面越好判别」「建议加，那就加待定」
+#
+# 为什么"越到后面越好判别"：托盘上件多时互相遮挡、边缘贴在一起，
+# 视觉判形容易错；抓走一些后托盘变稀疏，同样的件就判得准了。
+#
+# 🔴 关键设计选择：**低置信度件不丢弃，只排到最后**。
+#   如果直接丢弃，会出现两种坏情况：
+#     ① 全部件都低置信度 ⇒ 一件都发不出去 ⇒ 链路空转（死锁）
+#     ② 某件一直判不准 ⇒ 永远不抓 ⇒ 留在托盘上丢分
+#   排到最后则：前面好判的先抓，托盘稀疏后该件的置信度自然上升，
+#   到那时再抓就准了；即使一直不上升，最后也会被抓走（不是永远不抓）。
+#
+# 实现方式：在排序键最前面加一位 `pending`（0 = 已确定，1 = 待定），
+# 这样**所有待定件都排在所有已确定件之后**，而待定件内部仍按原规则排。
+
+#: 置信度（0~100）低于此值 ⇒ 判为「待定」。
+#: 取 50 的理由：MaixCAM 侧 HSV 命中率/ YOLO 置信度都归一化到 0~100，
+#: 50 大致对应"一半证据"，低于它时形状判定的错误率明显升高。
+#: ⚠️ 这是初始值，需要现场用真实托盘标定：若发现"待定"太多导致
+#:    最后扎堆抓不完 ⇒ 调低；若误判太多 ⇒ 调高。
+DEFER_CONFIDENCE_BELOW: int = 50
+
+
+def is_pending(det: Detection) -> bool:
+    """这件是否「待定」（置信度不足以确定形状/颜色）。
+
+    Returns:
+        True = 待定（应排到后面，等托盘稀疏了再判/再抓）
+        False = 已确定
+    """
+    return det.confidence < DEFER_CONFIDENCE_BELOW
+
+
+def difficulty_tier_of(det: Detection) -> int:
+    """这件物料的抓取难度层（0 最容易 / 1 中等 / 2 最难）。
+
+    未登记的 class_id 返回 :data:`PICK_TIER_DEFAULT`（= 0，按容易处理）。
+    理由：宁可先抓一件"难度未知"的，也不要让它因为排不上而永远被留在托盘上。
+
+    ⚠️ 本函数**不含**「待定」判定 —— 待定是排序时的独立一位，
+    见 :func:`difficulty_scan_key` / :func:`group_then_scan_key`。
+    """
+    return PICK_TIER_BY_CLASS_ID.get(det.class_id, PICK_TIER_DEFAULT)
+
+
+def difficulty_scan_key(det: Detection) -> tuple[int, int, float, float, int]:
+    """**待定 → 难度分层 → 行扫描**键。
+
+    与 :func:`row_scan_key` 的差别在最前面多了两级：
+      · ``pending``（0 = 已确定，1 = 待定）—— **待定件整体排到最后**
+      · ``tier``（难度层）
+    当全部件都已确定且同属一层时，它的后半段与 ``row_scan_key`` 完全一致。
+    """
+    return (
+        1 if is_pending(det) else 0,
+        difficulty_tier_of(det),
+        -det.y_mm,
+        det.x_mm,
+        det.target_seq,
+    )
+
+
+def order_by_difficulty_scan(
+    frame: VisionFrame, config: StrategyConfig
+) -> tuple[Detection, ...]:
+    """把一帧里的**可用件**按「难度分层 → 行扫描」排序（实链接入用）。
+
+    与 :func:`order_by_row_scan` 唯一的区别：**先按难度层分组**，
+    每层内部再走原来的行扫描（含 ``[Tray] row_tolerance_mm`` 分桶）。
+
+    效果：好抓的先抓（正方体/长方体/五棱柱/正四面体）
+          → 再抓圆柱 → 最后抓圆锥。
+    这样即使后半场超时，留在托盘上的是**难判/难吸的件**，不是好抓的件。
+
+    **一键回退开关**：把 :data:`PICK_TIER_BY_CLASS_ID` 清空（或全部置 0）
+    ⇒ 退化成与 :func:`order_by_row_scan` 完全相同的顺序。
+    本函数**只改顺序、不拒识**（与 :func:`order_by_row_scan` 同）。
+    """
+    usable, _ = usable_detections(frame, config)
+    tol = config.tray.row_tolerance_mm
+
+    # 先按 (pending, tier) 两级分组：
+    #   pending=1（待定）整体排在 pending=0（已确定）之后
+    by_tier: dict[tuple[int, int], list[Detection]] = {}
+    for det in usable:
+        key = (1 if is_pending(det) else 0, difficulty_tier_of(det))
+        by_tier.setdefault(key, []).append(det)
+
+    out: list[Detection] = []
+    for _pending, _tier in sorted(by_tier):
+        group = by_tier[(_pending, _tier)]
+        if tol <= 0.0:
+            # 行容差关闭 ⇒ 退化成逐件行扫描键
+            out.extend(sorted(group, key=row_scan_key))
+        else:
+            # 与 order_by_row_scan 同一套分桶逻辑，只是喂进去的是"同层子集"
+            out.extend(
+                det
+                for _anchor_y, row in _rows_by_y_tolerance(group, tol)
+                for det in sorted(row, key=lambda d: (d.x_mm, d.target_seq))
+            )
+    return tuple(out)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 「先一类再一类」+ 难度分层（2026-10-26 用户裁决，第二版）
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 用户口径（2026-10-26 追加）：
+#   「我们的夹取策略改成哪个简单哪个来，然后的话在合适的时机 yolo 判别
+#     再找简单的，最后判别最难的，在其他的弄完了之后和我们的先一类再一类结合」
+#
+# 解读成三级优先：
+#   ① **难度层**（tier）：容易的先抓 —— 保证后半场超时损失的是难件
+#   ② **类别**（class_id）：同一层内**做完一类再做下一类** —— 减少来回换箱
+#   ③ **行扫描**：同一类内仍按"从上到下、每排从左到右"
+#
+# 为什么要"先一类再一类"：
+#   每个 (颜色,形状) 组只进一个货格。若在组之间来回跳，机械臂每次都要
+#   走一趟不同落点、且组表状态频繁切换；做完一类再换下一类，落点更集中。
+#
+# ⚠️ 已知代价（用户需知）：同一类的件若散布在托盘两侧，会来回横穿，
+#   总行程可能比纯行扫描更长。若实测发现"总时间变长"，把本函数换回
+#   :func:`order_by_difficulty_scan`（只分层、不分类）即可。
+
+
+def group_then_scan_key(det: Detection) -> tuple[int, int, int, float, float, int]:
+    """「待定 → 难度 → 类别 → 行扫描」四级排序键。
+
+    返回 ``(pending, tier, class_id, -y_mm, x_mm, target_seq)``：
+      · pending 升序（0 = 已确定先，1 = 待定排最后）
+      · tier 升序（容易的先）
+      · class_id 升序（做完一类再下一类）
+      · -y 降序（靠 +Y 那排先）
+      · x 升序（同排从左到右）
+      · target_seq 升序（兜底稳定）
+    """
+    return (
+        1 if is_pending(det) else 0,
+        difficulty_tier_of(det),
+        det.class_id,
+        -det.y_mm,
+        det.x_mm,
+        det.target_seq,
+    )
+
+
+def order_by_group_scan(
+    frame: VisionFrame, config: StrategyConfig
+) -> tuple[Detection, ...]:
+    """把一帧里的**可用件**按「难度 → 类别 → 行扫描」排序（实链接入用）。
+
+    这是 :func:`order_by_difficulty_scan` 的加强版：多了一级 ``class_id``，
+    实现用户要求的「先一类再一类」。
+
+    行为：
+      1. 先按难度层分组（tier 0 → 1 → 2）
+      2. 每层内按 ``class_id`` 升序分组（== 一类做完再做下一类）
+      3. 每个类内按行扫描（含 ``[Tray] row_tolerance_mm`` 分桶）
+
+    **本函数只改顺序、不拒识**（与另外两个排序器一致）。
+
+    **一键回退**：
+      · 想只分层不分类 ⇒ 换回 :func:`order_by_difficulty_scan`
+      · 想完全回旧行为 ⇒ 换回 :func:`order_by_row_scan`
+    """
+    usable, _ = usable_detections(frame, config)
+    tol = config.tray.row_tolerance_mm
+
+    # 先按 (pending, tier, class_id) 三级分组
+    #   pending=1（待定）整体排在 pending=0（已确定）之后
+    by_group: dict[tuple[int, int, int], list[Detection]] = {}
+    for det in usable:
+        key = (1 if is_pending(det) else 0, difficulty_tier_of(det), det.class_id)
+        by_group.setdefault(key, []).append(det)
+
+    out: list[Detection] = []
+    for _pending, _tier, _class_id in sorted(by_group):
+        group = by_group[(_pending, _tier, _class_id)]
+        if tol <= 0.0:
+            out.extend(sorted(group, key=row_scan_key))
+        else:
+            out.extend(
+                det
+                for _anchor_y, row in _rows_by_y_tolerance(group, tol)
+                for det in sorted(row, key=lambda d: (d.x_mm, d.target_seq))
+            )
+    return tuple(out)
+
+
 def _rows_by_y_tolerance(
     dets: Sequence[Detection], tol_mm: float
 ) -> list[tuple[float, list[Detection]]]:
@@ -324,12 +555,21 @@ def describe_selection_limitation(mode: str) -> str:
 
 
 __all__ = [
+    "DEFER_CONFIDENCE_BELOW",
     "Detection",
+    "PICK_TIER_BY_CLASS_ID",
+    "PICK_TIER_DEFAULT",
     "Refusal",
     "RefusalCode",
     "Selection",
     "VisionFrame",
     "describe_selection_limitation",
+    "difficulty_scan_key",
+    "difficulty_tier_of",
+    "group_then_scan_key",
+    "is_pending",
+    "order_by_difficulty_scan",
+    "order_by_group_scan",
     "order_by_open_edge",
     "order_by_row_scan",
     "ordering_key",

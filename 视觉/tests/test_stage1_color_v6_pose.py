@@ -237,16 +237,27 @@ def _palette():
         return tuple(int(x) for x in cv2.cvtColor(np.uint8([[[h, s, v]]]),
                                                   cv2.COLOR_HSV2BGR)[0, 0])
     return {
-        # 干净物料：取值都留 >=3 余量
-        "cyan": bgr(95, 200, 200), "green": bgr(60, 200, 200),
-        "red": bgr(1, 200, 200), "blue": bgr(120, 200, 200),
+        # 🔴 2026-10-26：色相已按 **MaixCAM 实拍照实测值**重标。
+        #    实测（灯开、AE/AWB 收敛，采样每件中心 ±18px）：
+        #      红 H 171~173 / 黄 H 20~22 / 绿 H 69~75 / 蓝 H 107~112
+        #    旧值（red=1、green=60）来自早期台架假设，与现场物料不符 ——
+        #    这正是"红件完全漏检、黄件被判成橙圆柱"的根因。
+        #    stage1 的新窗口见 COLOR_RANGES。
+        "red": bgr(172, 200, 200), "green": bgr(72, 200, 200),
+        "yellow": bgr(21, 200, 200),
+        # cyan：表1 六类里**没有青色物料** ⇒ stage1 已把 cyan 设成
+        #       不可能窗口 H[255,255]（永假）。这里仍保留一个真的青色样本，
+        #       用于断言"真青色**不会**被检出"。
+        "cyan": bgr(95, 200, 200),
+        "blue": bgr(110, 200, 200),
         "orange": bgr(12, 200, 200), "black": bgr(0, 10, 20),
         # 单边遮挡带（颜色纯、只是 V 掉下来）→ 不进彩色掩膜、也不进黑
-        "red_dim": bgr(1, 200, 20),
+        "red_dim": bgr(172, 200, 20),
         # 彩色窗口 ∩ black 窗口 ∩ :259 深色核心 的**重叠带**
-        "blue_dark": bgr(120, 120, 34),    # blue 要 V>=30 → 命中
-        "red_dark": bgr(1, 120, 36),       # red 要 V>=35 → 命中
-        "green_dark": bgr(60, 120, 36),    # green 要 V>=35 → 命中
+        # （下面的 hue 已随实测色相同步更新；V 取在各自窗口下界之上）
+        "blue_dark": bgr(110, 120, 100),    # blue 要 V>=90 → 命中
+        "red_dark": bgr(172, 120, 110),     # red 要 V>=100 → 命中
+        "green_dark": bgr(72, 120, 120),    # green 要 V>=110 → 命中
         # 托盘阴影
         "shadow_deep": bgr(0, 40, 30),     # 低饱和 + V<=50 → 现在会被当黑件
         "shadow_light": bgr(0, 25, 110),   # V>50 → 必须被挡

@@ -30,8 +30,14 @@ import numpy as np
 from maix import app, camera, display, image
 
 # ==================== 配置 ====================
-FRAME = 320            # MaixCAM 实际输出帧；链路里的 (u,v) 就是这个尺寸下的
-GRID_STEP = 32         # 网格间距（像素）
+# 🔴 2026-10-29 分辨率迁移：原来固定 320（正方形），现在链路输出 1280x720。
+#    FRAME_W/FRAME_H 必须与「视觉发送端采集尺寸」一致，否则网格坐标与链路 (u,v) 对不上。
+import os as _os
+
+FRAME_W = int(_os.environ.get("FRAME_W", "1280"))
+FRAME_H = int(_os.environ.get("FRAME_H", "720"))
+FRAME = FRAME_W  # 兼容旧变量名（只用于打印）
+GRID_STEP = int(_os.environ.get("GRID_STEP", "128"))  # 网格间距（像素）；320 时代是 32（×4）
 TARGET_COLOR = "green"  # 追踪哪种颜色：red/orange/yellow/green/cyan/blue/black
 PRINT_INTERVAL = 0.5   # 秒；控制台打印间隔（别设太小，会刷屏）
 
@@ -101,12 +107,12 @@ def draw_grid(rgb):
 def main():
     print("=" * 60)
     print("标定辅助：网格 + 色块追踪")
-    print("  帧尺寸 = %dx%d，追踪颜色 = %s" % (FRAME, FRAME, TARGET_COLOR))
+    print("  帧尺寸 = %dx%d，追踪颜色 = %s" % (FRAME_W, FRAME_H, TARGET_COLOR))
     print("  把夹爪上的纯色块对准屏幕里的十字，用 MOVE 命令停到 3 个已知位置，")
     print("  每次抄下 CALIB 行。")
     print("=" * 60)
 
-    cam = camera.Camera(FRAME, FRAME, image.Format.FMT_RGB888)
+    cam = camera.Camera(FRAME_W, FRAME_H, image.Format.FMT_RGB888)
     disp = display.Display()
     last_print = 0.0
 

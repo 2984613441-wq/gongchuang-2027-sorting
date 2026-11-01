@@ -73,24 +73,116 @@ MIN_SEND_INTERVAL_S = 0.10     # 发送节流；V6 最高 6 FPS，不必每帧�
 _ANGLE_NONE = 0xFF
 _TARGET_BYTES = 7
 
+# ════════════════════════════════════════════════════════════════════════════
+# 2026-10-26 新增：(形状, 颜色) → code(1..30) 编码（省赛新协议）
+#
+# 背景：《2026年智能分拣赛项补充说明》把物料改成 **5 色 × 6 形状解耦**，
+#      `code` 同时编码形状和颜色，范围 1~30，且 `code` 就是屏幕图片的 `image_id`
+#      （30 张图 `1.png`~`30.png`，见 `_screen_assets/colored/manifest.json`）。
+#
+# 编码公式（冻结，见 manifest.json L2）：
+#     code = (shape_id - 1) * 5 + color_id + 1
+#
+# shape_id 映射（必须严格按顺序，见 manifest.json L3-10）：
+SHAPE_TO_ID = {
+    "cube": 1,               # 正方体
+    "cuboid": 2,             # 长方体
+    "cylinder": 3,           # 圆柱
+    "pentagonal_prism": 4,   # 五棱柱
+    "cone": 5,               # 圆锥
+    "tetrahedron": 6,        # 正四面体
+}
+
+# color_id 映射（见 manifest.json L19-25）：
+COLOR_TO_ID = {
+    "red": 0,
+    "yellow": 1,
+    "green": 2,
+    "blue": 3,
+    "white": 4,
+}
+
+
+def code_of(shape: str, color: str):
+    """(形状, 颜色) → code(1..30)。无法映射时返回 None。
+
+    省赛新协议：id_byte 不再是 bin_id(1..6)，而是 (shape, color) 打包码。
+    下游树莓派侧需同步改 BATCH_ID_BYTE_IS_BOX_ID = False 才能解开。
+    """
+    shape_id = SHAPE_TO_ID.get(shape)
+    color_id = COLOR_TO_ID.get(color)
+    if shape_id is None or color_id is None:
+        return None
+    return (shape_id - 1) * 5 + color_id + 1
+# ════════════════════════════════════════════════════════════════════════════
+
 
 def encode_target(row):
-    """把一个 V6 result 编成 7 字节。认不出货格（bin=None）返回 None。"""
-    bin_id = row.get("bin")
-    if bin_id is None:
-        return None          # HOLD 灰框 / 未知颜色 —— 不发货格，也不发这一件
-    if not isinstance(bin_id, int) or not (1 <= bin_id <= 6):
-        return None
+    """把一个 V6 result 编成 7 字节。
+
+    ## 双协议（2026-10-26 修正）
+
+    之前 AI-2 把本函数**无条件**改成输出 `code(1..30)`，导致严重回归：
+    默认路径（`USE_GEOMETRY_SHAPE=False`）下 `COLOR_TO_MATERIAL` 给出的是
+    旧形状名（`triangular_prism` / `unknown`），`code_of()` 映射不出来
+    ⇒ 红/蓝/黄/白**全部返回 None** ⇒ 一件都发不出去 ⇒ 树莓派 15s 无动作
+    ⇒ **本轮比赛结束**。同时破坏了 3 个线格式测试（test_50/51/54）。
+
+    ⇒ 现在按开关分叉，两条路径互不影响：
+
+    **USE_GEOMETRY_SHAPE = False（默认）**
+        `id_byte = bin_id(1..6)`，**逐字节等同原实现**
+        下游 `vision_ingest.py` 保持 `BATCH_ID_BYTE_IS_BOX_ID = True`
+
+    **USE_GEOMETRY_SHAPE = True（省赛新协议）**
+        `id_byte = code(1..30) = (shape_id-1)*5 + color_id + 1`
+        ⚠️ 下游**必须同一个 PR 做两件事**，否则全部拒识 → 15s → 本轮结束：
+          ① `vision_ingest.py` 改 `BATCH_ID_BYTE_IS_BOX_ID = False`
+          ② 补 `group_table` 负责把 code 分配成 box_id
+    """
+    if USE_GEOMETRY_SHAPE:
+        # ── 新协议：id_byte = code(1..30) ────────────────────────────
+        shape = row.get("shape")
+        color = row.get("color")
+        code = code_of(shape, color) if (shape and color) else None
+        if code is None:
+            # 形状/颜色映射不出来 ⇒ 不发这一件（下游会当"没看见"处理，
+            # 不会像 bin_id=None 那样触发整批拒识）
+            return None
+        if not (1 <= code <= 30):
+            return None                       # 双保险
+        id_byte = code
+
+        # confidence 语义（2026-10-26 明确）= min(颜色置信, 形状置信)
+        # 理由：下游用 `confidence < 50` 判「待定」，形状不确定比颜色不确定
+        #       更危险（混装 0 分），取 min 确保两者都够确定才发货。
+        color_conf = int(round((row.get("color_fraction") or 0.0) * 100))
+        shape_conf = int(row.get("shape_confidence", 100))
+        # TODO: 几何判定目前不输出 shape_confidence（默认满分 100），
+        #       后续应补：圆形度、长宽比偏差、轮廓多边形拟合残差 归一化到 0~100。
+        conf = max(0, min(100, min(color_conf, shape_conf)))
+    else:
+        # ── 旧协议：id_byte = bin_id(1..6)，逐字节等同原实现 ──────────
+        # ⚠️ 这段**不要**改成走 code_of —— COLOR_TO_MATERIAL 给的是旧形状名，
+        #    映射不出来。整段保持原样是刻意的向后兼容保证。
+        bin_id = row.get("bin")
+        if bin_id is None:
+            return None          # HOLD 灰框 / 未知颜色 —— 不发货格，也不发这一件
+        if not isinstance(bin_id, int) or not (1 <= bin_id <= 6):
+            return None
+        id_byte = bin_id
+        # confidence：V6 没有 score，只有 color_fraction。这是【合成值】，不是模型置信度。
+        frac = row.get("color_fraction") or 0.0
+        conf = max(0, min(100, int(round(frac * 100))))
+
     left, top, w, h = row["bbox"]
     # F1(2026-09-21)：A' 的形心只有在这里被读到才算生效。
     # 没有 "center" 键（旧 row / 对称形状回落的旧路径）⇒ 逐字节等同原实现。
     cx, cy = row.get("center") or (int(left + w / 2), int(top + h / 2))
     if not (0 <= cx <= 0xFFFF and 0 <= cy <= 0xFFFF):
         return None
-    # confidence：V6 没有 score，只有 color_fraction。这是【合成值】，不是模型置信度。
-    frac = row.get("color_fraction") or 0.0
-    conf = max(0, min(100, int(round(frac * 100))))
-    return struct.pack(">BBHHB", bin_id, conf, cx, cy, _ANGLE_NONE)
+
+    return struct.pack(">BBHHB", id_byte, conf, cx, cy, _ANGLE_NONE)
 
 
 def encode_batch_targets(rows, task_id):
@@ -221,6 +313,12 @@ ROI_MARGIN = 0.01
 MIN_AREA_FRACTION = 0.0015
 MAX_AREA_FRACTION = 0.22
 MIN_COLOR_FRACTION = 0.60   # 2026-09-23 DSH: 只靠颜色判据，贴边阴影使占比下降，放宽
+# 🔴 2026-10-25：同色多件时，保留面积 ≥ 同色最大者此比例的候选。
+# 旧逻辑是「每种颜色只留最大一个」，前提是校赛「一色一件」。
+# 新赛规下绿/蓝/黄各有 2 件 ⇒ 旧逻辑 7 件只报 4 件。
+# 取 0.30：碎屑通常 < 主件 5%，0.30 既能滤碎屑又能保住真件。
+# ⚠️ 若现场发现「紧挨着的小件被吞」就往下调（如 0.20）。
+SAME_COLOR_AREA_RATIO = 0.30
 SHAPE_EXTENT_CENTROID = 0.65   # A'(2026-09-21) ext<此值判为"非中心对称形状"，抓取点改用形心
 _REJ = {}                      # 方案0(2026-09-21) 每帧五道 continue 的拒绝计数
 _REJ_TOT = {}                  # F3(2026-09-21) 进程内累计，用于事件触发打印
@@ -263,21 +361,81 @@ KERNEL = np.ones((3, 3), np.uint8)
 GRIPPER_MASK_PATH = "/root/forensic/gripper_mask.png"
 GRIPPER_MASK_OVERLAP_MAX = 0.0   # 黑候选 bbox 内允许落在遮罩里的比例；0 = 必须完全在遮罩外
 
-# 彩色阈值沿用 V4；黑色收紧亮度并要求深色核心，以降低托盘阴影误检。
-# HSV: H=0..179，S/V=0..255；这些初始阈值仍需现场核对。
+# ═══════════════════════════════════════════════════════════════════════════
+# 🔴 2026-10-25 重标定：窗口按 MaixCAM 实拍照实测值重写
+#
+# 测量方法：_pi_tools/measure_tray_hsv.py，在实拍 1280x720 托盘照片上
+#          对每个物块中心 ±18px 采样，统计 H/S/V。
+# 实测值（灯开、AE/AWB 已收敛）：
+#   绿  H 69~75   S 144~207  V 160~193   （正方体 + 圆柱）
+#   蓝  H 107~112 S 227~255  V 134~173   （长方体 + 五棱柱侧放）
+#   红  H 171~173 S 223~255  V 145~168   （四棱锥）
+#   黄  H 20~22   S 152~167  V 209~234   （五棱柱 + 长方体）
+#
+# 🔴 修掉的两个致命错误（旧窗口的锅）：
+#   1) 红：旧窗口是 H[0,2] + H[173,179]，实测 171~173 ⇒ **171-172 落在缝隙里**，
+#      红四棱锥几乎完全漏检。新窗口改 H[167,177] 覆盖实测。
+#   2) 黄：旧 yellow 窗口 H[24,35]，而实测黄是 H 20~22 ⇒ **落进 orange 的 H[3,23]**，
+#      所有黄色物料被误判成"橙色"→"圆柱"。新 yellow 改 H[16,26]。
+#      orange 缩到 H[3,14]，不再抢黄色。
+#
+# 另外按新赛规（5 色 × 6 形状解耦）：
+#   · 删除 cyan（新赛规无青色）
+#   · 保留 black 但**只用于机构剔除**（夹爪/轴是黑的），不作为物料颜色
+#   · **白色物料窗口待后续添加**（需 V≥175 且 S≤55，与深灰托盘区分）
+#
+# ⚠️ 本文件只用颜色输出「颜色」，**形状不再由颜色决定**（同色多形状，
+#    例如绿既是正方体又是圆柱）—— 形状交给 YOLO / 几何判定。
+#    但为了让下游链路不炸，COLOR_TO_MATERIAL 暂时保留旧映射。
+# ═══════════════════════════════════════════════════════════════════════════
 COLOR_RANGES = {
-    "red": [((0, 95, 35), (2, 255, 255)), ((173, 95, 35), (179, 255, 255))],
-    "orange": [((3, 95, 45), (23, 255, 255))],
-    "yellow": [((24, 95, 45), (35, 255, 255))],
-    "green": [((36, 95, 35), (84, 255, 255))],
-    "cyan": [((85, 95, 35), (104, 255, 255))],
-    "blue": [((105, 95, 30), (137, 255, 255))],
+    # 🔴 核心修正：**只改 H 区间**，S/V 下界一律回到原来的宽松值。
+    #
+    # 为什么不能收紧 S/V：判定链里有一道 MIN_COLOR_FRACTION = 0.60，
+    # 要求「bbox 内颜色像素占比 ≥ 60%」。物块边缘/阴影/反光的 S/V 明显低于
+    # 中心采样值 ⇒ 把 S/V 下界抬高会让 mask 变小、占比跌破 60% ⇒ **整件被丢**。
+    # 实测教训（2026-10-25）：S 下界一度抬到 110~180，结果 7 件只检出 1 件。
+    # H 才是区分颜色的关键量；S/V 只用来排除「灰色/过暗」的像素。
+    #
+    # 红：实测 H 171~173，旧窗口的 0~2 与 173~179 中间有缝 ⇒ 合并成一段
+    "red": [((167, 95, 35), (177, 255, 255))],
+    # 黄：实测 H 20~22（旧窗口 24~35 完全够不着）
+    "yellow": [((16, 95, 45), (26, 255, 255))],
+    # 橙：托盘上没有橙色物料；缩到 H[3,14]，避免抢黄色
+    "orange": [((3, 95, 45), (14, 255, 255))],
+    # 绿：实测 H 69~75
+    "green": [((62, 95, 35), (82, 255, 255))],
+    # 蓝：实测 H 107~112
+    "blue": [((100, 95, 30), (122, 255, 255))],
+    # ⚠️ cyan：新赛规无青色物料，但 **bin 编号 1~6 不能动**（Pi 侧 [BoxMap] 依赖它）。
+    #    给一个 H=255 的**不可能窗口**（OpenCV H 最大 179）⇒ 永不匹配，
+    #    既保证两个字典键集一致（不会 KeyError），又让 cyan 实际失效。
+    "cyan": [((255, 255, 255), (255, 255, 255))],
+    # 黑：不作为物料颜色，只留给机构剔除逻辑（夹爪/轴）用
     "black": [((0, 0, 0), (179, 150, 50))],
+    # 🔴 2026-10-26 新增：白色窗口（省赛新要求）
+    #    初值：V≥175（明亮）且 S≤55（低饱和度 = 接近灰白）
+    #    ⚠️ 白托盘也是白的 → 容易误检。靠以下机制区分：
+    #       1. c1_area：托盘面积超 MAX_AREA_FRACTION=0.22，先被丢
+    #       2. c4_color_frac≥0.60：物料中心颜色占比高，托盘边缘有阴影
+    #       3. 形状判据：物料是 3D 几何体（轮廓复杂），托盘是平面矩形
+    #    TODO: 现场标定后微调（用 _pi_tools/measure_tray_hsv.py 测实拍值）
+    "white": [((0, 0, 175), (179, 55, 255))],
 }
 COLOR_TO_MATERIAL = {
     "cyan": ("cube", 1), "green": ("cube", 2),
     "red": ("triangular_prism", 3), "blue": ("triangular_prism", 4),
     "black": ("cylinder", 5), "orange": ("cylinder", 6),
+    # 🔴 2026-10-25 修复：yellow **原本完全不在这张表里** ⇒ L394 的
+    #    `for color in COLOR_TO_MATERIAL` 从来不扫描黄色 ⇒ 黄色物料完全消失。
+    #    实测托盘上有 2 件黄色（五棱柱 + 长方体），必须加进来。
+    #    bin 暂用 6（orange 的窗口已缩到 H[3,14]，实际不会命中，不会冲突）。
+    #    shape 用 "unknown"：新赛规下颜色不能定形状，形状交给 YOLO/几何。
+    "yellow": ("unknown", 6),
+    # 🔴 2026-10-26 新增：白色（省赛新要求）
+    #    旧路径（USE_GEOMETRY_SHAPE=False）占位用，新路径不走这里。
+    #    shape 用 "unknown"，bin 暂用 6（与 yellow/orange 不冲突）。
+    "white": ("unknown", 6),
 }
 DISPLAY_SHAPE = {"cube": "cube", "cylinder": "cylinder",
                  "triangular_prism": "tri-prism", "unknown": "unknown"}
@@ -510,9 +668,21 @@ def analyze(pixels, input_rgb=False, detect_size=None, trace=None,
                                # 口径与 bbox 一致：都乘回 320 系并加上 ROI 偏移 (x0,y0)。
                                "center": (round((cxl + x0) * sx), round((cyl + y0) * sy)),
                                "clipped": False})
-        # 本场景每种颜色只有一个物料：小碎片不与主物料抢同一个编号。
+        # 🔴 2026-10-25 修改：旧逻辑是「每种颜色只保留面积最大的一个候选」，
+        #    前提是校赛「一种颜色只对应一个物料」。
+        #    新赛规下**同色多件**（实测托盘：绿=正方体+圆柱、蓝=长方体+五棱柱、
+        #    黄=五棱柱+长方体）⇒ 旧逻辑会每色只报 1 件，7 件只报出 4 件。
+        #
+        #    改为：保留所有面积 ≥ 同色最大者 30% 的候选。
+        #    · 30% 足以滤掉碎屑/反光小块（实测碎片面积通常 < 主件的 5%）
+        #    · 又能保住真正的第二个同色件
+        #    ⚠️ 这个阈值是启发式，现场若发现"紧挨着的小件被吞"就往下调。
         if candidates:
-            results.append(max(candidates, key=lambda r: r["area"]))
+            _max_area = max(r["area"] for r in candidates)
+            _keep_min = _max_area * SAME_COLOR_AREA_RATIO
+            _kept = [r for r in candidates if r["area"] >= _keep_min]
+            if _kept:
+                results.extend(_kept)
     results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
     # C(2026-09-21)：black 与彩色候选空间互斥。
     # black 窗口 :191 横跨全部色相、与彩色窗在 S∈[95,150] 重叠 ⇒ 同一个物体可能
@@ -572,59 +742,109 @@ def analyze(pixels, input_rgb=False, detect_size=None, trace=None,
 
 
 class StableTargets:
-    """每色一件：连续确认、时间平滑、短时漏检保留灰框；缓存不输出货格。"""
+    """跨帧稳定确认 + 时间平滑 + 短时漏检保留灰框。
+
+    🔴 2026-10-25：从「每色一件」升级为「**同色可多件**」。
+       旧实现 `self.tracks` 是 `dict[color] -> track`，天然只能记一件/色。
+       新实现改为 `list[track]`，靠**空间距离**区分同色的不同物件。
+       （新赛规下同色多件是常态：实测托盘绿×2、蓝×2、黄×2）
+    """
     def __init__(self):
-        self.tracks = {}
+        # list，每个元素是一条轨迹：{color, box, hits, confirmed, last_seen, row, center}
+        self.tracks = []
 
     def update(self, detections, now):
-        seen = set()
+        """把本帧检测并入跨帧轨迹，返回已确认的目标。
+
+        🔴 2026-10-25 重写：**旧实现按「颜色」建轨迹（`self.tracks[color]`），
+           假设一色只有一件**。新赛规下同色多件（实测托盘：绿=正方体+圆柱、
+           蓝=长方体+五棱柱、黄=五棱柱+长方体）⇒ 同色两件会抢同一个轨迹槽，
+           距离一超阈值就 reset，永远凑不满 CONFIRM_FRAMES ⇒ **整件发不出去**。
+           实测现象：门限后 kept=7，线上只发 1 件。
+
+           新实现：`self.tracks` 改为**列表**，每帧对每个检测找「同色且位置最近」
+           的轨迹接上；找不到就新建。这样同色多件各自有独立轨迹。
+           位置匹配用中心距 < max(30px, 0.9×旧框长边)，与旧 reset 判据保持一致。
+        """
+        # ── 1) 逐检测匹配已有轨迹 ──────────────────────────────────────
+        matched = set()          # 已匹配的 track 索引，防止两检测抢同一轨迹
         for row in detections:
             color = row["color"]
-            seen.add(color)
             box = np.array(row["bbox"], dtype=float)
-            previous = self.tracks.get(color)
-            new_target = previous is None or now-previous["last_seen"] > MAX_TRACK_GAP
-            if not new_target:
-                old = previous["box"]
-                distance = float(np.linalg.norm((box[:2]+box[2:]/2)-(old[:2]+old[2:]/2)))
-                new_target = distance > max(30.0, 0.9*max(old[2], old[3]))
-            if new_target:
-                previous = {"box": box, "hits": 0, "confirmed": False,
-                            "last_seen": now, "row": row, "center": None}
-                self.tracks[color] = previous
-            else:
-                dt = max(0.0, now-previous["last_seen"])
-                alpha = 1.0 - np.exp(-dt / SMOOTH_TIME)
-                previous["box"] += alpha*(box-previous["box"])
-                _c = np.array(row.get("center") or (
-                    row["bbox"][0] + row["bbox"][2] / 2.0,
-                    row["bbox"][1] + row["bbox"][3] / 2.0), dtype=float)
-                if previous.get("center") is None:
-                    previous["center"] = _c
-                else:
-                    previous["center"] += alpha * (_c - previous["center"])
-            previous["hits"] += 1
-            # M5(2026-09-21)：黑色要求连续 3 帧静置（夹爪/机架也是黑的，需要更强证据）。
-            _need = BLACK_CONFIRM_FRAMES if color == "black" else CONFIRM_FRAMES
-            previous["confirmed"] = previous["confirmed"] or previous["hits"] >= _need
-            previous["last_seen"], previous["row"] = now, row
-        results = []
-        for color, track in list(self.tracks.items()):
-            age = now-track["last_seen"]
-            if color not in seen:
-                track["hits"] = 0
-                if age > HOLD_SECONDS or not track["confirmed"]:
-                    del self.tracks[color]
+            bc = box[:2] + box[2:] / 2.0
+
+            # 找同色、未匹配、中心最近且足够近的轨迹
+            best_i, best_d = -1, None
+            for i, tr in enumerate(self.tracks):
+                if i in matched or tr["color"] != color:
                     continue
-            if not track["confirmed"]:
+                ob = tr["box"]
+                oc = ob[:2] + ob[2:] / 2.0
+                d = float(np.linalg.norm(bc - oc))
+                limit = max(30.0, 0.9 * max(ob[2], ob[3]))
+                if d <= limit and (best_d is None or d < best_d):
+                    best_i, best_d = i, d
+
+            _c = np.array(row.get("center") or (
+                row["bbox"][0] + row["bbox"][2] / 2.0,
+                row["bbox"][1] + row["bbox"][3] / 2.0), dtype=float)
+
+            if best_i >= 0:
+                tr = self.tracks[best_i]
+                matched.add(best_i)
+                dt = max(0.0, now - tr["last_seen"])
+                alpha = 1.0 - np.exp(-dt / SMOOTH_TIME)
+                tr["box"] += alpha * (box - tr["box"])
+                if tr.get("center") is None:
+                    tr["center"] = _c
+                else:
+                    tr["center"] += alpha * (_c - tr["center"])
+                tr["hits"] += 1
+                tr["last_seen"], tr["row"] = now, row
+            else:
+                # 新轨迹（第一帧 hits=0，下一帧才 +1）
+                self.tracks.append({
+                    "color": color, "box": box, "hits": 0,
+                    "confirmed": False, "last_seen": now,
+                    "row": row, "center": _c,
+                })
+                self.tracks[-1]["hits"] = 1
+                matched.add(len(self.tracks) - 1)
+
+        # ── 2) 更新确认状态 ────────────────────────────────────────────
+        for i, tr in enumerate(self.tracks):
+            # 黑件要求连续 3 帧静置（夹爪/机架也是黑的，要更强证据）
+            _need = BLACK_CONFIRM_FRAMES if tr["color"] == "black" else CONFIRM_FRAMES
+            if tr["hits"] >= _need:
+                tr["confirmed"] = True
+            if i not in matched:
+                # 本帧没匹配上：hits 归零。
+                # 🔴 2026-10-26 修正：这里必须用 **or**，不是 and。
+                #   原实现（按颜色建轨迹时代）是：
+                #       if age > HOLD_SECONDS or not confirmed: del tracks[color]
+                #   即「超时 **或** 没确认过」都删。
+                #   我第一版误写成 and ⇒ 已确认的轨道**永远不会被删**，
+                #   于是它一直占着槽位、导致 test_40 的"超 HOLD 后必须消失"失败。
+                tr["hits"] = 0
+                if (now - tr["last_seen"]) > HOLD_SECONDS or not tr["confirmed"]:
+                    tr["_dead"] = True
+
+        self.tracks = [t for t in self.tracks if not t.get("_dead")]
+
+        # ── 3) 输出已确认轨迹 ──────────────────────────────────────────
+        results = []
+        for tr in self.tracks:
+            if not tr["confirmed"]:
                 continue
-            row = dict(track["row"])
-            row["bbox"] = tuple(int(round(v)) for v in track["box"])
-            if track.get("center") is not None:
-                row["center"] = tuple(int(round(v)) for v in track["center"])
-            row["stale"] = color not in seen
-            if row["stale"]:
-                row["bin"], row["classification_source"], row["reason"] = None, "none", "short_hold"
+            row = dict(tr["row"])
+            row["bbox"] = tuple(int(round(v)) for v in tr["box"])
+            if tr.get("center") is not None:
+                row["center"] = tuple(int(round(v)) for v in tr["center"])
+            stale = tr["hits"] == 0
+            row["stale"] = stale
+            if stale:
+                row["bin"], row["classification_source"], row["reason"] = (
+                    None, "none", "short_hold")
             results.append(row)
         results.sort(key=lambda r: (r["bbox"][1], r["bbox"][0]))
         return results

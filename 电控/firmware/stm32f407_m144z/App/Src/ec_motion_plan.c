@@ -532,3 +532,133 @@ bool ec_motion_plan_build_with_open_interp(ec_axis_pick_place_t *out,
                             place_x_mm10, place_y_mm10,
                             EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10);
 }
+
+/* ============================================================================
+ * 2026-11-01 新增：新硬件（Z 独立舵机 + 夹爪独立 + 托盘落料槽舵机）15 步程序
+ *
+ * 与 ec_motion_plan_build_with_open_interp（9 步，Z/夹爪共用一路）的区别：
+ *   · Z 升降走 EC_AXIS_STEP_Z_SERVO（PB0/TIM3_CH3）
+ *   · 夹爪开合走 EC_AXIS_STEP_GRIPPER（PB10/TIM2_CH3）
+ *   · 槽门开合走 EC_AXIS_STEP_SLOT（PE5/TIM9_CH1）
+ *   · 放件时**先降到放件高度、再开槽门、再松夹爪、再关槽门**（用户 2026-11-01 定：
+ *     开得太早会掉错位置，晚开有"兜底"作用）
+ *
+ * 步序（15 步，容量 16 留 1 个零填充尾槽）：
+ *   [0] Z→z_travel   [1] GRIP→grip_open   [2] XY PARK→PICK
+ *   [3] Z→z_pick     [4] WAIT 200ms       [5] GRIP→grip_close
+ *   [6] Z→z_travel   [7] XY PICK→PLACE
+ *   [8] Z→z_place    [9] SLOT→slot_open   [10] GRIP→grip_open
+ *   [11] SLOT→slot_close  [12] Z→z_travel  [13] XY PLACE→PARK  [14] Z→z_travel
+ * ========================================================================== */
+
+static void set_gripper(ec_axis_step_t *step, uint16_t pulse_us)
+{
+    step->kind = EC_AXIS_STEP_GRIPPER;
+    step->servo_pulse_us = pulse_us;
+}
+
+static bool append_gripper(ec_axis_pick_place_t *out, uint8_t *next_step,
+                           uint16_t pulse_us)
+{
+    if (*next_step >= EC_AXIS_PICK_PLACE_STEP_COUNT) {
+        return false;
+    }
+    set_gripper(&out->step[*next_step], pulse_us);
+    ++(*next_step);
+    return true;
+}
+
+static void set_slot(ec_axis_step_t *step, uint16_t pulse_us)
+{
+    step->kind = EC_AXIS_STEP_SLOT;
+    step->servo_pulse_us = pulse_us;
+}
+
+static bool append_slot(ec_axis_pick_place_t *out, uint8_t *next_step,
+                        uint16_t pulse_us)
+{
+    if (*next_step >= EC_AXIS_PICK_PLACE_STEP_COUNT) {
+        return false;
+    }
+    set_slot(&out->step[*next_step], pulse_us);
+    ++(*next_step);
+    return true;
+}
+
+bool ec_motion_plan_build_v2(ec_axis_pick_place_t *out,
+                             int16_t pick_x_mm10, int16_t pick_y_mm10,
+                             int16_t place_x_mm10, int16_t place_y_mm10,
+                             const ec_pick_params_t *p)
+{
+    uint8_t next_step = 0U;
+
+    if ((out == NULL) || (p == NULL)) {
+        return false;
+    }
+    if (!within_limits(pick_x_mm10, pick_y_mm10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10) ||
+        !within_limits(place_x_mm10, place_y_mm10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       -EC_MOTION_WORKSPACE_LIMIT_MM10,
+                       EC_MOTION_WORKSPACE_LIMIT_MM10) ||
+        !within_limits(pick_x_mm10, pick_y_mm10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10) ||
+        !within_limits(place_x_mm10, place_y_mm10,
+                       -EC_MOTION_REACH_LIMIT_X_MM10,
+                       EC_MOTION_REACH_FAR_X_MM10,
+                       -EC_MOTION_REACH_LIMIT_Y_MM10,
+                       EC_MOTION_REACH_FAR_Y_MM10)) {
+        return false;
+    }
+    if (p->grip_open_us == 0U || p->grip_close_us == 0U ||
+        p->z_travel_us == 0U || p->z_pick_us == 0U || p->z_place_us == 0U ||
+        p->slot_open_us == 0U || p->slot_close_us == 0U) {
+        return false;
+    }
+
+    (void)memset(out, 0, sizeof(*out));
+
+    /* [0] Z 先到行进位（保证移动时不撞件） */
+    if (!append_z_servo(out, &next_step, p->z_travel_us)) return false;
+    /* [1] 夹爪张开待命 */
+    if (!append_gripper(out, &next_step, p->grip_open_us)) return false;
+    /* [2] PARK -> PICK：两轴同时起步 */
+    if (!append_xy_interp(out, &next_step,
+                          EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10,
+                          pick_x_mm10, pick_y_mm10)) return false;
+    /* [3] Z 降到取件高度 */
+    if (!append_z_servo(out, &next_step, p->z_pick_us)) return false;
+    /* [4] 停一下再夹（视觉/机械稳定） */
+    if (!append_wait(out, &next_step, (uint16_t)EC_AXIS_PICK_DWELL_MS)) return false;
+    /* [5] 夹爪闭合夹住 */
+    if (!append_gripper(out, &next_step, p->grip_close_us)) return false;
+    /* [6] Z 抬到行进位 */
+    if (!append_z_servo(out, &next_step, p->z_travel_us)) return false;
+    /* [7] PICK -> PLACE：两轴同时起步 */
+    if (!append_xy_interp(out, &next_step,
+                          pick_x_mm10, pick_y_mm10,
+                          place_x_mm10, place_y_mm10)) return false;
+    /* [8] Z 降到放件高度（先降，不开门） */
+    if (!append_z_servo(out, &next_step, p->z_place_us)) return false;
+    /* [9] 开槽门放行 */
+    if (!append_slot(out, &next_step, p->slot_open_us)) return false;
+    /* [10] 夹爪张开释放 */
+    if (!append_gripper(out, &next_step, p->grip_open_us)) return false;
+    /* [11] 关槽门（兜底：防未落下的件卡住/误掉） */
+    if (!append_slot(out, &next_step, p->slot_close_us)) return false;
+    /* [12] Z 抬到行进位 */
+    if (!append_z_servo(out, &next_step, p->z_travel_us)) return false;
+    /* [13] PLACE -> PARK：两轴同时起步 */
+    if (!append_xy_interp(out, &next_step,
+                          place_x_mm10, place_y_mm10,
+                          EC_MOTION_PARK_X_MM10, EC_MOTION_PARK_Y_MM10)) return false;
+    /* [14] Z 回安全位，为下一轮复位（用户 2026-11-01 明确要这一步） */
+    return append_z_servo(out, &next_step, p->z_travel_us);
+}

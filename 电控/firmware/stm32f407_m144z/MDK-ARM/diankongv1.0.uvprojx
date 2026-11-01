@@ -500,6 +500,11 @@
               <FileType>1</FileType>
               <FilePath>../App/Src/ec_drop_servo.c</FilePath>
             </File>
+            <File>
+              <FileName>ec_z_servo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Src/ec_z_servo.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

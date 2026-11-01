@@ -224,3 +224,36 @@ f407测试气泵/
 
 # ===== 2026-10-23：带时间戳的备份文件（*.bak 匹配不到 .bak-20261018-003426 这种）=====
 *.bak-*
+
+# ===== 数据集与训练产物（2026-11-01 新增，不入库）=====
+_dataset_*/
+_labels_*/
+_label_*/
+_new_capture*/
+_review_*/
+_deleted_*/
+_check_old/
+_snap/
+_tmp_valset_*/
+_models_*/
+_pi_wheels/
+_two_cam_evidence/
+_device_check/
+_screen_assets/
+_prompts-for-other-ais/
+_train_*/
+_two_cam_pc.log
+_two_cam_pc.err
+*.onnx
+*.cvimodel
+*.whl
+*.npz
+*.pt
+*.jpg
+*.jpeg
+*.png
+
+# 文档里的图片仍然允许入库（上面的 *.jpg/*.png 只针对数据/产物）
+!docs/**/*.jpg
+!docs/**/*.png
+!docs/**/*.jpeg

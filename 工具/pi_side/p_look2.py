@@ -65,5 +65,11 @@ while time.time() - t0 < 8.0 and shown == 0:
                   % (sx_mm, sy_mm, WX[0], WX[1], WY[0], WY[1]))
             continue
         print("      ★滑台取料点 = (%.1f, %.1f) mm  ✅ 在可达区内" % (sx_mm, sy_mm))
-    shown = 1
+    # PATCH-20261029-heartbeat：发送端每 0.5s 会发 count=0 心跳；
+    # 旧逻辑「收到第一批就退出」会被心跳骗成「可见件数=0」⇒ p_go8 门禁误判"没件"。
+    # 现改为：空批次跳过，只有含目标的批次才算看到（8s 到期为止）。
+    if b.targets:
+        shown = 1
+    else:
+        print("  (心跳空帧，继续监听)")
 srv.close()

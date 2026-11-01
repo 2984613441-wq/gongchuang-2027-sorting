@@ -332,6 +332,31 @@ uint16_t ec_motion_plan_open_us_for_class(uint8_t class_id);
  * 用于"按类别选张开脉宽"（见上面的 EC_MOTION_OPEN_US_* 与 ec_motion_plan_open_us_for_class）。
  * 之所以用"新入口 + 老入口包装"而不是给老函数加形参：老签名在 tests/test_motion_plan.c 里
  * 有 22 处调用，加形参要把一份有价值的回归测试改成一堆 `, 800` 噪音；包装方案把改动压到 1 行。 */
+/* ============================================================================
+ * 2026-11-01：新硬件参数包（Z 独立舵机 / 夹爪独立 / 托盘落料槽舵机）
+ *
+ * 三路舵机彼此独立，取放一次需要 7 个脉宽（µs）。这些值**按件（类别）**由上层
+ * 查表填入；因为比赛场地的物料尺寸未知，脉宽要靠"现场测件高/件宽 → 换算"得到，
+ * 见 docs/改造-Z轴双舵机与落料槽舵机-方案-20261101.md 的测量表。
+ * ========================================================================== */
+typedef struct {
+    uint16_t z_travel_us;    /* Z 行进/安全高度（抬起，回程不刮托盘） */
+    uint16_t z_pick_us;      /* Z 取件高度（按件高：薄件低、高件高） */
+    uint16_t z_place_us;     /* Z 放件高度（槽口处，按件高） */
+    uint16_t grip_open_us;   /* 夹爪张开（含待机位） */
+    uint16_t grip_close_us;  /* 夹爪闭合（按件宽） */
+    uint16_t slot_open_us;   /* 槽门放行（= EC_DROP_SERVO_OPEN_US 实测值） */
+    uint16_t slot_close_us;  /* 槽门挡住（= EC_DROP_SERVO_CLOSE_US 实测值） */
+} ec_pick_params_t;
+
+/* 新硬件 15 步取放程序（XY 插补版：两轴同时动）。
+ * 步序见 docs/改造-Z轴双舵机与落料槽舵机-方案-20261101.md §八。
+ * 失败返回 false（坐标为 NULL/越界、参数为 NULL、或步数超出容量）。 */
+bool ec_motion_plan_build_v2(ec_axis_pick_place_t *out,
+                             int16_t pick_x_mm10, int16_t pick_y_mm10,
+                             int16_t place_x_mm10, int16_t place_y_mm10,
+                             const ec_pick_params_t *p);
+
 bool ec_motion_plan_build_with_open(ec_axis_pick_place_t *out,
                                     int16_t pick_x_mm10, int16_t pick_y_mm10,
                                     int16_t place_x_mm10, int16_t place_y_mm10,

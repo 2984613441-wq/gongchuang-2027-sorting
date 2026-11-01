@@ -4,8 +4,10 @@
 #include "ec_board.h"
 #include "ec_barrier_test.h"
 #include "ec_drop_servo.h"
+#include "ec_z_servo.h"
 #include "ec_group_test.h"
 #include "ec_light_ws2812.h"
+#include "ec_pneumatic_gripper.h"
 #include "ec_servo_test.h"
 #include "ec_step_test.h"
 #include "ec_tof.h"
@@ -373,8 +375,11 @@ void ec_diag_process_line(const char *line)
     if (strcmp(line, "HELP") == 0) {
         ec_diag_port_write(
             "HELP PING STATUS INPUTS TOF TOFDBG TOFRAW TOFSEND "
-            "LIGHT ON|OFF LIGHT LV 0-255 LIGHT RGB r g b LIGHT? GRIP n t "
+            "LIGHT ON|OFF LIGHT LV 0-255 LIGHT RGB r g b LIGHT? "
+            "LIGHT2 ON|OFF LIGHT2 LV 0-255 LIGHT2 RGB r g b LIGHT2? GRIP n t "
+            "AIR ON|OFF|? "
             "DROP OPEN|CLOSE|MID|POS us|? "
+            "ZPOS us|UP|DOWN|MID|? SLOT us|OPEN|CLOSE|MID|? "
             "STEP X|Y STEP STOP MOTION ARM "
             "MOVE X|Y DIR0|DIR1 MOVE X|Y DIR0|DIR1 STEPS n HZ f "
             "MOVE XY XDIR0|XDIR1 STEPS n YDIR0|YDIR1 STEPS m HZ f "
@@ -423,6 +428,40 @@ void ec_diag_process_line(const char *line)
                        (unsigned)ec_ws2812_white_level(),
                        (unsigned)EC_WS2812_LED_COUNT);
         ec_diag_port_write(output);
+    } else if (strcmp(line, "LIGHT2 ON") == 0) {
+        /* 2026-10-30 新增：第二路补光灯（WS2812，数据线 PE3 / LIGHT2_EN）。
+         * 实物为两条**独立**灯带（用户确认不级联），所以必须单独控制。 */
+        ec_ws2812_white_on_ch(EC_WS2812_CH1);
+        ec_diag_port_write("OK LIGHT2 ON\r\n");
+    } else if (strcmp(line, "LIGHT2 OFF") == 0) {
+        ec_ws2812_off_ch(EC_WS2812_CH1);
+        ec_diag_port_write("OK LIGHT2 OFF\r\n");
+    } else if (strncmp(line, "LIGHT2 LV ", 10U) == 0) {
+        unsigned lv2 = 0U;
+        if ((sscanf(line, "LIGHT2 LV %u", &lv2) == 1) &&
+            (lv2 <= EC_WS2812_LEVEL_MAX)) {
+            (void)ec_ws2812_set_white_level_ch(EC_WS2812_CH1, (uint8_t)lv2);
+            ec_diag_port_write("OK LIGHT2 LV\r\n");
+        } else {
+            ec_diag_port_write("ERR LIGHT2_USAGE LIGHT2 LV <0-255>\r\n");
+        }
+    } else if (strncmp(line, "LIGHT2 RGB ", 11U) == 0) {
+        unsigned r2 = 0U;
+        unsigned g2 = 0U;
+        unsigned b2 = 0U;
+        if ((sscanf(line, "LIGHT2 RGB %u %u %u", &r2, &g2, &b2) == 3) &&
+            (r2 <= 255U) && (g2 <= 255U) && (b2 <= 255U)) {
+            ec_ws2812_fill_ch(EC_WS2812_CH1, (uint8_t)r2, (uint8_t)g2, (uint8_t)b2);
+            ec_diag_port_write("OK LIGHT2 RGB\r\n");
+        } else {
+            ec_diag_port_write("ERR LIGHT2_USAGE LIGHT2 RGB <r> <g> <b> 0-255\r\n");
+        }
+    } else if (strcmp(line, "LIGHT2?") == 0) {
+        char output2[48];
+        (void)snprintf(output2, sizeof(output2), "OK LIGHT2 LV=%u LED=%u\r\n",
+                       (unsigned)ec_ws2812_white_level_ch(EC_WS2812_CH1),
+                       (unsigned)EC_WS2812_LED_COUNT);
+        ec_diag_port_write(output2);
     } else if (strncmp(line, "GRIP ", 5U) == 0) {
         /* 2026-09-18 新增：台架直控自适应夹爪总线舵机（HX-06L，USART3/PB10）。
          * 用法：GRIP <位置 0-1000> <时间 ms>
@@ -439,6 +478,131 @@ void ec_diag_process_line(const char *line)
                                "ERR GRIP_SEND_FAILED\r\n");
         } else {
             ec_diag_port_write("ERR GRIP_USAGE GRIP <pos 0-1000> <time_ms>\r\n");
+        }
+    } else if (strncmp(line, "AIR", 3U) == 0) {
+        /* 2026-10-26 新增：【气动阀】台架直控（PB11 / TIM2_CH4 / 开关控制）。
+         *
+         * 用法：
+         *   AIR ON    吸附（阀通电，CCR = 20000 = 100% 占空比）
+         *   AIR OFF   释放（阀断电，CCR = 0 = 0% 占空比）
+         *   AIR?      查询就绪状态与当前状态
+         *
+         * 为什么加这个命令：
+         *   原来的测试方式是 main.c 的 while(1) 里每 5 秒自动开/关一次，
+         *   只能"看着它动"，没法手动停在某个状态观察吸力/密封。
+         *   有了 AIR 命令可以手动长时间保持吸附，方便测漏气、测吸力。
+         *
+         * ⚠️ TIM2 的 CH3(PB10 舵机) 与 CH4(PB11 气阀) 共用同一个计数器，
+         *    但各自的 CCR 独立 ⇒ 可以同时工作，互不覆盖。
+         *
+         * ⚠️ 急停 ec_safety_port_stop_all() 只停 PB10，**不会停 PB11**。
+         *    按下急停后气阀保持当前状态（吸附中就继续吸着）。
+         *    要立刻断气只能：AIR OFF / 断气源 / 断电。 */
+        if (strcmp(line, "AIR?") == 0) {
+            char output[96];
+            (void)snprintf(output, sizeof(output),
+                           "OK AIR ready=%u state=%s\r\n",
+                           (unsigned)(ec_pneumatic_gripper_is_ready() ? 1U : 0U),
+                           (ec_pneumatic_gripper_state() != 0U) ? "on" : "off");
+            ec_diag_port_write(output);
+        } else if (strcmp(line, "AIR ON") == 0) {
+            if (!ec_pneumatic_gripper_is_ready()) {
+                ec_diag_port_write("ERR AIR_NOT_READY\r\n");
+            } else {
+                ec_pneumatic_gripper_close();
+                ec_diag_port_write("OK AIR on\r\n");
+            }
+        } else if (strcmp(line, "AIR OFF") == 0) {
+            if (!ec_pneumatic_gripper_is_ready()) {
+                ec_diag_port_write("ERR AIR_NOT_READY\r\n");
+            } else {
+                ec_pneumatic_gripper_open();
+                ec_diag_port_write("OK AIR off\r\n");
+            }
+        } else {
+            ec_diag_port_write("ERR AIR_USAGE AIR ON|OFF|?\r\n");
+        }
+    } else if (strncmp(line, "ZPOS", 4U) == 0) {
+        /* 2026-11-01 新增：Z 轴独立舵机（PB0 / TIM3_CH3）台架直控。
+         * 用法：
+         *   ZPOS UP / DOWN / MID     按 ec_z_servo.h 里的常量发脉宽
+         *   ZPOS <us>                任意脉宽（EC_Z_SERVO_MIN_US..MAX_US）
+         *   ZPOS?                    查询就绪/当前脉宽/上下限
+         * ⚠️ UP/DOWN 目前都是占位（1500），接线实测后改 ec_z_servo.h 的两行常量。 */
+        if (strcmp(line, "ZPOS?") == 0) {
+            char out[112];
+            (void)snprintf(out, sizeof(out),
+                           "OK ZPOS ready=%u cur_us=%u up_us=%u down_us=%u range=%u-%u\r\n",
+                           (unsigned)(ec_z_servo_is_ready() ? 1U : 0U),
+                           (unsigned)ec_z_servo_current_us(),
+                           (unsigned)EC_Z_SERVO_UP_US,
+                           (unsigned)EC_Z_SERVO_DOWN_US,
+                           (unsigned)EC_Z_SERVO_MIN_US,
+                           (unsigned)EC_Z_SERVO_MAX_US);
+            ec_diag_port_write(out);
+        } else if (strcmp(line, "ZPOS UP") == 0) {
+            ec_diag_port_write(ec_z_servo_up() ? "OK ZPOS UP\r\n" : "ERR ZPOS_NOT_READY\r\n");
+        } else if (strcmp(line, "ZPOS DOWN") == 0) {
+            ec_diag_port_write(ec_z_servo_down() ? "OK ZPOS DOWN\r\n" : "ERR ZPOS_NOT_READY\r\n");
+        } else if (strcmp(line, "ZPOS MID") == 0) {
+            ec_diag_port_write(ec_z_servo_mid() ? "OK ZPOS MID\r\n" : "ERR ZPOS_NOT_READY\r\n");
+        } else if (strncmp(line, "ZPOS ", 5U) == 0) {
+            unsigned us = 0U;
+            if ((sscanf(line, "ZPOS %u", &us) == 1) &&
+                (us >= EC_Z_SERVO_MIN_US) && (us <= EC_Z_SERVO_MAX_US)) {
+                if (ec_z_servo_set_us((uint16_t)us)) {
+                    char out[48];
+                    (void)snprintf(out, sizeof(out), "OK ZPOS %u\r\n", us);
+                    ec_diag_port_write(out);
+                } else {
+                    ec_diag_port_write("ERR ZPOS_NOT_READY\r\n");
+                }
+            } else {
+                char out[64];
+                (void)snprintf(out, sizeof(out), "ERR ZPOS_RANGE %u-%u\r\n",
+                               (unsigned)EC_Z_SERVO_MIN_US, (unsigned)EC_Z_SERVO_MAX_US);
+                ec_diag_port_write(out);
+            }
+        } else {
+            ec_diag_port_write("ERR ZPOS_USAGE ZPOS us|UP|DOWN|MID|?\r\n");
+        }
+    } else if (strncmp(line, "SLOT", 4U) == 0) {
+        /* 2026-11-01 新增：托盘落料槽舵机 = 现有 PE5/TIM9_CH1 的落料门（用户确认可复用）。
+         * 与 DROP 是**同一个舵机**，这里提供更贴合语义的别名命令。 */
+        if (strcmp(line, "SLOT?") == 0) {
+            char out[112];
+            (void)snprintf(out, sizeof(out),
+                           "OK SLOT(=DROP) ready=%u cur_us=%u open_us=%u close_us=%u\r\n",
+                           (unsigned)(ec_drop_servo_is_ready() ? 1U : 0U),
+                           (unsigned)ec_drop_servo_current_us(),
+                           (unsigned)EC_DROP_SERVO_OPEN_US,
+                           (unsigned)EC_DROP_SERVO_CLOSE_US);
+            ec_diag_port_write(out);
+        } else if (strcmp(line, "SLOT OPEN") == 0) {
+            ec_diag_port_write(ec_drop_servo_open() ? "OK SLOT OPEN\r\n" : "ERR SLOT_NOT_READY\r\n");
+        } else if (strcmp(line, "SLOT CLOSE") == 0) {
+            ec_diag_port_write(ec_drop_servo_close() ? "OK SLOT CLOSE\r\n" : "ERR SLOT_NOT_READY\r\n");
+        } else if (strcmp(line, "SLOT MID") == 0) {
+            ec_diag_port_write(ec_drop_servo_mid() ? "OK SLOT MID\r\n" : "ERR SLOT_NOT_READY\r\n");
+        } else if (strncmp(line, "SLOT ", 5U) == 0) {
+            unsigned us = 0U;
+            if ((sscanf(line, "SLOT %u", &us) == 1) &&
+                (us >= EC_DROP_SERVO_MIN_US) && (us <= EC_DROP_SERVO_MAX_US)) {
+                if (ec_drop_servo_set_us((uint16_t)us)) {
+                    char out[48];
+                    (void)snprintf(out, sizeof(out), "OK SLOT %u\r\n", us);
+                    ec_diag_port_write(out);
+                } else {
+                    ec_diag_port_write("ERR SLOT_NOT_READY\r\n");
+                }
+            } else {
+                char out[72];
+                (void)snprintf(out, sizeof(out), "ERR SLOT_RANGE %u-%u\r\n",
+                               (unsigned)EC_DROP_SERVO_MIN_US, (unsigned)EC_DROP_SERVO_MAX_US);
+                ec_diag_port_write(out);
+            }
+        } else {
+            ec_diag_port_write("ERR SLOT_USAGE SLOT us|OPEN|CLOSE|MID|?\r\n");
         }
     } else if (strncmp(line, "DROP", 4U) == 0) {
         /* 2026-10-22 新增：XY 最远端【落料舵机】台架直控（PE5 / TIM9_CH1 / 50Hz）。

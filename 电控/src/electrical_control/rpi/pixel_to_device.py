@@ -76,6 +76,31 @@ _LOGGER = logging.getLogger(__name__)
 _CALIBRATED_PIXEL_X_LIMITS = (15.0, 305.0)
 _CALIBRATED_PIXEL_Y_LIMITS = (15.0, 305.0)
 
+# 🔴🔴 2026-10-29 分辨率迁移（320×320 → 1280×720）
+#
+# 背景：视觉链路原本按 **320×320** 输出像素，上面两个常量就是那个时代定的。
+# 现在 MaixCAM 采集/上报改成 **1280×720**（v11 模型训练用的也是 1280×720），
+# 结果 1280 域的像素（如 (118,477)）被 `[15,305]` 判成"像素域外"，
+# 整批件一件都换算不出来（实测：2026-10-29 23:30 p_look2 全被判域外）。
+#
+# 处置：把"有效像素区间"改成**相对帧尺寸的比例**（原 15/320、305/320），
+# 这样换分辨率不用改常量。
+# 兼容性：frame=320×320 时算出来就是 (15,305)，与旧行为**逐值相同**。
+_PIXEL_DOMAIN_LO_RATIO = 15.0 / 320.0
+_PIXEL_DOMAIN_HI_RATIO = 305.0 / 320.0
+
+
+def pixel_domain_limits(frame_w: float, frame_h: float):
+    """按帧尺寸算「有效像素区间」。
+
+    Returns:
+        ((ux_lo, ux_hi), (vy_lo, vy_hi))
+    """
+    return (
+        (_PIXEL_DOMAIN_LO_RATIO * frame_w, _PIXEL_DOMAIN_HI_RATIO * frame_w),
+        (_PIXEL_DOMAIN_LO_RATIO * frame_h, _PIXEL_DOMAIN_HI_RATIO * frame_h),
+    )
+
 def validate_affine(a11: float, a12: float, tx: float,
                     a21: float, a22: float, ty: float) -> Optional[str]:
     """校验一组仿射参数；合法返回 None，不合法返回一句中文原因。
@@ -184,6 +209,9 @@ class PixelToDeviceConverter:
         # 视觉链路输出的帧尺寸，只用于求"图像中心"（见 _optical_axis_point）。
         self.frame_width = 320.0
         self.frame_height = 320.0
+        # 有效像素区间随帧尺寸换算（见 pixel_domain_limits）：
+        # 未标定时按 320×320 的旧口径，加载配置后按实际 frame_width/height 重算。
+        self.pixel_limits = pixel_domain_limits(320.0, 320.0)
         self.is_calibrated = False
 
         if self.config_path.exists():
@@ -245,6 +273,8 @@ class PixelToDeviceConverter:
                 f"frame_width/height={self.frame_width}/{self.frame_height} "
                 "必须是有限正数（inf/NaN 会让光轴落点算不出来）"
             )
+        # 有效像素区间按**实际帧尺寸**换算（2026-10-29 分辨率迁移）
+        self.pixel_limits = pixel_domain_limits(self.frame_width, self.frame_height)
 
         # 读取物体高度（可选节）
         if 'ObjectHeights' in config:
@@ -357,13 +387,16 @@ class PixelToDeviceConverter:
                 _LOGGER.warning("像素 %s=%r 不是有限数：拒识该件", name, value)
                 return None
 
-        if not (_CALIBRATED_PIXEL_X_LIMITS[0] <= float(u) <= _CALIBRATED_PIXEL_X_LIMITS[1]
-                and _CALIBRATED_PIXEL_Y_LIMITS[0] <= float(v) <= _CALIBRATED_PIXEL_Y_LIMITS[1]):
+        # 有效像素区间：按帧尺寸换算（320×320 时 = (15,305)，与旧行为一致；
+        # 1280×720 时 = (60,1220)×(33.75,686.25)，见 pixel_domain_limits）
+        x_lo, x_hi = self.pixel_limits[0]
+        y_lo, y_hi = self.pixel_limits[1]
+        if not (x_lo <= float(u) <= x_hi and y_lo <= float(v) <= y_hi):
             self.last_rejection_reason = (
                 "像素域外：pixel=(%g,%g) 不在标定区间 [%g,%g]x[%g,%g]"
-                % (float(u), float(v),
-                   _CALIBRATED_PIXEL_X_LIMITS[0], _CALIBRATED_PIXEL_X_LIMITS[1],
-                   _CALIBRATED_PIXEL_Y_LIMITS[0], _CALIBRATED_PIXEL_Y_LIMITS[1])
+                " (frame=%.0fx%.0f)"
+                % (float(u), float(v), x_lo, x_hi, y_lo, y_hi,
+                   self.frame_width, self.frame_height)
             )
             _LOGGER.warning("%s，拒识该件", self.last_rejection_reason)
             return None

@@ -244,8 +244,9 @@ void ec_board_enter_safe_state(void)
 
     ec_step_port_disable_all();
     /* 2026-10-18：补光灯是 WS2812，单纯拉低引脚不会熄灭（灯珠内部已锁存），
-     * 必须发送一帧全 0 的 GRB 数据。代价约 1.1ms（含前后复位低电平）。 */
-    ec_ws2812_off();
+     * 必须发送一帧全 0 的 GRB 数据。代价约 1.1ms（含前后复位低电平）。
+     * 2026-10-30：改为**两路都灭**（新增 PE3 第二路灯带），安全/停机路径必须全灭。 */
+    ec_ws2812_off_all();
 }
 
 /* 2026-09-18 新增：补光灯直控。低 = 关（与初始化及安全态一致）。
@@ -743,6 +744,34 @@ void ec_board_drop_servo_stop(void)
     __HAL_TIM_SET_COMPARE(&htim9, TIM_CHANNEL_1, 0U);
 }
 
+/* ---------------------------------------------------------------------------
+ * Z 轴舵机（2026-11-01 新增）：PB0 / TIM3_CH3 / 50 Hz
+ * 与 drop servo 同一套写法：先设比较值，首次调用时启动 PWM 通道。
+ * ⚠️ 通道用 TIM3_CH3，与夹爪（TIM2_CH3）物理独立，互不影响。
+ * ------------------------------------------------------------------------- */
+static bool z_servo_started = false;
+
+bool ec_board_z_servo_set_us(uint16_t pulse_us)
+{
+    if (pulse_us == 0U || pulse_us > htim3.Init.Period) return false;
+
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, pulse_us);
+    if (z_servo_started) return true;
+
+    if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK) return false;
+    z_servo_started = true;
+    return true;
+}
+
+void ec_board_z_servo_stop(void)
+{
+    if (z_servo_started) {
+        (void)HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
+        z_servo_started = false;
+    }
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0U);
+}
+
 uint32_t ec_servo_port_now_ms(void)
 {
     return HAL_GetTick();
@@ -959,6 +988,7 @@ void ec_safety_port_stop_all(void)
 {
     ec_step_port_stop_all();
     ec_servo_port_stop();
+    ec_board_z_servo_stop();      /* 2026-11-01：Z 独立舵机也要停 */
     ec_barrier_port_stop();
 }
 
@@ -971,6 +1001,7 @@ void ec_safety_port_inhibit_power(void)
 {
     /* ESTOP_FB is feedback only; dangerous power is cut by external hardware. */
     ec_servo_port_stop();
+    ec_board_z_servo_stop();      /* 2026-11-01：Z 独立舵机也要停 */
     ec_barrier_port_stop();
     ec_step_port_disable_all();
 }

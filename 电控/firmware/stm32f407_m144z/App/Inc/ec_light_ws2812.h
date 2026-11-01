@@ -59,19 +59,36 @@
 #define EC_WS2812_WHITE_G 200U
 #define EC_WS2812_WHITE_B 90U
 
-/* 使能 DWT 周期计数器并把数据线拉低。可重复调用。 */
+/* ── 两路独立灯带（2026-10-30 用户确认：同款 WS2812，但**分别控制**、不级联）──
+ *   路 0：PC0 = LIGHT_EN   （原灯带，16 颗 × 0.3W）
+ *   路 1：PE3 = LIGHT2_EN  （新增灯带，16 颗 × 0.3W，独立数据线）
+ * 两条数据线各自独立；旧 API（无 _ch 后缀）全部等价于路 0，行为逐字节不变。 */
+typedef enum {
+    EC_WS2812_CH0 = 0U,
+    EC_WS2812_CH1 = 1U,
+    EC_WS2812_CH_NUM = 2U
+} ec_ws2812_ch;
+
+/* 使能 DWT 周期计数器并把两路数据线都拉低。可重复调用。 */
 void ec_ws2812_init(void);
 
 /* 发送调用者提供的 GRB 数组（长度 = 灯珠数 × 3）。 */
 void ec_ws2812_send_grb(const uint8_t *grb, uint16_t len);
+void ec_ws2812_send_grb_ch(ec_ws2812_ch ch, const uint8_t *grb, uint16_t len);
 
 /* 所有灯珠设为同一颜色 / 熄灭。 */
 void ec_ws2812_fill(uint8_t r, uint8_t g, uint8_t b);
+void ec_ws2812_fill_ch(ec_ws2812_ch ch, uint8_t r, uint8_t g, uint8_t b);
 void ec_ws2812_off(void);
+void ec_ws2812_off_ch(ec_ws2812_ch ch);
+void ec_ws2812_off_all(void);   /* 两路都灭：安全态/停机路径用 */
 
 /* 按当前记录的亮度点亮白光；set_white_level 会立即生效。 */
 void ec_ws2812_white_on(void);
+void ec_ws2812_white_on_ch(ec_ws2812_ch ch);
 bool ec_ws2812_set_white_level(uint8_t level);
+bool ec_ws2812_set_white_level_ch(ec_ws2812_ch ch, uint8_t level);
 uint8_t ec_ws2812_white_level(void);
+uint8_t ec_ws2812_white_level_ch(ec_ws2812_ch ch);
 
 #endif /* EC_LIGHT_WS2812_H */

@@ -3,7 +3,17 @@
 from .color_quant import color_name, dominant_color, mmcq, rgb_to_hsl
 from .config import InferenceConfig
 from .coordinates import AffineCoordinateTransform, PixelCenterTransform
-from .depth_fusion import DepthReading, depth_disambiguate, requires_depth_disambiguation
+from .depth_fusion import (
+    CONE_FLATNESS_MIN,
+    CYLINDER_FLATNESS_MAX,
+    MIN_POINTS,
+    ROUND_AMBIGUOUS_GROUP,
+    PointCloudProfile,
+    ambiguity_group_of,
+    disambiguate_round,
+    profile_from_raw_depths,
+    requires_depth_disambiguation,
+)
 from .display_names import format_item_name
 from .drop_table import DropPoint, DropTable, DropTableError, ITEM_TASK_COORD_LIMIT
 from .encoding import (
@@ -74,7 +84,8 @@ __all__ = [
     "COLOR_TO_CODE",
     "ContourFeatures",
     "DEFAULT_COLOR_VOCABULARY",
-    "DepthReading",
+    "PointCloudProfile",
+    "profile_from_raw_depths",
     "DetectionResult",
     "DropPoint",
     "DropTable",
@@ -106,7 +117,7 @@ __all__ = [
     "color_name",
     "color_name_to_id",
     "decode_color_shape",
-    "depth_disambiguate",
+    "disambiguate_round",
     "dominant_color",
     "encode_color_shape",
     "extract_and_classify_roi",
@@ -118,6 +129,7 @@ __all__ = [
     "process_single_target_frame",
     "render_diagnostic",
     "requires_depth_disambiguation",
+    "ambiguity_group_of",
     "rgb_to_hsl",
     "run_vision_loop",
     "to_single_target_json",

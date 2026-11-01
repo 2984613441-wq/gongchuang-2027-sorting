@@ -122,6 +122,14 @@
  * next program step. GRIPPER and Z_SERVO share the same single-servo linkage
  * mechanics, so they share the same settle time (alias, not a second value). */
 #define EC_AXIS_SERVO_SETTLE_MS EC_AXIS_GRIPPER_SETTLE_MS
+
+/* 2026-11-01 新增（Z 与夹爪/槽门拆成三个独立舵机后，各自有各自的到位时间）：
+ *   · Z 舵机：MG996R 空载 90° 约 0.20~0.26s ⇒ 400ms 为 1.5~2 倍余量
+ *   · 槽门舵机：同为 MG996R，取 400ms
+ *   · 夹爪舵机（LDX-335MG）仍用 EC_AXIS_GRIPPER_SETTLE_MS(600)
+ * ⚠️ 这三个值直接决定整轮节拍，实测后可各自下调（见 docs 运动逻辑改造-20261101）。 */
+#define EC_AXIS_Z_SETTLE_MS     UINT32_C(400)
+#define EC_AXIS_SLOT_SETTLE_MS  UINT32_C(400)
 /* 🔴 2026-09-19 实测标定（用户在现场逐档目视，台架 SERVO PB10 Pxxxx）：
  *
  *   增量扫描结果（`工具/pi_servo_sweep.py`，P1000→P1900 每档停 3 秒）：
@@ -136,6 +144,11 @@
  *      越过机械端点会持续堵转、电流拉满、发热甚至烧舵机。
  *   ⚠️ 台架命令的两道闸（ec_diag.c 的 servo_pulse_from_command 与
  *      ec_servo_test.c 的 is_allowed_pulse）已同步加入 900/950。 */
+/* 2026-11-01 Z 独立：Z 轴已改为独立舵机（PB0/TIM3_CH3，见 ec_z_servo.h），
+ * 但下面两个常量**仍沿用与夹爪相同的占位脉宽**（800/1900），因为它们落在
+ * EC_Z_SERVO_MIN/MAX_US(700/2300) 范围内、能通过范围校验。
+ * ⚠️ 接线后必须用 ZPOS 命令实测 Z 自己的 UP/DOWN，再把这两行改成实测值，
+ *    否则 Z 行程与夹爪开度会被绑在一起。 */
 #define EC_AXIS_Z_DOWN_US EC_AXIS_GRIPPER_CLOSE_US  /* 取料点：闭合 + 下压（夹住）= 1900 */
 #define EC_AXIS_Z_UP_US   EC_AXIS_GRIPPER_OPEN_US   /* 落料点：张开 + 抬起（释放）= 跟随 OPEN_US（2026-09-21 起为 800） */
 /* Counted-move timeout margin, mirroring ec_step_test.c. */
@@ -188,7 +201,10 @@ typedef enum {
      *
      * 必须有值：WAIT 步 servo_pulse_us == 0 视为非法（会被 program_is_valid 拒掉），
      * 避免"等待 0ms"这种无意义步混进程序。 */
-    EC_AXIS_STEP_WAIT
+    EC_AXIS_STEP_WAIT,
+    /* 2026-11-01 新增：托盘落料槽舵机步（PE5/TIM9_CH1，复用 ec_drop_servo）。
+     * servo_pulse_us = 槽门脉宽(us)；与 Z 舵机、夹爪舵机完全独立。 */
+    EC_AXIS_STEP_SLOT
 } ec_axis_step_kind_t;
 
 /* 到位后、夹取前的默认停留时长（ms）。见 EC_AXIS_STEP_WAIT 的说明。
@@ -237,7 +253,9 @@ typedef struct {
  * A zeroed slot is an UNUSED step (not "move 0 steps"): the driver
  * validates only the leading used steps and tolerates the unused tail. Only
  * the tail may be zeroed - a used step after an unused one is rejected. */
-#define EC_AXIS_PICK_PLACE_STEP_COUNT 13U
+/* 2026-11-01：15 步新程序（Z 独立 + 夹爪独立 + 槽门）+ 1 个零填充尾槽 = 16。
+ * 旧 12/9 步程序仍可用（更少步），数组只增不减以免破坏既有断言。 */
+#define EC_AXIS_PICK_PLACE_STEP_COUNT 16U
 
 typedef struct {
     ec_axis_step_t step[EC_AXIS_PICK_PLACE_STEP_COUNT];

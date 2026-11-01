@@ -57,6 +57,10 @@ from electrical_control.pick_strategy.selector import (
     Detection,
     VisionFrame,
     describe_selection_limitation,
+    difficulty_tier_of,
+    is_pending,
+    order_by_difficulty_scan,
+    order_by_group_scan,
     order_by_row_scan,
 )
 
@@ -146,7 +150,29 @@ def make_payload_orderer(
                 for d in dets
             ),
         )
-        ordered_dets = order_by_row_scan(frame, config)   # 只按规则排序，不拒识
+        # 🔴 2026-10-26 用户裁决 + 赛规原文确认（省赛规则.txt L262-264）：
+        #   原文「多个颜色和形状相同的货物放进同一个储物盒，**每个货物得 5 分**」
+        #   ⇒ 2 件 = 10 分、4 件 = 20 分 ⇒ **每件都有 5 分边际收益**
+        #   ⇒ 所以「先一类再一类」（填满一个类再换下一个）是**正确策略**——
+        #     落点集中在同一格、减少来回换箱，且不会把时间浪费在组间跳转上。
+        #   ⚠️ 第 3/4 件**不是**边际 0（此前基于"整盒 5 分"的误解已纠正）。
+        #
+        #   同时保留难度分层：好判的先抓（正方体/长方体/五棱柱/正四面体），
+        #   圆柱(tier1)/圆锥(tier2) 留到托盘稀疏、遮挡少时再判 —— 用户口径。
+        #
+        #   ⚠️ 前提：class_id 必须是**打包码 code = shape_idx*5 + color_idx + 1**（1..30），
+        #   这样按 class_id 分组 == 按 (颜色,形状) 分组，与货格绑定口径一致。
+        #   一键回退：换回 order_by_difficulty_scan（只分层不分类）。
+        ordered_dets = order_by_group_scan(frame, config)   # 只按规则排序，不拒识
+        logger.info(
+            "排序分层: %s",
+            " → ".join(
+                "code=%d(tier=%d,pending=%s)" % (
+                    d.class_id, difficulty_tier_of(d),
+                    "Y" if is_pending(d) else "N")
+                for d in ordered_dets
+            ),
+        )
         logger.info(
             "排序输出（策略序）: %s",
             " → ".join("cls=%d(dev_y=%.1f)" % (d.class_id, d.y_mm) for d in ordered_dets),

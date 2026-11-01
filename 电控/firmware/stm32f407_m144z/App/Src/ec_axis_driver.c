@@ -4,6 +4,9 @@
 
 #include "ec_inputs.h"
 #include "ec_servo_test.h"
+#include "ec_z_servo.h"
+#include "ec_drop_servo.h"
+#include "ec_board.h"
 
 /* Safety inputs that must inhibit motion.
  * 2026-09-15 用户裁决：X/Y 不装限位开关，原点 = 上电位置，故 6 个限位输入
@@ -304,15 +307,21 @@ static void start_step(uint8_t index, uint32_t now_ms)
          * 区别只在时长来源 —— 见 poll 里对 settle_ms 的取法。 */
         gripper_settle_at_ms = now_ms;
         state = EC_AXIS_STATE_GRIPPING;
-    } else { /* EC_AXIS_STEP_Z_SERVO */
-        /* 2026-09-16：实机单舵机接在 PB10 = TIM2_CH3，不是本分支原本指向的
-         * PB11 = TIM2_CH4。两条理由：
-         *   1) 台架 SERVO 命令（ec_diag.c）打的也是 PB10，Z 留在 PB10 才能
-         *      用现成台架做脉宽标定（P4 是必做项，旧 1100/1900 已作废）；
-         *   2) ec_safety_port_stop_all() 只停 PB10 —— Z 在 PB11 时急停停不掉
-         *      它，在 PB10 才停得掉。
-         * 两个函数都在 ec_servo_test.h 声明，本文件第 4 行已 include。 */
-        if (!ec_servo_port_start(s->servo_pulse_us)) {
+    } else if (s->kind == EC_AXIS_STEP_Z_SERVO) {
+        /* 2026-11-01 改造：Z 轴已改为**独立舵机**（PB0/TIM3_CH3），不再与夹爪
+         * 共用 PB10/TIM2_CH3。夹爪步（EC_AXIS_STEP_GRIPPER）仍走
+         * ec_servo_port_start()，两者物理独立。
+         * 脉宽由 ec_z_servo_set_us() 负责范围校验（EC_Z_SERVO_MIN/MAX_US）。 */
+        if (!ec_z_servo_set_us(s->servo_pulse_us)) {
+            fault(EC_AXIS_RESULT_PORT_FAIL);
+            return;
+        }
+        gripper_settle_at_ms = now_ms;
+        state = EC_AXIS_STATE_GRIPPING;
+    } else if (s->kind == EC_AXIS_STEP_SLOT) {
+        /* 2026-11-01：托盘落料槽舵机步（PE5/TIM9_CH1，ec_drop_servo）。
+         * 与 diag 的 DROP/SLOT 命令同一路硬件；到位时间按 EC_AXIS_SLOT_SETTLE_MS。 */
+        if (!ec_drop_servo_set_us(s->servo_pulse_us)) {
             fault(EC_AXIS_RESULT_PORT_FAIL);
             return;
         }
@@ -413,10 +422,21 @@ ec_axis_result_t ec_axis_driver_poll(uint32_t now_ms, uint16_t active_inputs)
          *   · 其余舵机步 → EC_AXIS_GRIPPER_SETTLE_MS（脉宽生效所需的稳定时间）
          * GRIPPING 期间 step_index 仍指向**正在执行的这一步** —— 推进发生在下面的
          * ++step_index，所以此处读到的就是当前步，不会错位。 */
-        uint32_t settle_ms =
-            (program.step[step_index].kind == EC_AXIS_STEP_WAIT)
-                ? (uint32_t)program.step[step_index].servo_pulse_us
-                : EC_AXIS_GRIPPER_SETTLE_MS;
+        uint32_t settle_ms;
+        switch (program.step[step_index].kind) {
+        case EC_AXIS_STEP_WAIT:
+            settle_ms = (uint32_t)program.step[step_index].servo_pulse_us;  /* ms */
+            break;
+        case EC_AXIS_STEP_Z_SERVO:
+            settle_ms = EC_AXIS_Z_SETTLE_MS;
+            break;
+        case EC_AXIS_STEP_SLOT:
+            settle_ms = EC_AXIS_SLOT_SETTLE_MS;
+            break;
+        default:
+            settle_ms = EC_AXIS_GRIPPER_SETTLE_MS;
+            break;
+        }
 
         if ((uint32_t)(now_ms - gripper_settle_at_ms) >= settle_ms) {
             ++step_index;

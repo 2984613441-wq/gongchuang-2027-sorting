@@ -58,6 +58,24 @@ uint32_t ec_tof_errors(void) { return 0U; }
 uint32_t ec_tof_raw_bytes(void) { return 0U; }
 uint32_t ec_tof_uart_errors(void) { return 0U; }
 void ec_tof_send_test(void) { }
+/* 2026-10-26：AIR 命令（气动阀 PB11/TIM2_CH4）的桩。
+ * 主机测试不编译 ec_pneumatic_gripper.c（依赖 TIM2 HAL）。 */
+bool fake_air_ready = true;
+uint8_t fake_air_state = 0U;
+bool ec_pneumatic_gripper_is_ready(void) { return fake_air_ready; }
+uint8_t ec_pneumatic_gripper_state(void) { return fake_air_state; }
+void ec_pneumatic_gripper_init(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_open(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_close(void) { fake_air_state = 1U; }
+void ec_pneumatic_gripper_neutral(void) { fake_air_state = 0U; }
+void ec_pneumatic_gripper_set_pulse(uint16_t pulse_us)
+{
+    fake_air_state = (pulse_us != 0U) ? 1U : 0U;
+}
+uint16_t ec_pneumatic_gripper_get_pulse(void)
+{
+    return (fake_air_state != 0U) ? 20000U : 0U;
+}
 
 /* 2026-10-18 新增：TOFRAW 命令的桩 */
 uint8_t ec_tof_raw_ring(uint8_t *out, uint8_t max)

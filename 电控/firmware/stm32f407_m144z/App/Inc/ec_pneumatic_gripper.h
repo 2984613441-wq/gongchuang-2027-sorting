@@ -5,6 +5,7 @@
 #ifndef EC_PNEUMATIC_GRIPPER_H
 #define EC_PNEUMATIC_GRIPPER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /**
@@ -12,6 +13,21 @@
  * @note 在main函数中调用，MX_TIM2_Init()之后
  */
 void ec_pneumatic_gripper_init(void);
+
+/**
+ * @brief 初始化是否成功（PWM 通道已启动）
+ * @return true = 可用；false = 初始化失败，所有动作都应被拒绝
+ * @note  2026-10-26 新增。仿照 ec_drop_servo 的 fail-closed 设计：
+ *        外设可缺席（没接气阀），但缺席时动作必须明确返回失败，
+ *        而不是静默下发一个没人执行的 CCR。
+ */
+bool ec_pneumatic_gripper_is_ready(void);
+
+/**
+ * @brief 当前状态
+ * @return 1 = 吸附中（阀通电），0 = 释放（阀断电）
+ */
+uint8_t ec_pneumatic_gripper_state(void);
 
 /**
  * @brief 设置气动夹爪脉宽（微秒）

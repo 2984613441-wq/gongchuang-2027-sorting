@@ -327,3 +327,30 @@ def test_live_factory_rejects_uncalibrated_without_exception(tmp_path, chain_mod
     source.set_permitted(True)
     source.ingest(_BATCH)
     assert source.next_if_permitted() is None
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2026-10-29 分辨率迁移回归：视觉链路 320x320 → 1280x720
+# ─────────────────────────────────────────────────────────────────────────────
+def test_frame_resolution_migration_1280x720_domain(tmp_path):
+    """frame=1280x720 时像素域按比例放大，1280 域像素不再被判「像素域外」。"""
+    path = _write_config(tmp_path, overrides={"frame_width": "1280", "frame_height": "720"})
+    conv = calibration.PixelToDeviceConverter(path)
+    assert conv.frame_width == 1280.0
+    assert conv.frame_height == 720.0
+    (x_lo, x_hi), (y_lo, y_hi) = conv.pixel_limits
+    assert (x_lo, x_hi) == pytest.approx((60.0, 1220.0))
+    assert (y_lo, y_hi) == pytest.approx((33.75, 686.25))
+    # (118,477) 在旧 320 域下会被判域外；1280 域必须在域内（后续失败原因不得是像素域外）
+    conv.pixel_to_device(118, 477, 3, check_workspace=False)
+    assert "像素域外" not in (conv.last_rejection_reason or "")
+
+
+def test_frame_resolution_backward_compatible_320(tmp_path):
+    """没写 frame_width/height 时退回 320 域，行为与迁移前逐值一致。"""
+    path = _write_config(tmp_path)
+    conv = calibration.PixelToDeviceConverter(path)
+    assert conv.frame_width == 320.0
+    assert conv.frame_height == 320.0
+    assert conv.pixel_limits == ((15.0, 305.0), (15.0, 305.0))
+    conv.pixel_to_device(400, 400, 3, check_workspace=False)
+    assert "像素域外" in (conv.last_rejection_reason or "")
