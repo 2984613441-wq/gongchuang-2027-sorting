@@ -14,6 +14,7 @@ from electrical_control.rpi.place_verifier import (
     PlaceCheck,
     Verdict,
     verify_place,
+    verify_place_color,
 )
 from electrical_control.rpi.slot_allocator import SlotAllocator
 
@@ -123,3 +124,41 @@ def test_correct_persists_to_journal():
 
     reloaded = SlotAllocator(mode="dynamic", journal_path=journal, round_id="r1")
     assert reloaded.assignment() == {21: box}
+
+# --------------------------------------------------------------------------- #
+# 颜色级复看（副相机在落料位只判颜色）
+# --------------------------------------------------------------------------- #
+def test_color_match():
+    r = verify_place_color(11, 1)          # 11 = 圆柱+红，观测红
+    assert r.verdict is Verdict.MATCH
+    assert r.observed_code == 11
+
+
+def test_color_mismatch_infers_actual_code():
+    r = verify_place_color(11, 4)          # 圆柱+红 → 观测蓝 ⇒ 推断 14
+    assert r.verdict is Verdict.MISMATCH
+    assert r.observed_code == 14
+    assert r.needs_ledger_fix is True
+    assert "推断" in r.detail
+
+
+def test_color_unknown_does_nothing():
+    r = verify_place_color(11, 0)
+    assert r.verdict is Verdict.UNKNOWN
+    assert r.observed_code is None
+    assert r.needs_ledger_fix is False
+
+
+@pytest.mark.parametrize("bad_color", [6, -1, 255])
+def test_color_out_of_range_is_unknown(bad_color):
+    assert verify_place_color(11, bad_color).verdict is Verdict.UNKNOWN
+
+
+def test_color_mismatch_can_drive_ledger_fix():
+    """颜色级 MISMATCH 的推断 code 能直接喂给台账纠正。"""
+    alloc = SlotAllocator(mode="dynamic", journal_path=_journal("fix_color.json"),
+                          round_id="r1")
+    box = alloc.box_for(11)
+    r = verify_place_color(11, 4)          # 推断 14
+    assert alloc.correct(r.expected_code, r.observed_code, box) is True
+    assert alloc.assignment() == {14: box}

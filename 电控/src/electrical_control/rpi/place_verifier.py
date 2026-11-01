@@ -30,7 +30,7 @@ from enum import Enum
 
 _LOGGER = logging.getLogger(__name__)
 
-__all__ = ["Verdict", "PlaceCheck", "verify_place"]
+__all__ = ["Verdict", "PlaceCheck", "verify_place", "verify_place_color"]
 
 
 class Verdict(str, Enum):
@@ -66,6 +66,48 @@ class PlaceCheck:
     def needs_ledger_fix(self) -> bool:
         """MISMATCH 且能确定实际 code ⇒ 需要纠正台账。"""
         return self.verdict is Verdict.MISMATCH and self.observed_code is not None
+
+
+def verify_place_color(
+    expected_code: int,
+    observed_color: int,
+    *,
+    detail: str = "",
+) -> PlaceCheck:
+    """**颜色级**复看（副相机在落料位只判颜色，不判形状）。
+
+    判定：
+      * ``observed_color == 0``（判不出/太暗/遮挡）⇒ UNKNOWN，不动作；
+      * 与 ``expected_code`` 自带颜色一致 ⇒ MATCH；
+      * 不一致 ⇒ MISMATCH，且 ``observed_code`` = **按形状不变推断**的实际 code
+        （标注 inferred，因为形状没有复看）。
+
+    为什么只判颜色：形状在主相机抓取前已由 YOLO 判过；混料主要来源是颜色；
+    树莓派没有 YOLO 运行时，在落料位再判形状要另建通道、节拍也紧。
+    """
+    expected = int(expected_code)
+    color = int(observed_color)
+    expected_color = (expected - 1) % 5 + 1 if 1 <= expected <= 30 else 0
+
+    if color == 0:
+        return PlaceCheck(Verdict.UNKNOWN, expected, None,
+                          detail or "落料位判不出颜色")
+    if not (1 <= color <= 5):
+        return PlaceCheck(Verdict.UNKNOWN, expected, None,
+                          detail or "颜色值越界：%d" % color)
+    if color == expected_color:
+        return PlaceCheck(Verdict.MATCH, expected, expected, detail)
+
+    from .color_judge import infer_code_from_color
+
+    inferred = infer_code_from_color(expected, color)
+    _LOGGER.warning(
+        "落料位颜色复看不符：期望 code=%d(颜色=%d)，观测颜色=%d ⇒ 推断实际 code=%s",
+        expected, expected_color, color, inferred)
+    return PlaceCheck(
+        Verdict.MISMATCH, expected, inferred,
+        "颜色不符（推断值，形状未复看）：%s" % (detail or ""),
+    )
 
 
 def verify_place(
