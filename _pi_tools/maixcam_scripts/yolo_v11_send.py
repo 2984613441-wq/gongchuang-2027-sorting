@@ -55,6 +55,94 @@ LABELS = ["cube", "cuboid", "cylinder",
           "pentagonal_prism", "cone", "tetrahedron"]
 # shape_id 1..6（与 stage1_color_v6_send.SHAPE_TO_ID 对齐）
 SHAPE_ID = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6}
+
+# ── 2026-11-01 新增：颜色判定 + code(1..30) 编码（协议 V1.0 口径）────────────
+# code = (shape-1)*5 + color + 1
+#   shape 1..6 = cube/cuboid/cylinder/pentagonal_prism/cone/tetrahedron
+#   color 1..5 = red / yellow / green / blue / white
+# ⚠️ 下面 5 组 HSV 阈值【待实测】：必须在**固定补光灯 + 锁定曝光/AWB**下标定。
+#    未标定前建议 --id-mode shape（默认，保持现状）。
+COLOR_NAMES = ("red", "yellow", "green", "blue", "white")
+CODE_UNKNOWN = 0
+
+
+def _rgb_to_hsv255(r: int, g: int, b: int):
+    """RGB(0..255) → (H 0..255, S 0..255, V 0..255)，不依赖 colorsys。"""
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    v = mx
+    if mx == 0:
+        return 0, 0, 0
+    s_ = int(round(255.0 * (mx - mn) / mx))
+    d = mx - mn
+    if d == 0:
+        return 0, s_, v
+    if mx == r:
+        h = (60.0 * ((g - b) / float(d))) % 360.0
+    elif mx == g:
+        h = 60.0 * ((b - r) / float(d)) + 120.0
+    else:
+        h = 60.0 * ((r - g) / float(d)) + 240.0
+    return int(round(h / 360.0 * 255.0)) % 256, s_, v
+
+
+def classify_color_hsv(r: int, g: int, b: int) -> int:
+    """返回 color 1..5；判不出返回 0。阈值【待实测】。"""
+    h, s_, v = _rgb_to_hsv255(r, g, b)
+    if s_ < 40 and v >= 150:
+        return 5          # white：低饱和 + 高亮
+    if v < 40:
+        return 0          # 太暗，不猜
+    if s_ < 40:
+        return 0          # 灰/暗灰，不猜
+    if h < 12 or h >= 243:
+        return 1          # red（红色跨 0 界）
+    if 12 <= h < 38:
+        return 2          # yellow
+    if 38 <= h < 100:
+        return 3          # green
+    if 100 <= h < 175:
+        return 4          # blue
+    return 0              # 其余（紫/橙过渡带）不猜
+
+
+def _sample_rgb(img, x: int, y: int):
+    """取一个像素的 RGB；越界/接口不适用返回 None。"""
+    try:
+        px = img.get_pixel(int(x), int(y))
+    except Exception:
+        return None
+    if px is None:
+        return None
+    if isinstance(px, int):                      # 兼容灰度/打包格式
+        return (px >> 16) & 0xFF, (px >> 8) & 0xFF, px & 0xFF
+    if len(px) >= 3:
+        return int(px[0]), int(px[1]), int(px[2])
+    return None
+
+
+def color_of_box(img, x: int, y: int, w: int, h: int) -> int:
+    """框内 5 点采样投票 → color 1..5；无有效票返回 0。"""
+    pts = [(0.50, 0.50), (0.25, 0.50), (0.75, 0.50), (0.50, 0.25), (0.50, 0.75)]
+    votes = {}
+    for fx, fy in pts:
+        rgb = _sample_rgb(img, x + int(w * fx), y + int(h * fy))
+        if rgb is None:
+            continue
+        c = classify_color_hsv(*rgb)
+        if c:
+            votes[c] = votes.get(c, 0) + 1
+    if not votes:
+        return 0
+    best = max(votes.items(), key=lambda kv: kv[1])
+    return best[0] if best[1] >= 2 else 0        # 至少 2 票才算数，避免噪声
+
+
+def code_of(shape_id: int, color_id: int) -> int:
+    """(shape 1..6, color 1..5) → code(1..30)；color=0 返回 CODE_UNKNOWN。"""
+    if not color_id:
+        return CODE_UNKNOWN
+    return (int(shape_id) - 1) * 5 + int(color_id)
 ANGLE_NONE = 0xFF
 
 
@@ -135,6 +223,9 @@ def main() -> int:
     ap.add_argument("--display", type=int, default=0, help="1 = 屏幕同步显示")
     ap.add_argument("--dry-run", action="store_true", help="只打印不联网")
     ap.add_argument("--verbose", type=int, default=1)
+    ap.add_argument("--id-mode", choices=("shape", "code"), default="shape",
+                    help="id 字节语义：shape=shape_id(1..6)（默认，现状）；"
+                         "code=code(1..30)（协议 V1.0，颜色进链路）")
     args = ap.parse_args()
 
     if not os.path.exists(args.model):
@@ -204,7 +295,14 @@ def main() -> int:
                     continue          # 只发 6 类（防越界 id 让整批被拒）
                 cx = int(o.x + o.w / 2)
                 cy = int(o.y + o.h / 2)
-                dets.append((SHAPE_ID[cls], int(round(float(o.score) * 100)), cx, cy))
+                shape_id = SHAPE_ID[cls]
+                if args.id_mode == "code":
+                    color_id = color_of_box(frame, int(o.x), int(o.y),
+                                            int(o.w), int(o.h))
+                    id_byte = code_of(shape_id, color_id)
+                else:
+                    id_byte = shape_id
+                dets.append((id_byte, int(round(float(o.score) * 100)), cx, cy))
 
             now = time.time()
             # 有件 ⇒ 立刻发；无件 ⇒ 500ms 心跳空帧（让树莓派区分"没货"和"断链"）

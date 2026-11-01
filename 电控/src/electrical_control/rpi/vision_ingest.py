@@ -8,6 +8,8 @@ layer and never emits a serial frame.
 
 from __future__ import annotations
 
+import os
+
 import logging
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
@@ -50,6 +52,46 @@ ACTIVE_CLASS_IDS = frozenset({0, 2, 3, 4, 5, 6})
 # 依据：docs/交接台账-2026-09-17.md §2.1；裁决材料
 #       docs/design/2026-09-16-货物图片命名与image_id裁决.md
 BATCH_ID_BYTE_IS_BOX_ID = True
+
+# ── 2026-11-01 新增：id 字节 = code(1..30) 模式 ──────────────────────────────
+# 背景（docs/协议影响分析-20261101.md、interface-contract V1.0 草案）：
+#   颜色必须进决策；主相机本地「YOLO 形状 + 同框 HSV 颜色」算出
+#   code = (shape-1)*5 + color + 1（shape 1..6 = cube/cuboid/cylinder/
+#   pentagonal_prism/cone/tetrahedron；color 1..5 = red/yellow/green/blue/white），
+#   一个字节就能放下 1..30，**线格式不变**。
+#   code = 0 表示「形状或颜色判不出」⇒ 只丢该件（不猜）。
+#
+# 开关取值：
+#   "box_id"（默认，保持现状）：id 字节 = box_id(1..6)，颜色由视觉侧折叠成货格号
+#   "code"                   ：id 字节 = code(1..30)，由上层按 [BoxMap] 映射货格
+# 环境变量 BATCH_ID_BYTE_MODE 可覆盖（部署时逐台切换，避免两端同时改）。
+BATCH_ID_BYTE_MODE = os.environ.get("BATCH_ID_BYTE_MODE", "box_id").strip().lower()
+
+#: code(1..30) 的两个分量。shape 1..6、color 1..5。
+SHAPE_COUNT = 6
+COLOR_COUNT = 5
+CODE_UNKNOWN = 0
+
+
+def code_to_shape_color(code: int) -> tuple[int, int] | None:
+    """code(1..30) → (shape 1..6, color 1..5)；非法/未知返回 None。"""
+    code = int(code)
+    if not (1 <= code <= SHAPE_COUNT * COLOR_COUNT):
+        return None
+    shape = (code - 1) // COLOR_COUNT + 1
+    color = (code - 1) % COLOR_COUNT + 1
+    return shape, color
+
+
+def shape_color_to_code(shape: int, color: int) -> int:
+    """(shape 1..6, color 1..5) → code(1..30)。"""
+    shape = int(shape)
+    color = int(color)
+    if not (1 <= shape <= SHAPE_COUNT):
+        raise PayloadError(f"shape {shape} out of range 1..{SHAPE_COUNT}")
+    if not (1 <= color <= COLOR_COUNT):
+        raise PayloadError(f"color {color} out of range 1..{COLOR_COUNT}")
+    return (shape - 1) * COLOR_COUNT + color
 
 _LOGGER = logging.getLogger(__name__)
 # BATCH_TARGETS per-target wire size (interface-contract §5.1, frozen 2026-09-01).
@@ -103,7 +145,21 @@ def parse_batch_targets(data: bytes) -> BatchTargets:
         #    那一支会让 box_id 留 None → 上层 socket_vision_source 全部拒识
         #    → 一件都出不了货。必须先补 class_id → box_id 的映射。
         #    详见本文件顶部 :37-47 的说明。
-        if BATCH_ID_BYTE_IS_BOX_ID:
+        if BATCH_ID_BYTE_MODE == "code":
+            # 2026-11-01：id 字节 = code(1..30)（见文件顶部说明）
+            if id_byte == CODE_UNKNOWN:
+                _LOGGER.warning(
+                    "id 字节 0（code 模式）= 形状/颜色判不出：拒识该件，其余照常")
+                continue
+            pair = code_to_shape_color(id_byte)
+            if pair is None:
+                _LOGGER.warning(
+                    "id 字节 %d 不在 code 1..%d（code 模式）：拒识该件，其余照常",
+                    id_byte, SHAPE_COUNT * COLOR_COUNT)
+                continue
+            class_id = id_byte          # 冻结口径：class_id = code(1..30)
+            box_id = None               # 由上层 [BoxMap] 映射（不在解析层猜）
+        elif BATCH_ID_BYTE_IS_BOX_ID:
             if not (1 <= id_byte <= 6):
                 # 0（或其它越界值）= 视觉认不出这个件的颜色 → 只丢这一件，
                 # 不能整帧抛错：否则同一帧里认得出来的件会被一起丢掉。
