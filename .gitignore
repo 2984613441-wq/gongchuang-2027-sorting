@@ -264,3 +264,6 @@ _labelimg_main/
 交付-*.zip
 _pi_tools/*.log
 _pi_tools/*.npz
+
+# pytest 每次运行生成的策略变体 ini（测试夹具本身仍在库内）
+电控/tests/pick_strategy/_tmp/variant_*.ini
