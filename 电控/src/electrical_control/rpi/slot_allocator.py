@@ -102,6 +102,39 @@ class SlotAllocator:
         self._assign(code, chosen)
         return chosen
 
+    def correct(self, expected_code: int, actual_code: int, box_id: int) -> bool:
+        """落料位复看发现不一致时**纠正台账**（2026-11-01）。
+
+        场景：派发时以为 code=A 放到 box=B，复看发现该格里实际是 code=C。
+        处置：
+          * 解除 A→B（若 A 确实指向 B）；
+          * 记 C→B（同格复用规则从此按实际走）；
+          * 若 C 已指向别的格（另一处不一致）⇒ 只记日志、不改 C 的旧映射，返回 False，
+            让上层人工/后续复看去收敛，避免静默覆盖。
+        """
+        expected_code = int(expected_code)
+        actual_code = int(actual_code)
+        box_id = int(box_id)
+        if box_id not in self._boxes:
+            _LOGGER.warning("复看纠正：box_id=%d 不在可用货格 %s，忽略",
+                            box_id, self._boxes)
+            return False
+        if self._code_to_box.get(actual_code, box_id) != box_id:
+            _LOGGER.warning(
+                "复看纠正冲突：实际 code=%d 已映射到 box=%d，但复看在 box=%d 看到它；"
+                "保留旧映射，不改",
+                actual_code, self._code_to_box[actual_code], box_id)
+            return False
+        if self._code_to_box.get(expected_code) == box_id:
+            del self._code_to_box[expected_code]
+        self._box_to_code[box_id] = actual_code
+        self._code_to_box[actual_code] = box_id
+        self._last_box = box_id
+        self._save()
+        _LOGGER.info("复看纠正：box=%d 实际为 code=%d（原以为 code=%d）",
+                     box_id, actual_code, expected_code)
+        return True
+
     def assignment(self) -> dict[int, int]:
         """只读副本：code -> box_id。"""
         return dict(self._code_to_box)
