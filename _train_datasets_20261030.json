@@ -1,0 +1,20 @@
+[
+ {
+  "tag": "main",
+  "src": "_dataset_main_20261030_复核后",
+  "dst": "_train_main_20261030",
+  "total": 136,
+  "train": 109,
+  "val": 27,
+  "yaml": "_train_main_20261030\\data.yaml"
+ },
+ {
+  "tag": "cam2",
+  "src": "_dataset_cam2_复核后",
+  "dst": "_train_cam2_20261030",
+  "total": 56,
+  "train": 45,
+  "val": 11,
+  "yaml": "_train_cam2_20261030\\data.yaml"
+ }
+]

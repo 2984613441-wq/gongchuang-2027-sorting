@@ -1,0 +1,473 @@
+
+===== 第 1 页 =====
+TOFSense-M 用户手册 V3.0
+语言：简体中文
+固件版本：V2.0.2
+NAssistant 助手版本：V4.11.0
+产品系列：TOFSense-M，TOFSense-MS
+
+===== 第 2 页 =====
+Copyright©NooploopLTd2024.AllRightsReserved. 目录
+目录
+目录...................................................................................................................................................2
+免责声明...........................................................................................................................................3
+1 介绍...............................................................................................................................................5
+2 串口输出.......................................................................................................................................5
+2.1 主动输出...........................................................................................................................5
+2.2 查询输出...........................................................................................................................5
+3 CAN 输出......................................................................................................................................6
+3.1 主动输出...........................................................................................................................6
+3.2 查询输出...........................................................................................................................6
+4 视场角...........................................................................................................................................7
+5 像素点...........................................................................................................................................7
+6 级联测距.......................................................................................................................................8
+7 协议解析.......................................................................................................................................8
+7.1 介绍...................................................................................................................................8
+7.2 组成...................................................................................................................................9
+7.2.1 UART....................................................................................................................9
+7.2.2 CAN.......................................................................................................................9
+7.3 示例.................................................................................................................................10
+7.3.1 NLink_TOFSense_M_Frame0............................................................................10
+7.3.2 NLink_TOFSense_Read_Frame0.......................................................................11
+7.3.3 NLink_TOFSense_CAN_Frame0.......................................................................11
+7.3.4 NLink_TOFSense_CAN_Read_Frame0.............................................................12
+8 常见问题.....................................................................................................................................12
+9 参考.............................................................................................................................................14
+10 简写与首字母缩略...................................................................................................................14
+11 更新日志...................................................................................................................................14
+12 更多信息...................................................................................................................................15
+
+===== 第 3 页 =====
+免责声明
+Copyright©NooploopLTd2024.AllRightsReserved. 3
+免责声明
+Document Information|文档信息
+Nooploop reserves the right to change product specifications without notice. As far as possible
+changes to functionality and specifications will be issued in product specific errata sheets or in new
+versions of this document. Customers are advised to check with Nooploop for the most recent updates
+onthisproduct.
+Nooploop 保留更改产品规格的权利，恕不另行通知。尽可能将改变的功能和规格以产品特
+定勘误表或本文件的新版本发布。建议客户与Nooploop 一起检查了解该产品的最新动态。
+Life Support Policy|生命保障政策
+Nooploop products are not authorized for use in safety-critical applications (such as life support)
+where a failure of the Nooploop product would cause severe personal injury or death. Nooploop
+customers using or selling Nooploop products in such a manner do so entirely at their own risk and
+agreetofullyindemnifyNooploopanditsrepresentativesagainstanydamagesarisingoutoftheuseof
+Nooploopproductsinsuchsafety-criticalapplications.
+Nooploop 产品未被授权用于失效的安全关键应用（如生命支持），在这种应用中，Nooploop
+产品的故障可能会导致严重的人身伤害或死亡。以这种方式使用或销售 Nooploop 产品的
+Nooploop 客户完全自行承担风险，并同意对 Nooploop 及其代表在此类安全关键应用中使用
+Nooploop 产品所造成的任何损害给予充分赔偿。
+Regulatory Approvals|管理批准
+The TOFSense-M series sensors, as supplied from Nooploop currently have the following laser
+product certifications. Users need to confirm whether these certifications are applicable according to
+the region where such products are used or sold. All products developed by the user incorporating the
+TOFSense-M series sensors must be approved by the relevant authority governing radio emissions in
+any given jurisdiction priorto the marketing orsale of such products inthat jurisdiction and user bears
+allresponsibilityforobtainingsuchapprovalasneededfromtheappropriateauthorities.
+由Nooploop 提供的TOFSense-M 系列传感器目前获得的激光产品认证如下，用户需根据使
+用或销售此类产品的所在地区确认是否适用这些认证。用户开发的包含TOFSense-M 系列传感器
+的所有产品必须在该管辖区内销售或销售此类产品之前，由管理任何给定管辖区激光产品的相关
+主管部门批准，并且用户应根据需要负责获得相关主管部门的批准。
+
+===== 第 4 页 =====
+免责声明
+Copyright©NooploopLTd2024.AllRightsReserved. 4
+认证说明：
+ TOFSense-M 系列产品符合IEC60825-1:2014 第3 版规定的Class1 标准
+1. Caution - Use of controls or adjustments or performance of procedures other than those specified
+hereinmayresultinhazardousradiationexposure.
+2. According to IEC 60825-1:2014 Safety of laser products - Part 1:Equipment classification and
+requirements.
+ TOFSense-M 系列产品符合GB7247.1-2012 规定的1 类激光产品标准
+1. 注意：若不按规定使用控制或调整装置、或执行各步操作，就可能引起有害的辐射照射。
+2. 依据GB7247.1-2012 激光产品的安全 - 第1 部分：设备分类、要求。
+
+===== 第 5 页 =====
+介绍
+Copyright©NooploopLTd2024.AllRightsReserved. 5
+1 介绍
+这份文档主要介绍如何使用TOFSens-M、TOFSens-MS 系统以及使用过程中需要注意的事
+项，您可能需要参考以下资料辅助理解：
+ TOFSense-M_Datasheet.pdf
+2 串口输出
+UART 模式具有两种输出方式：主动输出ActiveOutput、查询输出QueryOutput，两种输出
+方式可以通过在NAssistant 软件上修改数据输出方式进行切换。
+通过USB 转TTL 模块（线序和供电电压参考数据手册）连接TOFSense 系列产品到NAssistant
+软件，识别成功后点击
+ 进入设置页面，配置完参数后需要点击写入参数按钮来保存参数，写
+入参数成功后模块会自动重启，等待重启后可以读取一次参数来确认参数是否写入成功。
+2.1 主动输出
+UART 主动输出模式仅可在单模块时使用。
+接口类型设置为UART，数据输出方式设置为ACTIVE，UART 主动输出模式配置如图 1
+所示，写入参数模块重新启动后会主动上报数据。
+该模式下模块以固定频率（8*8 模式15Hz、4*4 模式60Hz）主动输出测量信息，输出格式
+遵循NLink_TOFSense_M_Frame0 协议。
+图 1：UART 主动输出模式配置图
+2.2 查询输出
+UART 查询输出模式可在单模块与级联时使用。
+接口类型设置为UART，数据输出方式设置为INQUIRE，UART 查询输出模式配置如图 2
+所示，写入参数模块重新启动后将不会再主动上报数据。
+该模式下通过控制器向期望查询模块发送包含该模块ID 的查询指令，模块即可输出一帧测
+量 信 息 。 查 询 帧 格 式 遵 循 协 议 NLink_TOFSense_Read_Frame0 ， 输 出 帧 格 式 遵 循 协 议
+NLink_TOFSense_M_Frame0。
+
+===== 第 6 页 =====
+CAN 输出
+Copyright©NooploopLTd2024.AllRightsReserved. 6
+图 2：UART 查询输出模式配置图
+3 CAN 输出
+CAN 模式具有两种输出方式：主动输出ActiveOutput、查询输出QueryOutput，两种输出
+方式可以通过在NAssistant 软件上修改数据输出方式进行切换。
+通过USB 转TTL 模块（线序和供电电压参考数据手册）连接TOFSense 系列产品到NAssistant
+软件，识别成功后点击
+ 进入设置页面，配置完参数后需要点击写入参数按钮来保存参数。（如
+果之前已经切换到了CAN 或IO 模式上位机将无法直接识别，需按照FAQ 中的方式更改模式）
+3.1 主动输出
+CAN 主动输出模式可在单模块与级联时使用。
+接口类型设置为CAN，数据输出方式设置为ACTIVE，CAN 主动输出模式配置如图 3 所示，
+写入参数模块重新启动后会主动上报数据（写入参数后，模块重新上电后为CAN 模式，NAssistant
+将暂时无法使用，需要使用例如CAN 分析仪等设备进行测试）。
+该模式下模块以10Hz 的频率主动输出测量信息（8*8 模式和4*4 模式分别连续输出64 帧和
+16 帧，每帧输出一个像素点的测距信息），输出格式遵循协议NLink_TOFSense_CAN_Frame0。
+图 3：CAN 主动输出模式配置图
+3.2 查询输出
+CAN 查询输出模式可在单模块与级联时使用。
+接口类型设置为CAN，数据输出方式设置为INQUIRE，CAN 查询输出模式配置如图 4 所
+示，写入参数模块重新启动后将不会再主动上报数据。（写入参数后，模块重新上电后为CAN
+模式，NAssistant 将暂时无法使用，需要使用例如CAN 分析仪等设备进行测试）。
+
+===== 第 7 页 =====
+视场角
+Copyright©NooploopLTd2024.AllRightsReserved. 7
+该模式下通过控制器向期望查询模块发送包含该模块ID 的查询指令，模块即可输出该模块
+所 有 像 素 点 的 测 量 信 息 （8*8 模 式 64 帧 ，4*4 模 式 16 帧 ） 。 查 询 帧 格 式 遵 循 协 议
+NLink_TOFSense_CAN_Read_Frame0，输出帧格式遵循协议NLink_TOFSense_CAN_Frame0。
+图 4：CAN 查询输出模式配置图
+4 视场角
+视场角参数代表的是模块发射测距光能够覆盖的角度。模块视场角参数为横向&纵向45°，
+对角65°。如下图所示，TOFSense-M 系列的FOV 区域是一个底面为正方形顶点在发射窗口的
+类四棱锥，在正对足够大的被测物体时，其FOV 在被测平面上的覆盖方形范围的边长可以通过
+三角函数估算R=L*tan45°（L：TOFSense-M 系列模块距离被测物体的距离）。
+图 5：TOFSense-M 系列FOV 覆盖区域示意图
+5 像素点
+模块支持64(8*8)与16(4*4)像素点输出，像素点与实际关系如图 6 所示。
+
+===== 第 8 页 =====
+级联测距
+Copyright©NooploopLTd2024.AllRightsReserved. 8
+图 6:FOV 与像素点对应示意图
+6 级联测距
+将多个传感器配置为不同ID 并串联起来，通过一个通信接口即可读取到所有传感器的测距
+信息。连接示意图如图 7 所示，TOFSense-MS 只有一个通信接口，级联需自行转接。
+图 7: 级联测距示意图
+级联测距下，适合UART 查询、CAN 查询、CAN 主动输出三种方式。
+7 协议解析
+7.1 介绍
+本章协议解析示例基于NLink 协议，同时提供了基于C 语言开发的NlinkUnpack 示例解析
+代码，能够有效的减少用户开发周期。
+
+===== 第 9 页 =====
+协议解析
+Copyright©NooploopLTd2024.AllRightsReserved. 9
+根据TOFSense-M 系列产品数据情况，为尽可能用更少的字节数表示更多数据，我们采用整
+形表示浮点数，通过协议帧传输，因此解包时整形数据但带有倍率的实际上为浮点型，需要对应
+除以协议中标识的倍率。
+特别的，对于int24 类型，我们需要先转换成int32 类型，为了保持符号不变，采用左移后
+除以256 的方式。例如对于位置数据，我们采用int24 表示，乘率为1000，解析代码如下：
+uint8_tbyte[]={0xe6,0x0e,0x00};//代表十进制数值：3.814
+//uint8_tbyte[]={0xec,0xfb,0xff};//代表十进制数值：-1.044
+int32_ttemp=(int32_t)(byte[0]<<8|byte[1]<<16|byte[2]<<24)/256;
+floatresult=temp/1000.0f;
+目前协议校验主要为协议帧末尾单字节和校验，示例代码：
+uint8_tverifyCheckSum(uint8_t*data,int32_tlength){
+uint8_tsum=0;
+for(int32_ti=0;i<length-1;++i){
+sum+=data[i];
+}
+returnsum==data[length-1];
+}
+7.2 组成
+7.2.1 UART
+串口默认配置为：数据位 8bit，停止位 1bit，无奇偶校验，无流控制，默认波特率921600。
+UART 接口下每个包含距离的数据帧由400/112（8*8/4*4）个字节的十六进制数据组成。距
+离等数据均以小端模式排列。串口通信输出协议数据帧格式如表 1 所示，Protocol 由FrameHeader
+（帧头）、FunctionMark（功能字）、Data（数据）、 SumCheck（校验和）组成。
+表 1:Protocol 组成
+FrameHeader + FunctionMark + Data + SumCheck
+FrameHeader：帧头，固定为0x57。
+FunctionMark：功能字，输出协议帧该位固定为0x01，查询协议帧该位固定为0x10。
+Data：数据段，输出协议帧包含模块ID、系统时间System_time、以及按照0~63 顺序排列
+各个像素点对应的数据包，每个数据包分别为测量值dis、距离状态disstatus、信号强度signal
+strength，查询协议帧仅包含被查询模块的ID。
+SumCheck：校验和，对从FrameHeader 到Data 的所有字节进行求和计算，取低 8 位。
+输 出 协 议 帧 详 见 表 2 ：NLink_TOFSense_M_Frame0 解 析 表 ， 查 询 协 议 帧 详 见 表 3 ：
+NLink_TOFSense_Read_Frame0 解析表。
+7.2.2 CAN
+CAN 通信支持波特率修改以及ID 修改协议内容如下：
+默认波特率1000000，接收ID 为0x200+模块ID，发送ID 固定为0x402。
+Data：数据段，输出协议帧包含测量值dis、距离状态disstatus、信号强度signalstrength 以
+及此帧对应像素点位置index，查询协议帧仅包含被查询模块的ID。
+由于CAN 传输字节有限，所以TOFSense-M 系列8*8（4*4）模式数据一次传输分64（16）
+帧发送。
+输出协议帧详见表 4：NLink_TOFSense_CAN_Frame0 解析表，查询协议帧详见表 5：
+
+===== 第 10 页 =====
+协议解析
+Copyright©NooploopLTd2024.AllRightsReserved. 10
+NLink_TOFSense_CAN_Read_Frame0 解析表
+7.3 示例
+本文档中以单模块连续测距为应用场景。
+7.3.1 NLink_TOFSense_M_Frame0
+数据来源：将模块连接上位机，配置UART 为主动输出模式，NLink_TOFSense_M_Frame0
+协议，距离数据解析可以参考 FAQ。
+原始数据：5701ff 0003a0000040e08107009f 00f0 4303005800c0c80300550090
+e2000044 00d0840000570018 7900006100e8 8000007a00906500008e00d8d00100
+27 00 e8 74 02 00 28 00 00 f4 01 00 2e00 f8 a7 00 00 39 00 50 c3 00 00 41 00 30 75 0000 5b 00 70
+94 0000 61 0000 7d 00 009b 00 30e0 03 00 1900 c8 79 09 00 1a0028 cf 0d 00 3a00 b0 b3 0000
+2000307500003100606d00004000 e88000004b00d08400007100403c10001e0088
+b30f00240020b903001200e8260f003400f0d200002c00c8af00003000589800003a
+00 f8 a7 00 00 47 00 d8 ed 11 09 1c00 60 84 11 00 1c00 e0 c8 10 00 21 00 d0 a1 10 00 25 00 88 90
+00001c00e0ab0000240018790000410008cf00004100684714ff0b00c8b414000e00
+20d6 13 001100 d8 e113 00 1400 d084 00 001d 00f0 6c1100 1900 a0 8c0000 4700 9065 00
+005000884122ff1200e8f6 16000700803117ff0b00701016000c00409c00002000f8
+a70000320080bb00003300a08c0000500090d602ff 2c00b0e122ff 0b00401901ff10
+00d8d600ff110028a000002500e88000002b00c8af00002500906500003c00ffffffff
+ffff7d
+表 2：NLink_TOFSense_M_Frame0 解析表
+Data Type Length(Bytes) Hex Result
+FrameHeader uint8 1 57 0x57
+FunctionMark uint8 1 01 0x01
+reserved uint8 1 … *
+id uint8 1 00 0
+system_time uint32 4 03a00000 40963ms
+zonemap uint8 1 40 64
+data0{dis*1000，
+dis_status，
+signal_strength}
+{uint24,
+uint8,
+uint16}
+6
+e08107
+00
+9f00
+492mm
+0
+159
+… … … … …
+dataindex{dis*1000，
+dis_status，
+signal_strength}
+{uint24,
+uint8,
+uint16}
+6 … …
+… … … … …
+data63{dis*1000，
+dis_status，
+signal_strength}
+{uint24,
+uint8,
+uint16}
+6
+906500
+00
+3c00
+26mm
+0
+60
+Reserved * 6 * *
+SumCheck uint8 1 7d 0x7d
+
+===== 第 11 页 =====
+协议解析
+Copyright©NooploopLTd2024.AllRightsReserved. 11
+7.3.2 NLink_TOFSense_Read_Frame0
+数据来源：将模块连接上位机，配置为UART 查询输出模式，id 为0，通过上位机发送下列
+数据实现数据查询。
+如需查询其他ID 的模块，更改 id 和校验和字节发送即可，例id=3 的模块，查询指令应为
+5710FFFF03FFFF66。
+原始数据：5710FFFF00FFFF63
+表 3：NLink_TOFSense_Read_Frame0 解析表
+Data Type Length (Bytes) Hex Result
+FrameHeader uint8 1 57 0x57
+FunctionMark uint8 1 10 0x10
+reserved uint16 2 … *
+id uint8 1 00 0
+reserved uint16 2 … *
+SumCheck uint8 1 63 0x63
+7.3.3 NLink_TOFSense_CAN_Frame0
+数据来源：模块配置为CAN 主动输出模式，id 为1，连接CAN 接收设备。
+原始数据： StdID:0x201 + Data:ec0100009f0000FF
+表 4：NLink_TOFSense_CAN_Frame0 解析表
+Dominantlevel
+Dominantorrecessivelevel
+Recessivelevel
+Field name Part Level Type Length(bits) Hex Result
+StartOfFrame SOF * 1 * *
+ArbitrationField
+ID * 11 0x200+id 0x201
+RTR * 1 * *
+ControlField
+IDE * 1 * *
+r0 * 1 * *
+DLC * 4 * *
+DataField
+dis uint24 24 ec0100 492mm
+dis_status uint8 8 00 0
+signal_strength uint16 16 9f00 159
+index uint8 8 00 0
+reserved uint8 8 … *
+CRCField
+CRC * 15 * *
+CRC_delimiter * 1 * *
+ACKField
+ACKSlot * 1 * *
+ACK_delimiter * 1 * *
+EndOfFrame EOF * 7 * *
+
+===== 第 12 页 =====
+常见问题
+Copyright©NooploopLTd2024.AllRightsReserved. 12
+7.3.4 NLink_TOFSense_CAN_Read_Frame0
+数据来源：模块配置为CAN 查询输出模式，id 为1，连接CAN 查询设备，查询设备id_s
+为2。
+原始数据：StdID:0x402 + Data:FFFFFF01FFFFFFFF
+表 5：NLink_TOFSense_CAN_Read_Frame0 解析表
+Dominantlevel
+Dominantorrecessivelevel
+Recessivelevel
+8 常见问题
+Q1. 室外（强光）条件下可以用吗？
+模块量程受自然光影响。一般来说自然光越强，受影响越大，表现为测距量程变短。
+Q2. 多个模块是否有干扰？
+当多个模块同时工作时，即使相互之间的红外光线交叉或打到同一个位置，也不会影响实际
+测量。如果两个模块处于同一水平高度，且分别朝向对方时测量会对双方都有影响。
+Q3. 为什么模块没有数据输出？
+各个模块均经过严格的测试后发货，没有数据时请先自行检查模式、接线（供电电压、线序
+是否正确，以及推荐使用万用表测试通信双方两端的引脚是否导通）、波特率等配置是否正确；
+对于CAN 输出模式，请检查是否含有终端电阻（一般为120Ω）。
+Q4. 安装时需要注意什么？
+如果不希望检测到地面或其它反射面，安装时需避免FOV 角度内有遮挡。另外需要注意与
+地面高度，应避免FOV 内出现地面遮挡等类似反射面，如果安装高度离地面较近，可以考虑将
+模块稍微倾斜向上进行安装。
+Field name Part Level Type Length(bits) Hex Result
+StartOfFrame SOF * 1 * *
+ArbitrationField
+ID * 11 0x400+id_s 0x402
+RTR * 1 * *
+ControlField
+IDE * 1 * *
+r0 * 1 * *
+DLC * 4 * *
+DataField
+reserved uint24 24 … *
+id uint8 8 01 id=1
+reserved uint32 32 … *
+CRCField
+CRC * 15 * *
+CRC_delimiter * 1 * *
+ACKField
+ACKSlot * 1 * *
+ACK_delimiter * 1 * *
+EndOfFrame EOF * 7 * *
+
+===== 第 13 页 =====
+常见问题
+Copyright©NooploopLTd2024.AllRightsReserved. 13
+Q5. 模块的 UART 与 CAN 是同一个接口吗？
+模块的UART 接口与CAN 接口公用相同的物理接口，针对不同的通讯模式转换对应线序即
+可。
+Q6. 切换到 CAN 模式后，为什么 NAssistant 软件识别不了模块？如何在不同通讯模式间进行切
+换？
+目前NAssistant 软件只支持识别UART 模式下的模块。在UART 模式下，通过上位机识别
+成功后进入设置页面可将模块配置为CAN 通讯模式；在CAN 通讯模式下，TOFSense-M 需按住
+按键然后将模块上电，当指示灯由快速闪烁变为慢速闪烁后松开按键，此时模块强制进入临时
+UART 模式，再通过上位机进入设置页面选择 UART 模式写入参数即可；TOFSense-MS 可以通
+过向模块发送几次以下的串口指令来切换回UART 模式：
+542000ff00ffffffff00ffff00100effffffffffffffffffffffffffffffff7b
+Q7. 模块输出的是最近距离、最远距离还是平均距离？
+模块单次测量会得到FOV 内多个点的距离值（8*8 模式64 个点，4*4 模式16 个点），针对
+每个点由内部处理器处理得到占比最大的距离，并且按照指定顺序输出各个像素点的距离。
+Q8. 超量程时距离如何输出？
+超量程时，距离输出保持上一时刻的值不变。此时距离状态为255，可以参考距离状态指示
+来进行判断。
+Q9. CAN 查询模式下查询不到数据是什么原因?
+首先保证CAN 设备之间线序正确。其次TOFSense-M 系列端口不含120R 匹配电阻，需保
+证 查 询 设 备 端 电 阻 匹 配 ， 最 后 检 测 发 送 的 查 询 帧 格 式 是 否 满 足
+NLink_TOFSense_CAN_Read_Frame0 协议，特别注意标准帧ID 正确。
+Q10.CAN 模式级联后面的模块收不到数据/数据不全？
+级联模块会有压降现象，所以常规使用一根线路串联所有模块，越靠后的模块所获得的电压
+越小，如果靠后的模块所获得的电压小于CAN 模式下所需最低工作电压，就会出现收不到数据
+或数据不全等现象，此时可以在两方面进行优化
+1：提高供电电源输出功率
+2：采用星形供电的方式，例如需要级联7 个的情况下，首先将电源分4 路输出，第一路接
+1 号2 号的VCC、GND，第二路接3 号4 号的VCC、GND，第三路接5 号6 号的VCC、GND，
+第四路接7 号的VCC、GND，然后将7 个模块的CAN_H、CAN_L 全部串联起来接到CAN 总
+线上，经测试每路电源接2 个模块是最稳定的，如果是短时间测试可以每路电源接3 个模块。
+Q11.物体表面反射率会影响传感器吗？
+在实际使用中，传感器的量程和精度可能会受到被测物体的反射率影响。相同环境下，对
+于不同反射率的被测物体，测量结果可能会有差异。因此，在使用传感器时，建议用户在实际场
+景中进行充分的测试，若需获取更准确的测量结果则针对具体场景进行校准。建议对比纸板与实
+际被测物体两种测试数据，根据信号强度进行分析并补偿和优化。
+
+===== 第 14 页 =====
+参考
+Copyright©NooploopLTd2024.AllRightsReserved. 14
+Q12.按住按键无法进入 UART 配置模式是什么原因？
+功能按键在出货之前均经过测试，无法进入UART 模式则多试几次。注意按键需要在上电
+之前按下，灯慢闪之后松开。
+Q13.模块使用的串口通信端子型号是什么？飞控、单片机上没有这个端子的接口怎么办？
+模块使用的是GH1.25 的端子。可以自行购买GH1.25 转其他端子的转接线，或者剪断产品
+附带的GH1.25-GH1.25 接线，自行焊接其他的端子。线序、供电电压、信号线电平等请参考数
+据手册。
+Q14.接收到的 e0 81 07 如何解算为距离值？
+协议帧中的数据是小端模式存储的，而且编码时乘了一定的倍率，举例来说e08107 先恢复
+成16 进制数据0x0781e0 换算成10 进制为492000，除以1000 为492 毫米。
+Q15.校验和是怎么计算的？
+校验和就是前面所有的字节相加然后取最低字节的数据，比如550100ef03 的校验和就是
+0x55+0x01+0x00+0xef+0x03=0x0148，那校验和就是48，所以这一帧的完整数据是550100ef03
+48。
+Q16.ROS 驱动包使用过程中编译出现报错或者没有数据怎么办？
+用户使用ROS 驱动包前，需要先阅读驱动包内的README.MD 文档，按照文档的步骤和
+注意事项来使用，还可以参考官网的《ROS 驱动应用图文教程》来进行使用。
+9 参考
+[1] TOFSense-M 数据手册
+10 简写与首字母缩略
+表 6：简写与首字母缩略
+Abbreviation Full Title 中文
+TOF TimeofFlight 飞行时间
+FOV FieldofView 视场角
+11 更新日志
+表 7：更新日志
+Version Firmware Version Data Description
+1.0 1.0.1 20211112 1. 发布初版手册
+1.1 1.0.1 20220211 1. 优化部分描述
+1.2 1.0.4 20220924
+1. 添加认证相关说明
+2. 优化部分描述
+1.3 1.0.4 20221205 1. 优化部分描述
+1.4 1.0.6 20230404
+1. 增加固件更新描述
+2. 扩展FAQ 并优化部分描述
+2.0 2.0.0 20230808 1. 扩展FAQ 并优化部分描述
+
+===== 第 15 页 =====
+更多信息
+Copyright©NooploopLTd2024.AllRightsReserved. 15
+2. 修复CAN 协议解析dis 变量倍率问题
+2.1 2.0.2 20240226
+1. 删除固件更新描述
+2. 增加FOV 视场角的描述
+3. 增加协议帧组成
+4. 优化部分描述
+3.0 2.0.2 20240629
+1. 修正每帧字节数
+2. 优化FOV 示意图
+3. 优化FAQ 部分描述
+12 更多信息
+公司：深圳空循环科技有限公司
+地址：深圳市南山区粤海街道科技园社区科慧路1 号沛鸿大厦A2-218
+邮箱：sales@nooploop.com
+官网：www.nooploop.com

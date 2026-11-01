@@ -257,3 +257,10 @@ _two_cam_pc.err
 !docs/**/*.jpg
 !docs/**/*.png
 !docs/**/*.jpeg
+
+# ===== 2026-11-01 追加 =====
+_labelimg_main/
+副摄像头/
+交付-*.zip
+_pi_tools/*.log
+_pi_tools/*.npz

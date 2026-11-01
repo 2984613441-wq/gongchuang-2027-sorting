@@ -1,0 +1,23 @@
+[
+ {
+  "tag": "main",
+  "best": "_runs\\main_6c_20261030\\weights\\best.pt",
+  "exists": false,
+  "metrics": {},
+  "epochs": 120,
+  "data": "_train_main_20261030/data.yaml"
+ },
+ {
+  "tag": "cam2",
+  "best": "_runs\\cam2_6c_20261030\\weights\\best.pt",
+  "exists": false,
+  "metrics": {
+   "mAP50": 0.9040522875816994,
+   "mAP50_95": 0.6584942324151883,
+   "precision": 0.7493074269294708,
+   "recall": 0.9271224791973277
+  },
+  "epochs": 150,
+  "data": "_train_cam2_20261030/data.yaml"
+ }
+]

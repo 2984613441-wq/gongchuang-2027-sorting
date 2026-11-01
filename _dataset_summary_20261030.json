@@ -1,0 +1,30 @@
+{
+ "主相机": {
+  "dir": "_dataset_main_20261030_复核后",
+  "images": 136,
+  "labels": 136,
+  "boxes": 416,
+  "dist": {
+   "cube": 32,
+   "cuboid": 125,
+   "cylinder": 70,
+   "pentagonal_prism": 47,
+   "cone": 98,
+   "tetrahedron": 44
+  }
+ },
+ "副相机": {
+  "dir": "_dataset_cam2_复核后",
+  "images": 56,
+  "labels": 56,
+  "boxes": 263,
+  "dist": {
+   "cube": 13,
+   "cuboid": 42,
+   "cylinder": 40,
+   "pentagonal_prism": 16,
+   "cone": 16,
+   "tetrahedron": 136
+  }
+ }
+}
