@@ -522,10 +522,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
     )
     parser.add_argument(
+        "--anchor",
+        choices=("last_drop", "fixed"),
+        default=_env("SORT_ANCHOR", "last_drop"),
+        help="排序锚点（审核 D1）：last_drop=用『上一次落料点』（默认，修掉固定 (0,0)）；"
+             "fixed=沿用构造时的固定锚点（一键回退用）。",
+    )
+    parser.add_argument(
         "--order-mode",
-        choices=("legacy", "group", "difficulty", "open_edge", "five_key"),
-        default=_env("ORDER_MODE", "group"),
+        choices=("auto", "legacy", "group", "difficulty", "open_edge", "five_key"),
+        default=_env("ORDER_MODE", "auto"),
         help="夹取策略排序口径（仅 --pick-strategy=order 生效）。"
+             "auto=用配置 [Strategy] order_mode（缺省 legacy=不排序）；"
              "group=分组→待定→难度→行扫描（现状默认）；"
              "difficulty=只按难度分层；open_edge=离无壁边最近；"
              "five_key=停稳→待定→难度→隔离度→落点距离（2026-11-01 新增）；"
@@ -1420,9 +1428,10 @@ def run(args: argparse.Namespace) -> int:
                     settle_shift_mm=float(args.settle_shift_mm),
                 )
 
+            resolved_mode = None if args.order_mode == "auto" else args.order_mode
             payload_orderer = payload_orderer_from_ini(
                 args.pick_strategy_config,
-                order_mode=args.order_mode,
+                order_mode=resolved_mode,
                 settle=settle_tracker,
                 last_drop_provider=_last_drop_point,
             )
@@ -1432,7 +1441,8 @@ def run(args: argparse.Namespace) -> int:
                 )
             else:
                 logger.info(
-                    "夹取策略：已启用【顺序】模式（α：只改顺序、不丢件），配置=%s",
+                    "夹取策略：已启用（α：只改顺序、不丢件）；order_mode=%s 配置=%s",
+                    "配置 [Strategy] order_mode" if args.order_mode == "auto" else args.order_mode,
                     args.pick_strategy_config,
                 )
         source = build_socket_source(
@@ -1442,7 +1452,8 @@ def run(args: argparse.Namespace) -> int:
             calibration_config=args.calibration_config,
             fixed_pick_point=fixed_pick_point,
             payload_orderer=payload_orderer,
-            current_position_provider=_current_position_mm10,
+            current_position_provider=(_current_position_mm10
+                                      if args.anchor == "last_drop" else None),
             first_dispatch_settle_frames=args.first_dispatch_settle,
             first_dispatch_max_wait_s=args.first_dispatch_max_wait,
         )

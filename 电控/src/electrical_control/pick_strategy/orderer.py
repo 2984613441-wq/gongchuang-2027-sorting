@@ -32,6 +32,8 @@ key = (
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 
 from .geometry import Point
@@ -45,6 +47,8 @@ from .selector import (
     row_scan_key,
     usable_detections,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ORDER_MODES",
@@ -107,6 +111,7 @@ class SettleTracker:
 
     def __post_init__(self) -> None:
         self._history: dict[int, list[tuple[float, float]]] = {}
+        self._degraded: set[int] = set()
 
     def observe(self, frame: VisionFrame) -> None:
         """记录本帧各件位置（按 target_seq）。"""
@@ -119,17 +124,34 @@ class SettleTracker:
                 del buf[0: len(buf) - maxlen]
 
     def is_settled(self, target_seq: int) -> bool | None:
-        """返回 True / False / None（未知）。"""
-        buf = self._history.get(int(target_seq))
+        """返回 True / False / None（未知）。
+
+        2026-11-01：**超时降级** —— 同一件等满 ``settle_max_wait_frames`` 帧仍在动，
+        返回 ``None``（按未知处理，不再无限期排在最后），并在日志里记一次 WARNING。
+        理由：托盘上可能有人手/气流导致轻微抖动，无限期等待会把节拍拖死。
+        """
+        key = int(target_seq)
+        buf = self._history.get(key)
         need = max(1, int(self.settle_frames))
+        max_wait = max(need, int(self.settle_max_wait_frames))
         if not buf or len(buf) < need:
             return None
         recent = buf[-need:]
+        moving = False
         for (x0, y0), (x1, y1) in zip(recent, recent[1:]):
             dx = x1 - x0
             dy = y1 - y0
             if (dx * dx + dy * dy) ** 0.5 > self.settle_shift_mm:
-                return False
+                moving = True
+                break
+        if moving:
+            if len(buf) >= max_wait and key not in self._degraded:
+                self._degraded.add(key)
+                logger.warning(
+                    "停稳判据超时降级：target_seq=%d 等满 %d 帧仍在动 ⇒ 按『未知』处理"
+                    "（不再惩罚排序，节拍优先）", key, max_wait)
+                return None
+            return False
         return True
 
     def reset(self) -> None:

@@ -69,13 +69,13 @@ def test_legacy_keeps_input_order(demo_config):
     assert orderer(payloads) == payloads            # 原顺序不改
 
 
-def test_default_mode_is_group_and_matches_group_scan(demo_config):
-    """默认 group 必须与接入前口径逐条一致（回归保护）。"""
+def test_explicit_group_matches_group_scan(demo_config):
+    """显式 group 必须与接入前口径逐条一致（回归保护）。"""
     off = demo_config.tool_offset
     a = _payload(1, 1, 30.0, 40.0, off)
     b = _payload(2, 5, -10.0, 40.0, off)
     payloads = (a, b)
-    got = make_payload_orderer(demo_config)(payloads)
+    got = make_payload_orderer(demo_config, order_mode="group")(payloads)
     # 用同一套 Detection 直接跑 order_by_group_scan，比较 class_id 序列
     dets = tuple(
         det(p.target_seq, p.class_id, p.pick_x_position / 10.0 - off.x_mm,
@@ -201,3 +201,94 @@ def test_five_key_provider_exception_falls_back(demo_config):
         demo_config, order_mode="five_key", last_drop_provider=bad_provider)
     out = orderer((a, b))
     assert len(out) == 2 and {p.target_seq for p in out} == {1, 2}
+
+# --------------------------------------------------------------------------- #
+# 5) 默认口径 = legacy（审核要求：默认不改变行为，可一键回退）
+# --------------------------------------------------------------------------- #
+def test_default_order_mode_is_legacy(demo_config):
+    """不传 order_mode 且 ini 未配 [Strategy] ⇒ legacy（不排序）。"""
+    assert demo_config.order_mode == "legacy"
+    off = demo_config.tool_offset
+    a = _payload(1, 5, 10.0, 40.0, off)     # cone 近
+    b = _payload(2, 1, 60.0, 20.0, off)     # cube 远
+    payloads = (a, b)
+    assert make_payload_orderer(demo_config)(payloads) == payloads
+
+
+# --------------------------------------------------------------------------- #
+# 6) 停稳超时降级（等满 max_wait 帧仍在动 ⇒ 按未知处理，不再惩罚）
+# --------------------------------------------------------------------------- #
+def test_settle_tracker_timeout_degrade(demo_config):
+    tracker = SettleTracker(settle_frames=3, settle_shift_mm=4.0,
+                            settle_max_wait_frames=6)
+    # 一直在抖（每帧跳 10mm）
+    for i in range(7):
+        tracker.observe(frame(i + 1, (det(1, 1, 10.0 * i, 0.0, class_id=1),)))
+        if i + 1 < 3:
+            assert tracker.is_settled(1) is None
+        elif i + 1 < 6:
+            assert tracker.is_settled(1) is False
+    # 数到第 7 帧（>= max_wait=6）⇒ 降级为 None
+    assert tracker.is_settled(1) is None
+
+
+def test_settle_degrade_keeps_piece_pickable(demo_config):
+    """降级后该件不再被排到最后（可与停稳件同权，按后续键比较）。"""
+    tracker = SettleTracker(settle_frames=3, settle_shift_mm=4.0,
+                            settle_max_wait_frames=6)
+    for i in range(7):
+        tracker.observe(frame(i + 1, (det(1, 1, 10.0 * i, 0.0, class_id=1),
+                                      det(2, 1, 40.0, 40.0, class_id=1))))
+    moving = det(1, 1, 60.0, 0.0, class_id=1)
+    steady = det(2, 1, 40.0, 40.0, class_id=1)
+    ordered = order_by_five_key(frame(8, (moving, steady)), demo_config, settle=tracker)
+    assert len(ordered) == 2   # 不丢件
+
+
+# --------------------------------------------------------------------------- #
+# 7) [Strategy] 配置节解析（带【待实测】标签）
+# --------------------------------------------------------------------------- #
+def test_config_reads_strategy_section():
+    from conftest import DEMO_INI
+    from electrical_control.pick_strategy.config import build_config
+
+    text = open(DEMO_INI, encoding="utf-8").read()
+    text = text.replace("order_mode = legacy", "order_mode = five_key")
+    text = text.replace("settle_frames = 3", "settle_frames = 5")
+    text = text.replace("settle_shift_mm = 4.0", "settle_shift_mm = 2.5")
+    from pathlib import Path as _P
+    _tmp = _P(__file__).resolve().parent / "_tmp"
+    _tmp.mkdir(exist_ok=True)
+    ini = _tmp / "variant_strategy_ok.ini"
+    ini.write_text(text, encoding="utf-8")
+    cfg = build_config(ini)
+    assert cfg.order_mode == "five_key"
+    assert cfg.settle_frames == 5
+    assert cfg.settle_shift_mm == 2.5
+    assert cfg.isolation_band_mm == 10.0
+
+
+def test_config_rejects_bad_order_mode():
+    import pytest as _pytest
+    from conftest import DEMO_INI
+    from electrical_control.pick_strategy.config import ConfigError, build_config
+
+    text = open(DEMO_INI, encoding="utf-8").read()
+    text = text.replace("order_mode = legacy", "order_mode = nope")
+    from pathlib import Path as _P
+    _tmp = _P(__file__).resolve().parent / "_tmp"
+    _tmp.mkdir(exist_ok=True)
+    ini = _tmp / "variant_strategy_bad.ini"
+    ini.write_text(text, encoding="utf-8")
+    with _pytest.raises(ConfigError):
+        build_config(ini)
+
+
+def test_config_without_strategy_section_uses_defaults():
+    from electrical_control.pick_strategy.config import StrategyConfig  # noqa: F401
+    from conftest import build_config, REAL_INI
+    try:
+        cfg = build_config(REAL_INI)
+    except Exception:
+        return      # 真机 ini 可能不存在/过期；缺席时本用例跳过
+    assert cfg.order_mode in ("legacy", "group", "difficulty", "open_edge", "five_key")

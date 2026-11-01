@@ -239,6 +239,11 @@ class StrategyConfig:
     object_sizes: dict[int, Point]   # box_id -> 半尺寸；contour 模式必需
     obstacles: tuple[Rect, ...]
     raw: RawConfig
+    # 2026-11-01 新增（可选 [Strategy] 节）：五键排序参数；缺节时用下列默认值。
+    order_mode: str = "legacy"
+    settle_frames: int = 3
+    settle_shift_mm: float = 4.0
+    isolation_band_mm: float | None = None
 
     # ---- 由其它参数推出的量，不是配置项（避免同一事实有两处来源）----
     @property
@@ -379,7 +384,34 @@ def build_config(path: str | Path) -> StrategyConfig:
                 "不得由程序虚构。"
             )
 
+    # ---- 可选 [Strategy] 节（2026-11-01 新增；不写则用默认值，不破坏旧 ini）----
+    opt_mode = raw.opt("Strategy", "order_mode")
+    order_mode = (opt_mode.value.strip() if opt_mode is not None else "legacy")
+    try:
+        from electrical_control.pick_strategy.orderer import ORDER_MODES as _OM
+        if order_mode not in _OM:
+            raise ConfigError(
+                f"[Strategy] order_mode={order_mode!r} 非法，只能是 {_OM}")
+    except ImportError:      # 极端情况下（部分模块未装）不阻塞加载
+        pass
+    opt_frames = raw.opt("Strategy", "settle_frames")
+    settle_frames = int(opt_frames.value) if opt_frames is not None else 3
+    if settle_frames < 1:
+        raise ConfigError("[Strategy] settle_frames 必须 ≥ 1")
+    opt_shift = raw.opt("Strategy", "settle_shift_mm")
+    settle_shift = float(opt_shift.value) if opt_shift is not None else 4.0
+    if settle_shift <= 0:
+        raise ConfigError("[Strategy] settle_shift_mm 必须 > 0")
+    opt_band = raw.opt("Strategy", "isolation_band_mm")
+    isolation_band = float(opt_band.value) if opt_band is not None else None
+    if isolation_band is not None and isolation_band < 0:
+        raise ConfigError("[Strategy] isolation_band_mm 不能为负")
+
     return StrategyConfig(
+        order_mode=order_mode,
+        settle_frames=settle_frames,
+        settle_shift_mm=settle_shift,
+        isolation_band_mm=isolation_band,
         workspace=ws,
         home=home,
         tray=tray,

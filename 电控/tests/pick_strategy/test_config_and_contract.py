@@ -87,7 +87,12 @@ def test_home_outside_workspace_is_rejected():
 
 def test_demo_config_declares_its_unverified_params():
     config = build_config(DEMO_INI)
-    assert config.unverified_params() == ("[Tray] open_side", "[Tray] gap_known")
+    # 2026-11-01：新增 [Strategy] 四项（五键排序参数），同样标【待实测】
+    assert config.unverified_params() == (
+        "[Tray] open_side", "[Tray] gap_known",
+        "[Strategy] order_mode", "[Strategy] settle_frames",
+        "[Strategy] settle_shift_mm", "[Strategy] isolation_band_mm",
+    )
 
 
 def test_real_config_is_fail_closed_on_gap_geometry():

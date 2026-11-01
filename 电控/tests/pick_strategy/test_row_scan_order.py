@@ -216,7 +216,7 @@ class RowScanOrderTests(unittest.TestCase):
     def test_orderer_is_alpha_and_keeps_every_payload(self) -> None:
         """判据 5：启用时也**不丢件**；件数 < 2 原样返回。"""
 
-        orderer = make_payload_orderer(self.cfg)
+        orderer = make_payload_orderer(self.cfg, order_mode="group")
         payloads = tuple(payload(s, 1, x, y, self.cfg) for s, x, y in CORPUS)
         ordered = orderer(payloads)
 
@@ -231,7 +231,7 @@ class RowScanOrderTests(unittest.TestCase):
     def test_unusable_payload_is_moved_to_tail_not_dropped(self) -> None:
         """α：缺抓取点的件排到队尾，**不丢**。"""
 
-        orderer = make_payload_orderer(self.cfg)
+        orderer = make_payload_orderer(self.cfg, order_mode="group")
         good = payload(3, 1, 30.0, 55.0, self.cfg)
         broken = _Payload(target_seq=9, class_id=1,
                           pick_x_position=None, pick_y_position=None)  # type: ignore[arg-type]

@@ -358,10 +358,12 @@ def test_first_dispatch_gate_has_a_hard_wait_cap():
     15s 红线是从起轮算起的，无限等比顺序错严重得多。超时应放行 + WARNING。"""
     import time as _time
 
-    source = _gate_source(settle=999, max_wait=0.05)
+    # 2026-11-01：原 0.05/0.06 只留 10ms 余量，慢机器上首次 _pull 就可能已超时
+    #   ⇒ 偶发失败（并非逻辑问题）。放宽到 0.20/0.25，保留同一语义。
+    source = _gate_source(settle=999, max_wait=0.20)
     source.set_permitted(True)
     assert _pull(source, [1, 2]) is None, "未超时：不派"
-    _time.sleep(0.06)
+    _time.sleep(0.25)
     late = _pull(source, [1, 2])
     assert late is not None, "超过等待上限必须放行（否则链死在起轮处）"
 

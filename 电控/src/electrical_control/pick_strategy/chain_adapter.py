@@ -92,7 +92,7 @@ def make_payload_orderer(
     config: StrategyConfig,
     *,
     frame_id_base: int = 0,
-    order_mode: str = "group",
+    order_mode: str | None = None,
     settle: "SettleTracker | None" = None,
     last_drop_provider=None,
 ) -> PayloadOrderer:
@@ -109,6 +109,8 @@ def make_payload_orderer(
     ``last_drop_provider``：返回「上一次落料点」``Point``(mm) 的函数；
     为 None 或返回 None 时按「锚点未知」处理（落点距离键记 0，不惩罚）。
     """
+    if order_mode is None:                      # None ⇒ 用 ini 的 [Strategy] order_mode
+        order_mode = getattr(config, "order_mode", "legacy")
     if order_mode not in ORDER_MODES:
         raise ValueError("order_mode=%r 非法，只能是 %s" % (order_mode, ORDER_MODES))
 
@@ -247,7 +249,7 @@ def payload_orderer_from_ini(
     ini_path: str | Path,
     *,
     frame_id_base: int = 0,
-    order_mode: str = "group",
+    order_mode: str | None = None,
     settle: "SettleTracker | None" = None,
     last_drop_provider=None,
 ) -> PayloadOrderer | None:
