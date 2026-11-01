@@ -165,6 +165,8 @@ class MonitorBroadcaster:
         self.latest_vision_batch: dict | None = None
         self.latest_item_task: dict | None = None
         self.latest_item_result: dict | None = None
+        self.latest_place_check: dict | None = None
+        self.place_runtime = None          # 2026-11-01：落料位复看运行时（可空）
 
     def start(self, logger: logging.Logger) -> None:
         """启动监控服务器"""
@@ -265,6 +267,27 @@ class MonitorBroadcaster:
             'basis': basis,
             'success': result_code == 0x00,
         }
+        # 2026-11-01：落料完成（ITEM_RESULT 成功）→ 用副相机在落料位复看
+        rt = self.place_runtime
+        if rt is not None and rt.enabled():
+            code = None
+            task = self.latest_item_task or {}
+            if task.get('target_seq') == target_seq:
+                code = task.get('class_id')
+            box_id = None
+            batch = self.latest_vision_batch or {}
+            for t in (batch.get('targets') or []):
+                if t.get('target_seq') == target_seq:
+                    box_id = t.get('box_id')
+                    break
+            if code is not None:
+                try:
+                    self.latest_place_check = rt.on_item_result(
+                        target_seq=target_seq, class_id=int(code),
+                        box_id=box_id, result_code=int(result_code))
+                except Exception:
+                    self.latest_place_check = {"verdict": "UNKNOWN",
+                                               "reason": "复看运行时异常"}
         self._send_status()
 
     def _send_status(self) -> None:
@@ -274,6 +297,7 @@ class MonitorBroadcaster:
             'vision': self.latest_vision_batch,
             'item_task': self.latest_item_task,
             'item_result': self.latest_item_result,
+            'place_check': getattr(self, 'latest_place_check', None),
         }
         self.broadcast(status)
 
@@ -520,6 +544,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pick-strategy-config",
         default=_env("PICK_STRATEGY_CONFIG", "/home/pi/电控/deploy/pick_strategy.ini"),
         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
+    )
+    parser.add_argument(
+        "--verify-place", choices=("off", "observe", "correct"),
+        default=_env("VERIFY_PLACE", "off"),
+        help="落料位复看（副相机 + Pi 本地 HSV 判色）：off=不看（默认）；"
+             "observe=只看只统计；correct=不符时纠正货格分配台账",
+    )
+    parser.add_argument(
+        "--place-eye-config", default=_env("PLACE_EYE_CONFIG", None),
+        help="[PlaceEye] 所在 ini（缺省=与 --config 同一个 sorting_config.ini）",
     )
     parser.add_argument(
         "--slot-mode", choices=("static", "dynamic"), default=_env("SLOT_MODE", "static"),
@@ -1480,6 +1514,22 @@ def run(args: argparse.Namespace) -> int:
             logger.info("货格动态分配：已启用（台账=%s，round=%s）",
                         args.slot_journal, round_id)
 
+        # 2026-11-01：落料位复看（默认 off）。复用同一个 slot_allocator 做台账纠正。
+        place_runtime = None
+        if args.verify_place != "off":
+            from electrical_control.rpi.place_eye import load_place_eye_config
+            from electrical_control.rpi.place_verify_runtime import PlaceVerifyRuntime
+
+            eye_cfg = load_place_eye_config(args.place_eye_config or args.config)
+            if eye_cfg is None:
+                logger.warning("落料位复看：--verify-place=%s 但 [PlaceEye] 未启用/未标定"
+                               "⇒ 本次按不可用处理（统计记 UNKNOWN）", args.verify_place)
+            place_runtime = PlaceVerifyRuntime(
+                args.verify_place, cfg=eye_cfg, allocator=slot_allocator)
+            monitor.place_runtime = place_runtime
+            logger.info("落料位复看：已启用 %s（配置=%s）",
+                        args.verify_place, args.place_eye_config or args.config)
+
         source = build_socket_source(
             round_id=round_id,
             round_task_id=round_task_id,
@@ -1596,8 +1646,25 @@ def run(args: argparse.Namespace) -> int:
             #     `payload.class_id` **就是货格号**（校赛模式，见 vision_ingest），
             #     所以这里零协议改动：ITEM_TASK 的 12 字节一个都没动。
             if turn_guard is not None:
+                # 2026-11-01（协议 V1.0）：code(1..30) 下 class_id **不再是货格号**，
+                # 必须先映射成 box_id(1..6) 再下发转盘；否则转盘会转到错角度。
+                # 默认 static + box_id 模式下 tt_box == payload.class_id，行为与改动前一致。
+                tt_box = int(task.payload.class_id)
+                if slot_allocator is not None:
+                    try:
+                        mapped = slot_allocator.box_for(tt_box)
+                        if mapped is not None:
+                            tt_box = int(mapped)
+                        else:
+                            logger.error("转盘预置失败：code=%d 无可用货格（分配器满）"
+                                         "⇒ 本件不发，停链", tt_box)
+                            cl.record(FAULT, now=time.monotonic(),
+                                      detail="货格分配器满，无法预置转盘")
+                            return 1
+                    except Exception:
+                        logger.warning("货格映射失败：沿用 class_id 作货格号", exc_info=True)
                 try:
-                    refused = turn_guard.before_dispatch(task.payload.class_id)
+                    refused = turn_guard.before_dispatch(tt_box)
                 except TurntableError as exc:
                     cl.record(FAULT, now=time.monotonic(), detail=f"转盘拒绝动作: {exc}")
                     logger.error("转盘拒绝动作，本件不发 ITEM_TASK，链路停止：%s", exc)
@@ -1608,6 +1675,10 @@ def run(args: argparse.Namespace) -> int:
                     return 1
             raw = outbound.send_item_task(task)  # ITEM_TASK 出站（状态 → WAIT_MOTION_DONE）
             done_items += 1
+            # 2026-11-01：每 4 件打一条落料位复看统计（含 MATCH/MISMATCH/UNKNOWN 计数）
+            if (place_runtime is not None and place_runtime.enabled()
+                    and done_items % 4 == 0):
+                logger.info(place_runtime.summary())
             last_task_sent_at = time.monotonic()
             last_task_context = task
             success_info = None  # 新的一件：清掉上一件遗留的「分拣成功」载荷

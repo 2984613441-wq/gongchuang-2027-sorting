@@ -120,3 +120,26 @@ static const uint16_t k_motion_by_shape[6][3] = {
 | 日期 | 版本 | 变更 | 依据 |
 |---|---|---|---|
 | 2026-11-01 | V1.0 草案 | id 字节与 `class_id` 冻结为 `code(1..30)`；逐件参数走固件查表；外层帧不变 | 用户三决策 + `docs/协议影响分析-20261101.md` |
+
+---
+
+## 七、实现期发现（2026-11-01，必须记）
+
+**转盘预置原来把 `ITEM_TASK.payload.class_id` 直接当货格号用**：
+
+```python
+# deploy/run_chain.py（改动前）
+turn_guard.before_dispatch(task.payload.class_id)   # 注释原文：payload.class_id 就是货格号
+```
+
+V1.0 把 `class_id` 冻结成 `code(1..30)` 之后，**这条会转错角度**（把 11 当成"11 号格"）。
+已修：派件前先用分配器把 `code → box_id(1..6)` 再下发：
+
+```python
+tt_box = int(task.payload.class_id)
+if slot_allocator is not None:
+    tt_box = int(slot_allocator.box_for(tt_box))
+turn_guard.before_dispatch(tt_box)
+```
+
+默认 `static` + `box_id` 模式下 `tt_box == payload.class_id`，与改动前逐字节一致。
