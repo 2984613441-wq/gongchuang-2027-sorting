@@ -17,6 +17,7 @@ from electrical_control.pick_strategy.orderer import (
     DEFAULT_WEIGHTS,
     ORDER_MODES,
     SettleTracker,
+    apply_hard_first_guard,
     order_by_weighted,
     score_detections,
 )
@@ -186,15 +187,67 @@ class _Payload:
         self.pick_y_position = int(round((y_mm + offset.y_mm) * 10))
 
 
-def test_chain_adapter_weighted_mode_orders_by_score(demo_config):
+def test_chain_adapter_weighted_mode_respects_hard_first_guard(demo_config):
+    """默认护栏：靠前的圆锥虽是加权第一，但难件不得排首位 ⇒ 正方体先抓。"""
     off = demo_config.tool_offset
     cone_front = _Payload(1, 5, 0.0, 60.0, off)     # 靠前但难夹
     cube_back = _Payload(2, 1, 0.0, 0.0, off)       # 靠里但好夹
     orderer = make_payload_orderer(demo_config, order_mode="weighted")
     out = orderer((cone_front, cube_back))
     assert len(out) == 2
-    assert [p.target_seq for p in out] == [1, 2], \
-        "默认权重下前端(0.45)压过夹取(0.30)，靠前的圆锥应在前"
+    assert [p.target_seq for p in out] == [2, 1], "难件不得排首位"
+
+
+def test_hard_first_guard_can_be_disabled_via_config():
+    """关掉护栏后回到纯加权顺序（圆锥在前）。"""
+    cfg = build_config(_ini("no_guard", weighted_guard_hard_first="false"))
+    off = cfg.tool_offset
+    cone_front = _Payload(1, 5, 0.0, 60.0, off)
+    cube_back = _Payload(2, 1, 0.0, 0.0, off)
+    orderer = make_payload_orderer(cfg, order_mode="weighted")
+    assert [p.target_seq for p in orderer((cone_front, cube_back))] == [1, 2]
+
+
+# --------------------------------------------------------------------------- #
+# 难件不得排首位护栏（2026-11-02 测评结论）
+# --------------------------------------------------------------------------- #
+def test_guard_moves_hard_piece_out_of_first_place(demo_config):
+    cone = det(1, 5, 0.0, 60.0, class_id=5)      # 位置最好但难夹
+    cube = det(2, 1, 0.0, -20.0, class_id=1)
+    fr = frame(1, [cone, cube])
+    guarded = order_by_weighted(fr, demo_config)
+    assert guarded[0].class_id == 1, "护栏后首件必须是易件"
+
+
+def test_guard_disabled_keeps_weighted_order(demo_config):
+    cone = det(1, 5, 0.0, 60.0, class_id=5)
+    cube = det(2, 1, 0.0, -20.0, class_id=1)
+    fr = frame(1, [cone, cube])
+    raw = order_by_weighted(fr, demo_config, guard_hard_first=False)
+    assert raw[0].class_id == 5
+
+
+def test_guard_noop_when_first_is_easy(demo_config):
+    a = det(1, 1, 0.0, 60.0, class_id=1)
+    b = det(2, 3, 0.0, -20.0, class_id=3)
+    fr = frame(1, [a, b])
+    ordered = order_by_weighted(fr, demo_config)
+    assert ordered[0].class_id == 1
+
+
+def test_guard_noop_when_all_pieces_are_hard(demo_config):
+    cylinder = det(1, 3, 0.0, 60.0, class_id=3)
+    cone = det(2, 5, 0.0, -20.0, class_id=5)
+    fr = frame(1, [cylinder, cone])
+    ordered = order_by_weighted(fr, demo_config)
+    assert len(ordered) == 2                      # 全难件：保持原样，不崩
+
+
+def test_apply_guard_helper_swaps_first_easy():
+    easy = det(9, 1, 0.0, 0.0, class_id=1)
+    hard = det(8, 5, 0.0, 0.0, class_id=5)
+    out = apply_hard_first_guard((hard, easy))
+    assert out[0].class_id == 1 and out[1].class_id == 5
 
 
 def test_chain_adapter_weighted_falls_back_on_bad_payload(demo_config):

@@ -96,6 +96,8 @@ def test_demo_config_declares_its_unverified_params():
         # 2026-11-02：加权排序四项权重，同样【待实测】
         "[Strategy] weight_front", "[Strategy] weight_pick",
         "[Strategy] weight_route", "[Strategy] weight_isolation",
+        # 2026-11-02 测评结论：难件不得排首位的护栏
+        "[Strategy] weighted_guard_hard_first",
     )
 
 

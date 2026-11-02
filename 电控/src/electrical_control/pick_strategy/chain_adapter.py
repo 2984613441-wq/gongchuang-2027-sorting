@@ -228,7 +228,9 @@ def make_payload_orderer(
                 "isolation": float(getattr(config, "weight_isolation", 0.05)),
             }
             ordered_dets = order_by_weighted(
-                frame, config, weights=weights, settle=settle, last_drop=last_drop)
+                frame, config, weights=weights, settle=settle, last_drop=last_drop,
+                guard_hard_first=bool(getattr(
+                    config, "weighted_guard_hard_first", True)))
         else:   # group（默认 = 现状口径）
             ordered_dets = order_by_group_scan(frame, config)   # 只按规则排序，不拒识
         logger.info(

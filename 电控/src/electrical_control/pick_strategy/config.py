@@ -258,6 +258,9 @@ class StrategyConfig:
     weight_pick: float = 0.15
     weight_route: float = 0.10
     weight_isolation: float = 0.05
+    # 2026-11-02 测评结论：难件（tier>=1）不得排首位（否则与「先易后难」冲突，
+    # 仿真实测难件首位率 10.33% → 0%）。默认开，可关。
+    weighted_guard_hard_first: bool = True
 
     # ---- 由其它参数推出的量，不是配置项（避免同一事实有两处来源）----
     @property
@@ -471,6 +474,17 @@ def build_config(path: str | Path) -> StrategyConfig:
     w_pick = _opt_weight("weight_pick", 0.15)
     w_route = _opt_weight("weight_route", 0.10)
     w_iso = _opt_weight("weight_isolation", 0.05)
+    opt_guard = raw.opt("Strategy", "weighted_guard_hard_first")
+    guard_hard_first = True
+    if opt_guard is not None:
+        low = opt_guard.value.strip().lower()
+        if low in ("true", "1", "yes", "on"):
+            guard_hard_first = True
+        elif low in ("false", "0", "no", "off"):
+            guard_hard_first = False
+        else:
+            raise ConfigError(
+                f"{opt_guard.qualified}={opt_guard.value!r} 不是布尔值")
     if (w_front + w_pick + w_route + w_iso) <= 0:
         raise ConfigError("[Strategy] 四个权重之和必须 > 0")
 
@@ -479,6 +493,7 @@ def build_config(path: str | Path) -> StrategyConfig:
         weight_pick=w_pick,
         weight_route=w_route,
         weight_isolation=w_iso,
+        weighted_guard_hard_first=guard_hard_first,
         skip_shapes=skip_shapes,
         class_id_mode=class_id_mode,
         order_mode=order_mode,

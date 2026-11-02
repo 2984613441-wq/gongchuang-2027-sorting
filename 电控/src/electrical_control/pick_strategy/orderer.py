@@ -55,6 +55,7 @@ __all__ = [
     "ORDER_MODES",
     "SettleTracker",
     "order_by_five_key",
+    "apply_hard_first_guard",
     "order_by_weighted",
     "neighbor_count",
     "score_detections",
@@ -287,6 +288,34 @@ def score_detections(
     return out
 
 
+def _tier_of(det: Detection) -> int:
+    return PICK_TIER_BY_CLASS_ID.get(int(det.class_id), PICK_TIER_DEFAULT)
+
+
+def apply_hard_first_guard(
+    ordered: tuple[Detection, ...], *, enabled: bool = True
+) -> tuple[Detection, ...]:
+    """「难件不得排首位」护栏（2026-11-02 测评结论）。
+
+    测评（docs/reports/测评-加权排序可行性-20261102.md §2.2）：前端权重 0.70 时，
+    默认权重下 **10.33% 的帧首件是难件（圆柱/圆锥）**，与用户「先易后难」冲突。
+    本护栏：若首件 tier>=1，把它与序列里**第一个 tier=0 的件**交换。
+
+    效果（300 帧仿真）：难件首位率 10.33% → **0%**，且总行程还略降（1164.5 → 1158.9 mm）。
+    一键关闭：``enabled=False``（恢复纯加权结果）。
+    """
+    if not enabled or len(ordered) < 2:
+        return ordered
+    if _tier_of(ordered[0]) == 0:
+        return ordered
+    for i, det in enumerate(ordered):
+        if _tier_of(det) == 0:
+            lst = list(ordered)
+            lst[0], lst[i] = lst[i], lst[0]
+            return tuple(lst)
+    return ordered                # 全为难件：保持原样（没法避免）
+
+
 def order_by_weighted(
     frame: VisionFrame,
     config,
@@ -294,11 +323,15 @@ def order_by_weighted(
     weights: dict[str, float] | None = None,
     settle: SettleTracker | None = None,
     last_drop: Point | None = None,
+    guard_hard_first: bool = True,
 ) -> tuple[Detection, ...]:
     """按加权总分从高到低排序（同分按行扫描键定序，保证可复现）。
 
     ⚠️ 停稳是**更高一级**的条件：``settle`` 明确判定为「还在动」的件仍排到最后
     （用户要求「停稳才抓」），之后再比权重分。
+
+    ⚠️ ``guard_hard_first=True``（默认）：难件（tier>=1）**不得排首位**，
+    见 :func:`apply_hard_first_guard`（测评依据：难件首位率 10.33% → 0%）。
     """
     usable, _ = usable_detections(frame, config)
     if len(usable) < 2:
@@ -312,4 +345,5 @@ def order_by_weighted(
         total = scores.get(int(det.target_seq), {}).get("total", 0.0)
         return (moving, -total) + row_scan_key(det)
 
-    return tuple(sorted(usable, key=key))
+    ordered = tuple(sorted(usable, key=key))
+    return apply_hard_first_guard(ordered, enabled=guard_hard_first)
