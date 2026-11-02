@@ -36,7 +36,7 @@ def _ini(name: str, **replaced) -> str:
         text = text.replace(old, "%s = %s  # 【待实测】测试变体" % (key, value), 1)
     d = Path(__file__).resolve().parent / "_tmp"
     d.mkdir(exist_ok=True)
-    out = d / (name + ".ini")
+    out = d / ("variant_" + name + ".ini")
     out.write_text(text, encoding="utf-8")
     return str(out)
 
