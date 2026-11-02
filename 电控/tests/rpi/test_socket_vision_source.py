@@ -535,3 +535,64 @@ def test_resolver_does_not_override_visual_box_id():
     ctx = src._expand(frame)
     assert len(ctx) == 1
     assert ctx[0].payload.class_id == 3      # class_id 不受影响
+
+# ---------------------------------------------------------------------------
+# 2026-11-02 新增：主动放弃形状（skip_shapes → class_id_filter）
+# ---------------------------------------------------------------------------
+def _source_with_skip(skip_shapes, *, grasp_by_seq=None):
+    from electrical_control.pick_strategy.selector import shape_of_class_id
+
+    if grasp_by_seq is None:
+        grasp_by_seq = {1: (-30, 40), 2: (-20, 40)}
+    return SocketVisionSource(
+        round_id="round-1",
+        task_id=1,
+        image_id_for_class=lambda class_id: class_id,
+        drop_point_for_box=lambda box_id: (100, 200),
+        grasp_point_for_target=lambda target: grasp_by_seq[target.target_seq],
+        class_id_filter=lambda cid: shape_of_class_id(cid) in skip_shapes,
+    )
+
+
+def test_skip_filter_drops_skipped_shape_but_keeps_others():
+    src = _source_with_skip((3, 5))
+    frame = BatchTargets(task_id=1, targets=(
+        VisionTarget(1, 3, pixel_x=0, pixel_y=0, box_id=3),   # 圆柱 → 跳过
+        VisionTarget(2, 1, pixel_x=0, pixel_y=0, box_id=1),   # 正方体 → 保留
+    ))
+    ctx = src._expand(frame)
+    assert len(ctx) == 1
+    assert ctx[0].payload.target_seq == 2
+
+
+def test_skip_filter_all_skipped_yields_nothing():
+    src = _source_with_skip((1, 2, 3, 4, 5, 6))
+    frame = BatchTargets(task_id=1, targets=(
+        VisionTarget(1, 3, pixel_x=0, pixel_y=0, box_id=3),
+    ))
+    assert src._expand(frame) == []
+
+
+def test_skip_filter_empty_keeps_everything():
+    src = _source_with_skip(())
+    frame = BatchTargets(task_id=1, targets=(
+        VisionTarget(1, 3, pixel_x=0, pixel_y=0, box_id=3),
+        VisionTarget(2, 1, pixel_x=0, pixel_y=0, box_id=1),
+    ))
+    assert len(src._expand(frame)) == 1      # 一帧仍只派一件
+
+
+def test_skip_filter_does_not_crash_on_exception():
+    def boom(cid):
+        raise RuntimeError("boom")
+
+    src = SocketVisionSource(
+        round_id="round-1", task_id=1,
+        image_id_for_class=lambda class_id: class_id,
+        drop_point_for_box=lambda box_id: (100, 200),
+        grasp_point_for_target=lambda target: (-30, 40),
+        class_id_filter=boom,
+    )
+    frame = BatchTargets(task_id=1, targets=(
+        VisionTarget(1, 1, pixel_x=0, pixel_y=0, box_id=1),))
+    assert len(src._expand(frame)) == 1     # 抛错按"不跳过"处理

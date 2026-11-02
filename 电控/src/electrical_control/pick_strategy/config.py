@@ -244,6 +244,13 @@ class StrategyConfig:
     settle_frames: int = 3
     settle_shift_mm: float = 4.0
     isolation_band_mm: float | None = None
+    # 2026-11-02 新增（可选 [Strategy]）：为得分主动放弃难夹的形状。
+    # 例：skip_shapes = 3,5 ⇒ 圆柱(3)/圆锥(5) 不派件（但**仍留在几何里当障碍**，见 planner）。
+    # class_id_mode：class_id 的取值口径，决定怎么由 class_id 反推 shape。
+    #   box_id（默认，现状）：class_id 1..6 与形状冻结 1:1（历史口径）
+    #   code            ：class_id = code(1..30) ⇒ shape = (code-1)//5 + 1
+    skip_shapes: tuple[int, ...] = ()
+    class_id_mode: str = "box_id"
 
     # ---- 由其它参数推出的量，不是配置项（避免同一事实有两处来源）----
     @property
@@ -402,12 +409,47 @@ def build_config(path: str | Path) -> StrategyConfig:
     settle_shift = float(opt_shift.value) if opt_shift is not None else 4.0
     if settle_shift <= 0:
         raise ConfigError("[Strategy] settle_shift_mm 必须 > 0")
+    # -- 2026-11-02：[Strategy] skip_shapes / class_id_mode --
+    opt_skip = raw.opt("Strategy", "skip_shapes")
+    skip_shapes: tuple[int, ...] = ()
+    if opt_skip is not None:
+        raw_skip = opt_skip.value.replace("，", ",").strip()
+        if raw_skip in ("0", "none", "None", "-"):
+            raw_skip = ""          # 0/none = 不放弃任何形状（默认口径）
+        if raw_skip:
+            vals = []
+            for part in raw_skip.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    v = int(part)
+                except ValueError:
+                    raise ConfigError(
+                        f"{opt_skip.qualified}={opt_skip.value!r} 含非整数项") from None
+                if not (1 <= v <= 6):
+                    raise ConfigError(
+                        f"{opt_skip.qualified}={opt_skip.value!r} 含越界形状"
+                        "（只能是 1..6：1=cube 2=cuboid 3=cylinder "
+                        "4=pentagonal_prism 5=cone 6=tetrahedron）")
+                vals.append(v)
+            skip_shapes = tuple(sorted(set(vals)))
+
+    opt_cid_mode = raw.opt("Strategy", "class_id_mode")
+    class_id_mode = (opt_cid_mode.value.strip().lower()
+                     if opt_cid_mode is not None else "box_id")
+    if class_id_mode not in ("box_id", "code"):
+        raise ConfigError(
+            f"[Strategy] class_id_mode={class_id_mode!r} 非法，只能是 ('box_id', 'code')")
+
     opt_band = raw.opt("Strategy", "isolation_band_mm")
     isolation_band = float(opt_band.value) if opt_band is not None else None
     if isolation_band is not None and isolation_band < 0:
         raise ConfigError("[Strategy] isolation_band_mm 不能为负")
 
     return StrategyConfig(
+        skip_shapes=skip_shapes,
+        class_id_mode=class_id_mode,
         order_mode=order_mode,
         settle_frames=settle_frames,
         settle_shift_mm=settle_shift,

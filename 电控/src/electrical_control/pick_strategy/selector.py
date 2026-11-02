@@ -123,6 +123,34 @@ class Selection:
                 f"到无壁边={self.distance_to_open_edge_mm:.1f}mm")
 
 
+def shape_of_class_id(class_id: int, class_id_mode: str = "box_id") -> int | None:
+    """由 class_id 反推形状(1..6)；判不出返回 None。
+
+    * ``box_id``（默认，历史口径）：class_id 1..6 与形状冻结 1:1；
+    * ``code``（协议 V1.0）：class_id = code(1..30) ⇒ shape = (code-1)//5 + 1。
+    """
+    try:
+        cid = int(class_id)
+    except (TypeError, ValueError):
+        return None
+    if class_id_mode == "code":
+        if 1 <= cid <= 30:
+            return (cid - 1) // 5 + 1
+        return None
+    if 1 <= cid <= 6:
+        return cid
+    return None
+
+
+def shape_of_detection(det: Detection, config: StrategyConfig) -> int | None:
+    """由 Detection.class_id 反推形状；口径取自 ``config.class_id_mode``。"""
+    try:
+        cid = int(det.class_id)
+    except (TypeError, ValueError):
+        return None
+    return shape_of_class_id(cid, getattr(config, "class_id_mode", "box_id"))
+
+
 def usable_detections(
     frame: VisionFrame, config: StrategyConfig
 ) -> tuple[tuple[Detection, ...], list[str]]:
@@ -136,6 +164,25 @@ def usable_detections(
             )
             continue
         usable.append(det)
+    # 2026-11-02：主动放弃难夹形状（[Strategy] skip_shapes）。
+    # ⚠️ 只从"可决策集合"里剔除；frame.detections 保持不变 ⇒ planner 仍把它们当障碍物，
+    #    路径/退出检查不会因"看不见"而放行（这是刻意设计，见方案备选文档 §三.1）。
+    skip = tuple(getattr(config, "skip_shapes", ()) or ())
+    if skip:
+        kept = []
+        skipped = []
+        for det in usable:
+            shp = shape_of_detection(det, config)
+            if shp is not None and shp in skip:
+                skipped.append(det)
+            else:
+                kept.append(det)
+        if skipped:
+            notes.append(
+                "主动放弃形状 %s：本帧跳过 %d 件（target_seq=%s），"
+                "它们仍作为障碍物参与路径检查" % (
+                    skip, len(skipped), [d.target_seq for d in skipped]))
+        usable = kept
     if config.selection_mode == SELECTION_CONTOUR:
         without_size = [d for d in usable if config.half_size_of(d.box_id) is None]
         if without_size:

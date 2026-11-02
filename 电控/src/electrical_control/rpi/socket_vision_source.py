@@ -119,6 +119,9 @@ class SocketVisionSource:
         # 传它以后，TSP 与策略排序都用『上一次落料点』而不是固定 (0,0)。
         current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
         box_id_resolver: Callable[[int], int | None] | None = None,
+        # 2026-11-02：主动放弃某些形状（为得分）。返回 True ⇒ 该 class_id 不派件，
+        # 但**仍留在帧里**（上层几何/障碍判断不受影响）。
+        class_id_filter: Callable[[int], bool] | None = None,
         first_dispatch_settle_frames: int = 0,
         # 稳定门的**等待上限（秒）**。必须有：无上限时"操作员还在摆件"会让链在起轮处
         # 无限等，而 15s 失活窗/显示红线是从起轮算起的 ⇒ 那比顺序错严重得多。
@@ -167,6 +170,7 @@ class SocketVisionSource:
         self._payload_orderer = payload_orderer
         self._current_position_provider = current_position_provider
         self._box_id_resolver = box_id_resolver
+        self._class_id_filter = class_id_filter
         self._permitted = False
         self._lock = threading.Lock()
         self._latest: BatchTargets | None = None
@@ -272,6 +276,29 @@ class SocketVisionSource:
                     self.note_served(_p.pick_x_position, _p.pick_y_position)
         return contexts[0] if contexts else None
 
+    def _filter_skipped(self, batch: BatchTargets) -> BatchTargets:
+        """把「主动放弃的形状」从本帧可派发集合里剔除（2026-11-02）。
+
+        只影响**是否派件**；不修改视觉帧本身，也不改 wire。
+        被剔除的件下一帧还会出现，仍被剔除（不会重复派发，也不会报"空台面"）。
+        """
+        if self._class_id_filter is None:
+            return batch
+        kept = []
+        skipped = []
+        for target in batch.targets:
+            try:
+                drop = bool(self._class_id_filter(int(target.class_id)))
+            except Exception:
+                _LOGGER.warning("跳过判定抛错（class_id=%s）：按不跳过处理",
+                                getattr(target, "class_id", None), exc_info=True)
+                drop = False
+            (skipped if drop else kept).append(target)
+        if skipped:
+            _LOGGER.info("主动放弃形状：本帧跳过 %d 件（target_seq=%s）",
+                         len(skipped), [t.target_seq for t in skipped])
+        return BatchTargets(task_id=batch.task_id, targets=tuple(kept))
+
     def _resolve_box_ids(self, batch: BatchTargets) -> BatchTargets:
         """code 模式下把 `VisionTarget.box_id`（None）补成货格号（2026-11-01 动态分配）。
 
@@ -314,6 +341,7 @@ class SocketVisionSource:
             return None
         keys = []
         batch = self._resolve_box_ids(batch)
+        batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
 
         for target in batch.targets:
             if target.box_id is None:
@@ -393,6 +421,7 @@ class SocketVisionSource:
         不抛异常（抛出去会冒到 run() 兜底，把整条链带走），也绝不猜盒。
         """
         batch = self._resolve_box_ids(batch)          # 2026-11-01：code → box_id
+        batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
         for target in batch.targets:
             if target.box_id is None:
                 _LOGGER.warning(

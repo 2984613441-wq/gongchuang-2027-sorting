@@ -92,6 +92,7 @@ def test_demo_config_declares_its_unverified_params():
         "[Tray] open_side", "[Tray] gap_known",
         "[Strategy] order_mode", "[Strategy] settle_frames",
         "[Strategy] settle_shift_mm", "[Strategy] isolation_band_mm",
+        "[Strategy] skip_shapes", "[Strategy] class_id_mode",
     )
 
 

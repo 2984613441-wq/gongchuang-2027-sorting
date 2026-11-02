@@ -935,6 +935,7 @@ def build_socket_source(
     payload_orderer: Callable[[tuple[object, ...]], tuple[object, ...]] | None = None,
     current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
     box_id_resolver: Callable[[int], int | None] | None = None,
+    class_id_filter: Callable[[int], bool] | None = None,
     # 首件稳定门（见 SocketVisionSource 的注释）。两个默认值 = **关闭**，
     # 由 run_chain 的 --first-dispatch-settle 传下来（默认 3 帧）。
     first_dispatch_settle_frames: int = 0,
@@ -1014,6 +1015,7 @@ def build_socket_source(
         payload_orderer=payload_orderer,
         current_position_provider=current_position_provider,
         box_id_resolver=box_id_resolver,
+        class_id_filter=class_id_filter,
         first_dispatch_settle_frames=first_dispatch_settle_frames,
         first_dispatch_max_wait_s=first_dispatch_max_wait_s,
     )
@@ -1490,6 +1492,26 @@ def run(args: argparse.Namespace) -> int:
                     "配置 [Strategy] order_mode" if args.order_mode == "auto" else args.order_mode,
                     args.pick_strategy_config,
                 )
+        # 2026-11-02：主动放弃难夹形状（为得分）。规则放在 pick_strategy.ini 的
+        # [Strategy] skip_shapes（0=全抓，3=圆柱，5=圆锥）。默认 0 ⇒ 行为不变。
+        class_id_filter = None
+        try:
+            from electrical_control.pick_strategy.config import build_config as _build_pcfg
+            from electrical_control.pick_strategy.selector import shape_of_class_id
+
+            _pc = _build_pcfg(args.pick_strategy_config)
+            _skip = tuple(getattr(_pc, "skip_shapes", ()) or ())
+            _cid_mode = getattr(_pc, "class_id_mode", "box_id")
+            if _skip:
+                class_id_filter = (
+                    lambda cid, _s=_skip, _m=_cid_mode:
+                    shape_of_class_id(cid, _m) in _s
+                )
+                logger.warning("主动放弃形状：跳过分拣 %s（class_id_mode=%s）",
+                               _skip, _cid_mode)
+        except Exception:
+            logger.warning("读取 skip_shapes 失败：本次不跳过任何形状", exc_info=True)
+
         # 2026-11-01（动态分配）：code → box_id。默认 static（走旧静态表，行为不变）。
         slot_allocator = None
         box_id_resolver = None
@@ -1538,6 +1560,7 @@ def run(args: argparse.Namespace) -> int:
             fixed_pick_point=fixed_pick_point,
             payload_orderer=payload_orderer,
             box_id_resolver=box_id_resolver,
+            class_id_filter=class_id_filter,
             current_position_provider=(_current_position_mm10
                                       if args.anchor == "last_drop" else None),
             first_dispatch_settle_frames=args.first_dispatch_settle,
