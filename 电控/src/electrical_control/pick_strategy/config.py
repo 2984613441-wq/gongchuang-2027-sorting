@@ -251,6 +251,13 @@ class StrategyConfig:
     #   code            ：class_id = code(1..30) ⇒ shape = (code-1)//5 + 1
     skip_shapes: tuple[int, ...] = ()
     class_id_mode: str = "box_id"
+    # 2026-11-02 新增（可选 [Strategy]）：加权排序权重（前端/夹取/路线/隔离度）。
+    # 用户口径：主相机前端最先 → 前端内部置信度高的先 → 同时考虑路线。
+    # 全部 >= 0 且总和 > 0；缺省体现「前端 > 好夹 > 路线 > 隔离度」。
+    weight_front: float = 0.70
+    weight_pick: float = 0.15
+    weight_route: float = 0.10
+    weight_isolation: float = 0.05
 
     # ---- 由其它参数推出的量，不是配置项（避免同一事实有两处来源）----
     @property
@@ -447,7 +454,31 @@ def build_config(path: str | Path) -> StrategyConfig:
     if isolation_band is not None and isolation_band < 0:
         raise ConfigError("[Strategy] isolation_band_mm 不能为负")
 
+    # -- 2026-11-02：[Strategy] 加权排序权重（前端/夹取/路线/隔离度）--
+    def _opt_weight(key: str, default: float) -> float:
+        param = raw.opt("Strategy", key)
+        if param is None:
+            return default
+        try:
+            val = float(param.value)
+        except ValueError:
+            raise ConfigError(f"{param.qualified}={param.value!r} 不是数字") from None
+        if val < 0:
+            raise ConfigError(f"{param.qualified} 不能为负")
+        return val
+
+    w_front = _opt_weight("weight_front", 0.70)
+    w_pick = _opt_weight("weight_pick", 0.15)
+    w_route = _opt_weight("weight_route", 0.10)
+    w_iso = _opt_weight("weight_isolation", 0.05)
+    if (w_front + w_pick + w_route + w_iso) <= 0:
+        raise ConfigError("[Strategy] 四个权重之和必须 > 0")
+
     return StrategyConfig(
+        weight_front=w_front,
+        weight_pick=w_pick,
+        weight_route=w_route,
+        weight_isolation=w_iso,
         skip_shapes=skip_shapes,
         class_id_mode=class_id_mode,
         order_mode=order_mode,

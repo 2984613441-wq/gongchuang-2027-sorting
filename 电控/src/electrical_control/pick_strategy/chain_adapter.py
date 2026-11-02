@@ -69,6 +69,7 @@ from electrical_control.pick_strategy.orderer import (
     ORDER_MODES,
     SettleTracker,
     order_by_five_key,
+    order_by_weighted,
 )
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,24 @@ def make_payload_orderer(
                     logger.warning("取上一次落料点失败：五键排序按锚点未知处理", exc_info=True)
             ordered_dets = order_by_five_key(
                 frame, config, settle=settle, last_drop=last_drop)
+        elif order_mode == "weighted":
+            # 2026-11-02（用户口径）：前端最先 → 前端内部置信度高的先 → 兼顾路线。
+            # 权重取自 [Strategy] weight_front/weight_pick/weight_route/weight_isolation。
+            last_drop = None
+            if last_drop_provider is not None:
+                try:
+                    last_drop = last_drop_provider()
+                except Exception:
+                    logger.warning("取上一次落料点失败：加权排序按锚点未知处理",
+                                   exc_info=True)
+            weights = {
+                "front": float(getattr(config, "weight_front", 0.70)),
+                "pick": float(getattr(config, "weight_pick", 0.15)),
+                "route": float(getattr(config, "weight_route", 0.10)),
+                "isolation": float(getattr(config, "weight_isolation", 0.05)),
+            }
+            ordered_dets = order_by_weighted(
+                frame, config, weights=weights, settle=settle, last_drop=last_drop)
         else:   # group（默认 = 现状口径）
             ordered_dets = order_by_group_scan(frame, config)   # 只按规则排序，不拒识
         logger.info(

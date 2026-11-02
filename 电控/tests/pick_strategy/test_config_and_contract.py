@@ -93,6 +93,9 @@ def test_demo_config_declares_its_unverified_params():
         "[Strategy] order_mode", "[Strategy] settle_frames",
         "[Strategy] settle_shift_mm", "[Strategy] isolation_band_mm",
         "[Strategy] skip_shapes", "[Strategy] class_id_mode",
+        # 2026-11-02：加权排序四项权重，同样【待实测】
+        "[Strategy] weight_front", "[Strategy] weight_pick",
+        "[Strategy] weight_route", "[Strategy] weight_isolation",
     )
 
 

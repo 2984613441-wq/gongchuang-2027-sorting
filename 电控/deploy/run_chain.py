@@ -573,13 +573,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--order-mode",
-        choices=("auto", "legacy", "group", "difficulty", "open_edge", "five_key"),
+        choices=("auto", "legacy", "group", "difficulty", "open_edge", "five_key",
+                 "weighted"),
         default=_env("ORDER_MODE", "auto"),
         help="夹取策略排序口径（仅 --pick-strategy=order 生效）。"
              "auto=用配置 [Strategy] order_mode（缺省 legacy=不排序）；"
              "group=分组→待定→难度→行扫描（现状默认）；"
              "difficulty=只按难度分层；open_edge=离无壁边最近；"
              "five_key=停稳→待定→难度→隔离度→落点距离（2026-11-01 新增）；"
+             "weighted=加权评分：前端/夹取/路线/隔离度（2026-11-02 新增，权重见 [Strategy]）；"
              "legacy=不排序（原顺序）。",
     )
     parser.add_argument(

@@ -51,10 +51,13 @@ from .selector import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "DEFAULT_WEIGHTS",
     "ORDER_MODES",
     "SettleTracker",
     "order_by_five_key",
+    "order_by_weighted",
     "neighbor_count",
+    "score_detections",
 ]
 
 #: 可选排序模式（灰度开关用）。``legacy`` = 完全不排序（原顺序）。
@@ -64,7 +67,16 @@ ORDER_MODES: tuple[str, ...] = (
     "difficulty",
     "open_edge",
     "five_key",
+    "weighted",
 )
+
+#: 加权排序默认权重（前端 > 好夹 > 路线 > 隔离度；用户 2026-11-02 口径）
+DEFAULT_WEIGHTS: dict[str, float] = {
+    "front": 0.70,
+    "pick": 0.15,
+    "route": 0.10,
+    "isolation": 0.05,
+}
 
 #: 保守默认参数（单位 mm / 帧）。
 DEFAULTS: dict[str, float] = {
@@ -189,5 +201,115 @@ def order_by_five_key(
             dy = det.y_mm - last_drop.y_mm
             drop_d = (dx * dx + dy * dy) ** 0.5
         return (deferred, pending, tier, isolation, drop_d) + row_scan_key(det)
+
+    return tuple(sorted(usable, key=key))
+
+
+# --------------------------------------------------------------------------- #
+# 加权评分排序（2026-11-02 用户口径）
+# --------------------------------------------------------------------------- #
+def _norm(value: float, lo: float, hi: float) -> float:
+    """线性归一化到 0..1（超界夹紧）。"""
+    if hi <= lo:
+        return 0.5
+    v = (float(value) - lo) / (hi - lo)
+    return 0.0 if v < 0 else (1.0 if v > 1.0 else v)
+
+
+def _isolation_band(config) -> float:
+    band = DEFAULTS["isolation_band_mm"]
+    env = getattr(config, "gripper_envelope", None)
+    if env is not None:
+        band = max(float(env.x_mm), float(env.y_mm)) + DEFAULTS["isolation_band_mm"]
+    return band
+
+
+def score_detections(
+    frame: VisionFrame,
+    config,
+    *,
+    weights: dict[str, float] | None = None,
+    last_drop: Point | None = None,
+) -> dict[int, dict[str, float]]:
+    """给每个可用件算 4 个分项（0..1，越大越优先）与加权总分。
+
+    用户 2026-11-02 口径：「主摄像头前端的最先夹取；最先夹取里面再按置信度高的先
+    （正方体这种好夹的）；把路线、物料夹取、前端三个都考虑进去」⇒ 加权评分。
+
+    ==========  ============================================================
+    front       离**无壁边**越近越高（= 主相机画面靠前/靠外的那一排）
+    pick        越好夹越高：``0.75×(1 - tier/2) + 0.25×(conf/100)``
+    route       空爪行程（+ 到上一次落点，未知则只算空爪）越短越高
+    isolation   周围件越少越高（防碰倒邻件）
+    ==========  ============================================================
+
+    返回 ``{target_seq: {...}}``；不可用件不出现（与其它排序函数同口径）。
+    """
+    usable, _ = usable_detections(frame, config)
+    w = dict(DEFAULT_WEIGHTS)
+    if weights:
+        w.update({k: float(v) for k, v in weights.items() if k in DEFAULT_WEIGHTS})
+
+    ws = config.workspace
+    diag = max(1.0, ((ws.x_max - ws.x_min) ** 2 +
+                     (ws.y_max - ws.y_min) ** 2) ** 0.5)
+    band = _isolation_band(config)
+    home = config.home
+
+    out: dict[int, dict[str, float]] = {}
+    for det in usable:
+        try:
+            d_edge = config.tray.to_open_edge_mm(det.point)
+        except Exception:
+            d_edge = diag / 2.0
+        front = 1.0 - _norm(d_edge, 0.0, diag)
+
+        tier = PICK_TIER_BY_CLASS_ID.get(int(det.class_id), PICK_TIER_DEFAULT)
+        ease = 1.0 - min(tier, 2) / 2.0
+        conf = _norm(getattr(det, "confidence", 0), 0.0, 100.0)
+        pick = 0.75 * ease + 0.25 * conf
+
+        legs = [((det.x_mm - home.x_mm) ** 2 + (det.y_mm - home.y_mm) ** 2) ** 0.5]
+        if last_drop is not None:
+            legs.append(((det.x_mm - last_drop.x_mm) ** 2 +
+                         (det.y_mm - last_drop.y_mm) ** 2) ** 0.5)
+        route = 1.0 - _norm(sum(legs) / len(legs), 0.0, diag)
+
+        n = neighbor_count(det, usable, band)
+        isolation = 1.0 - min(n, 3) / 3.0
+
+        total = (w["front"] * front + w["pick"] * pick +
+                 w["route"] * route + w["isolation"] * isolation)
+        out[int(det.target_seq)] = {
+            "front": front, "pick": pick, "route": route,
+            "isolation": isolation, "total": total,
+        }
+    return out
+
+
+def order_by_weighted(
+    frame: VisionFrame,
+    config,
+    *,
+    weights: dict[str, float] | None = None,
+    settle: SettleTracker | None = None,
+    last_drop: Point | None = None,
+) -> tuple[Detection, ...]:
+    """按加权总分从高到低排序（同分按行扫描键定序，保证可复现）。
+
+    ⚠️ 停稳是**更高一级**的条件：``settle`` 明确判定为「还在动」的件仍排到最后
+    （用户要求「停稳才抓」），之后再比权重分。
+    """
+    usable, _ = usable_detections(frame, config)
+    if len(usable) < 2:
+        return tuple(usable)
+    scores = score_detections(frame, config, weights=weights, last_drop=last_drop)
+
+    def key(det: Detection):
+        moving = 0
+        if settle is not None:
+            moving = 1 if settle.is_settled(det.target_seq) is False else 0
+        total = scores.get(int(det.target_seq), {}).get("total", 0.0)
+        return (moving, -total) + row_scan_key(det)
 
     return tuple(sorted(usable, key=key))
