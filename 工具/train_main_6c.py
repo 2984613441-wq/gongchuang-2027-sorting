@@ -19,7 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="_train_6c_merged_20261105/data.yaml")
+    ap.add_argument("--data", default="_train_6c_merged_20261105/data.yaml",
+                    help="默认 494 张（合并去重版）。2026-11-05 用户确认："
+                         "此前所有模型的照片均由用户复核过 ⇒ v10 的 23 张老图同样可信，"
+                         "故用并集；要退回 471 张用 --data _train_main_6c_v2/data.yaml")
     ap.add_argument("--init", default="_runs/main_6c_v2/weights/best.pt",
                     help="初始权重：main_v2 best.pt（热启动）或 yolo11n.pt")
     ap.add_argument("--epochs", type=int, default=100)
@@ -28,6 +31,11 @@ def main() -> int:
     ap.add_argument("--name", default="yolo11n_6c_merged13_20261105")
     ap.add_argument("--project", default="_runs")
     ap.add_argument("--device", default="0")
+    ap.add_argument("--patience", type=int, default=30)
+    ap.add_argument("--lr0", type=float, default=0.001,
+                    help="初始学习率：热启动 0.001；从头训 0.01")
+    ap.add_argument("--cache", action="store_true", default=True)
+    ap.add_argument("--no-cache", dest="cache", action="store_false")
     args = ap.parse_args()
 
     from ultralytics import YOLO
@@ -42,10 +50,10 @@ def main() -> int:
         batch=args.batch,
         device=args.device,
         workers=0,
-        cache=True,
-        patience=30,
+        cache=args.cache,
+        patience=args.patience,
         cos_lr=True,
-        lr0=0.001,            # 热启动用较小的初始学习率
+        lr0=args.lr0,
         project=str(ROOT / args.project),
         name=args.name,
         exist_ok=True,
