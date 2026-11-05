@@ -1,44 +1,43 @@
 # -*- coding: utf-8 -*-
-r"""三路对比视图：**主相机判断 / 副相机判断 / 两者融合**（2026-11-05）。
+r"""三路实时观测窗口：主相机 / 副相机 / 融合判决（2026-11-05 v2）。
 
-用途（实验室现场）：
-  * 主相机（MaixCAM）通过 TCP 8765 发 `BATCH_TARGETS`（3B 头 + N×7B）
-  * 副相机（DF200，插在树莓派）通过 Pi 的 HTTP 快照接口取帧
-  * PC 本地推理副相机模型（可选 ONNX）+ HSV 判色，或只看主相机结果
-  * 同时打印/显示三块：①主相机判断 ②副相机判断 ③融合判断（CONFIRMED/CONTRADICTED/UNPROVEN）
+**默认就是窗口模式**（`--headless` 才是纯终端）。
+左栏：主相机画面 + 检测框（主相机若没开快照服务，则退化为检测点阵）
+中栏：副相机画面 + 检测框/颜色
+右栏：融合判决（CONFIRMED / CONTRADICTED / UNPROVEN）、计数、FPS、数据新鲜度
 
-边界
+快捷键
+------
+q / ESC  退出        s  存一张证据（json+jpg）      1  集合模式
+2        点匹配模式     m 切换主相机 id 语义(shape/code)
+
+用法
 ----
-* 只读：不连 STM32、不写串口、不动固件、不改协议。
-* 没有 cv2/onnxruntime 时仍可跑「终端模式」（`--headless --no-image`），用 `--cam2-json` 读离线结果。
-
-用法示例
---------
 ```powershell
-# 1) 现场：主相机 + 副相机实时（有画面）
+# 最小：连主相机 TCP 8765 + 副相机 Pi 快照（会自动尝试主相机 :8766 快照）
+python _pi_tools/three_way_view.py
+
+# 指定地址
 python _pi_tools/three_way_view.py --maixcam 172.20.10.9 --cam2-url http://172.20.10.8:8080/snap
 
-# 2) 只看终端结论，不开窗口
-python _pi_tools/three_way_view.py --headless
-
-# 3) 副相机做 6 类模型推理（PC 上有 onnxruntime）
+# 副相机跑 6 类 ONNX
 python _pi_tools/three_way_view.py --model _deploy_maixcam\yolo11n_6c_cam2.onnx
 
-# 4) 保存证据（每轮一张副相机图 + 一份 json）
-python _pi_tools/three_way_view.py --evidence _three_way_evidence
+# 没有设备时，先验证窗口本身是否正常（合成动画）
+python _pi_tools/three_way_view.py --synthetic
 
-# 5) 自检（无设备、无 cv2 也能跑）
-python _pi_tools/three_way_view.py --self-test
+# 纯终端
+python _pi_tools/three_way_view.py --headless
 ```
+
+边界：只读。不连 STM32、不写串口、不改协议、不影响场上运行。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import socket
-import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -46,10 +45,8 @@ from pathlib import Path
 SHAPES = {1: "cube", 2: "cuboid", 3: "cylinder", 4: "pentagonal_prism",
           5: "cone", 6: "tetrahedron"}
 COLORS = {1: "red", 2: "yellow", 3: "green", 4: "blue", 5: "white"}
-_ANGLE_NONE = 0xFF
 _TARGET_BYTES = 7
 
-# HSV 阈值（cv2 口径 H 0..179）—— 与电控/rpi/color_judge.py 保持一致，仍为【待实测】
 COLOR_HSV = {
     "red": [((0, 90, 60), (10, 255, 255)), ((170, 90, 60), (179, 255, 255))],
     "yellow": [((11, 80, 80), (28, 255, 255))],
@@ -59,9 +56,6 @@ COLOR_HSV = {
 }
 
 
-# --------------------------------------------------------------------------- #
-# 依赖探测（没有 cv2/numpy 也能跑终端模式）
-# --------------------------------------------------------------------------- #
 def _try(mod: str):
     try:
         return __import__(mod)
@@ -78,14 +72,9 @@ def have_images() -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# 报文解析（主相机 BATCH_TARGETS）
+# 主相机报文
 # --------------------------------------------------------------------------- #
 def parse_batch(body: bytes, id_mode: str = "shape") -> tuple[int, list[dict]]:
-    """解析 `count(1) + task_id(2 BE) + N×7B`。
-
-    ``id_mode``：``shape`` ⇒ id 字节是 shape_id(1..6)（默认，现状）；
-                 ``code``  ⇒ id 字节是 code(1..30)。
-    """
     if len(body) < 3:
         return 0, []
     count = body[0]
@@ -96,19 +85,12 @@ def parse_batch(body: bytes, id_mode: str = "shape") -> tuple[int, list[dict]]:
         if off + _TARGET_BYTES > len(body):
             break
         id_byte = body[off]
-        rec = {
-            "seq": i + 1,
-            "id": id_byte,
-            "conf": body[off + 1],
-            "x": int.from_bytes(body[off + 2:off + 4], "big"),
-            "y": int.from_bytes(body[off + 4:off + 6], "big"),
-        }
+        rec = {"seq": i + 1, "id": id_byte, "conf": body[off + 1],
+               "x": int.from_bytes(body[off + 2:off + 4], "big"),
+               "y": int.from_bytes(body[off + 4:off + 6], "big")}
         if id_mode == "code":
-            if 1 <= id_byte <= 30:
-                rec["shape"] = (id_byte - 1) // 5 + 1
-                rec["color"] = (id_byte - 1) % 5 + 1
-            else:
-                rec["shape"] = rec["color"] = 0
+            rec["shape"] = (id_byte - 1) // 5 + 1 if 1 <= id_byte <= 30 else 0
+            rec["color"] = (id_byte - 1) % 5 + 1 if 1 <= id_byte <= 30 else 0
         else:
             rec["shape"] = id_byte if 1 <= id_byte <= 6 else 0
             rec["color"] = 0
@@ -117,25 +99,23 @@ def parse_batch(body: bytes, id_mode: str = "shape") -> tuple[int, list[dict]]:
     return task_id, items
 
 
-def recv_exact(sock: socket.socket, n: int) -> bytes | None:
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
-            return None
-        buf += chunk
-    return buf
-
-
 class MainCamClient:
-    """连 MaixCAM 的 TCP 8765，一次收一整批 BATCH_TARGETS。"""
+    """TCP 8765 收 BATCH_TARGETS（非阻塞：超时返回 None，界面继续刷）。"""
 
     def __init__(self, host: str, port: int = 8765, id_mode: str = "shape"):
         self.host, self.port, self.id_mode = host, port, id_mode
         self.sock: socket.socket | None = None
+        self.last_error = ""
 
-    def connect(self, timeout: float = 5.0) -> None:
-        self.sock = socket.create_connection((self.host, self.port), timeout=timeout)
+    def connect(self, timeout: float = 4.0) -> bool:
+        try:
+            self.sock = socket.create_connection((self.host, self.port), timeout=timeout)
+            self.sock.settimeout(0.05)
+            return True
+        except Exception as exc:
+            self.last_error = str(exc)
+            self.sock = None
+            return False
 
     def close(self) -> None:
         if self.sock is not None:
@@ -144,33 +124,60 @@ class MainCamClient:
             finally:
                 self.sock = None
 
-    def recv_one(self) -> tuple[int, list[dict]] | None:
+    def poll(self) -> tuple[int, list[dict]] | None:
         if self.sock is None:
             return None
-        hdr = recv_exact(self.sock, 3)
-        if hdr is None:
+        try:
+            hdr = self.sock.recv(3)
+        except socket.timeout:
             return None
-        count = hdr[0]
-        body = hdr + (recv_exact(self.sock, count * _TARGET_BYTES) or b"")
-        return parse_batch(body, self.id_mode)
+        except Exception as exc:
+            self.last_error = str(exc)
+            self.sock = None
+            return None
+        if not hdr:
+            self.sock = None
+            return None
+        while len(hdr) < 3:
+            try:
+                more = self.sock.recv(3 - len(hdr))
+            except socket.timeout:
+                continue
+            if not more:
+                self.sock = None
+                return None
+            hdr += more
+        need = hdr[0] * _TARGET_BYTES
+        body = b""
+        while len(body) < need:
+            try:
+                chunk = self.sock.recv(need - len(body))
+            except socket.timeout:
+                continue
+            if not chunk:
+                self.sock = None
+                return None
+            body += chunk
+        return parse_batch(hdr + body, self.id_mode)
 
 
 # --------------------------------------------------------------------------- #
-# 副相机：取帧 + 判色 + 可选 ONNX
+# 取图 / 判色 / 可选 ONNX
 # --------------------------------------------------------------------------- #
-def grab_jpeg(url: str, timeout: float = 6.0):
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        raw = resp.read()
-    if cv2 is None or np is None:
-        raise RuntimeError("没有 cv2/numpy：无法解码副相机图像（请用 --cam2-json 离线模式）")
-    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        raise RuntimeError("副相机图像解码失败")
-    return img
+def grab_jpeg(url: str, timeout: float = 1.5):
+    if not url:
+        return None
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            raw = resp.read()
+    except Exception:
+        return None
+    if cv2 is None or np is None or not raw:
+        return None
+    return cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
 
 
 def color_of(bgr) -> tuple[str, float]:
-    """整帧 HSV 主色（副相机落料位/托盘局部用；现场按需裁 ROI）。"""
     if cv2 is None or np is None:
         return "unknown", 0.0
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -187,11 +194,9 @@ def color_of(bgr) -> tuple[str, float]:
 
 
 class Cam2Model:
-    """可选：副相机 6 类 ONNX 推理（没有 onnxruntime/文件时自动降级为只用 HSV）。"""
-
     def __init__(self, model_path: str | None, conf: float = 0.30, size: int = 448):
         self.ok = False
-        self.reason = "未启用"
+        self.reason = "未启用（只用 HSV）"
         self.conf, self.size = conf, size
         if not model_path:
             return
@@ -208,22 +213,21 @@ class Cam2Model:
             self.input_name = self.sess.get_inputs()[0].name
             self.ok = True
             self.reason = "ok"
-        except Exception as exc:                       # pragma: no cover
+        except Exception as exc:
             self.reason = "加载失败：%s" % exc
 
     def detect(self, bgr) -> list[dict]:
-        if not self.ok or cv2 is None or np is None:
+        if not self.ok or cv2 is None:
             return []
         h, w = bgr.shape[:2]
         s = self.size
-        img = cv2.resize(bgr, (s, s))
-        blob = img[:, :, ::-1].astype("float32").transpose(2, 0, 1)[None] / 255.0
+        blob = cv2.resize(bgr, (s, s))[:, :, ::-1].astype("float32")
+        blob = blob.transpose(2, 0, 1)[None] / 255.0
         out = self.sess.run(None, {self.input_name: blob})[0]
-        # YOLO11 输出：(1, 4+nc, N) 或 (1, N, 4+nc)
         pred = out[0]
         if pred.shape[0] < pred.shape[1]:
             pred = pred.T
-        boxes, scores, classes = [], [], []
+        dets = []
         for row in pred:
             cx, cy, bw, bh = row[:4]
             cls_scores = row[4:]
@@ -231,44 +235,35 @@ class Cam2Model:
             conf = float(cls_scores[cid])
             if conf < self.conf:
                 continue
-            boxes.append([cx - bw / 2, cy - bh / 2, bw, bh])
-            scores.append(conf)
-            classes.append(cid)
-        dets = []
-        for box, conf, cid in zip(boxes, scores, classes):
-            cx, cy, bw, bh = box
-            # 输出是中心点+宽高（已按 448 缩放），换算回原图
-            x1 = int((cx - bw / 2) * w / s)
-            y1 = int((cy - bh / 2) * h / s)
-            x2 = int((cx + bw / 2) * w / s)
-            y2 = int((cy + bh / 2) * h / s)
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w - 1, x2), min(h - 1, y2)
+            x1 = max(0, int((cx - bw / 2) * w / s))
+            y1 = max(0, int((cy - bh / 2) * h / s))
+            x2 = min(w - 1, int((cx + bw / 2) * w / s))
+            y2 = min(h - 1, int((cy + bh / 2) * h / s))
             if x2 <= x1 or y2 <= y1:
                 continue
             crop = bgr[y1:y2, x1:x2]
-            cname, frac = color_of(crop) if crop.size else ("unknown", 0.0)
-            dets.append({"shape": cid + 1, "shape_name": SHAPES.get(cid + 1, "?"),
-                         "conf": round(conf, 3), "color": cname,
+            cname, _ = color_of(crop) if crop.size else ("unknown", 0.0)
+            dets.append({"shape": cid + 1, "conf": round(conf, 3), "color": cname,
                          "box": (x1, y1, x2, y2)})
         return dets
 
 
 # --------------------------------------------------------------------------- #
-# 融合判决（不改协议，只在 PC 显示）
+# 融合判决
 # --------------------------------------------------------------------------- #
-def verdict_set(main_items: list[dict], cam2: dict | None) -> dict:
-    """集合模式（无单应标定）：比较**形状计数**与颜色集合。"""
-    main_shapes: dict[int, int] = {}
-    for it in main_items:
-        main_shapes[it["shape"]] = main_shapes.get(it["shape"], 0) + 1
+def _shape_counts(items) -> dict:
+    out: dict[int, int] = {}
+    for it in items:
+        out[int(it["shape"])] = out.get(int(it["shape"]), 0) + 1
+    return out
+
+
+def verdict_set(main_items, cam2) -> dict:
+    main_shapes = _shape_counts(main_items)
+    cam2_shapes = _shape_counts((cam2 or {}).get("detections", []))
     if cam2 is None:
         return {"mode": "set", "verdict": "UNPROVEN", "reason": "副相机无数据",
                 "main": main_shapes, "cam2": {}}
-    cam2_shapes: dict[int, int] = {}
-    for d in cam2.get("detections", []):
-        cam2_shapes[d["shape"]] = cam2_shapes.get(d["shape"], 0) + 1
-
     if not main_shapes:
         return {"mode": "set", "verdict": "UNPROVEN", "reason": "主相机本帧无件",
                 "main": {}, "cam2": cam2_shapes}
@@ -278,29 +273,26 @@ def verdict_set(main_items: list[dict], cam2: dict | None) -> dict:
     if main_shapes == cam2_shapes:
         return {"mode": "set", "verdict": "CONFIRMED", "reason": "形状计数一致",
                 "main": main_shapes, "cam2": cam2_shapes}
-    only_main = {k: v for k, v in main_shapes.items() if cam2_shapes.get(k) != v}
+    diff = {k: (main_shapes.get(k, 0), cam2_shapes.get(k, 0))
+            for k in set(main_shapes) | set(cam2_shapes)
+            if main_shapes.get(k, 0) != cam2_shapes.get(k, 0)}
     return {"mode": "set", "verdict": "CONTRADICTED",
-            "reason": "形状计数不一致（主相机多/少的形状：%s）" % only_main,
+            "reason": "计数不一致 形状:(主,副)=%s" % diff,
             "main": main_shapes, "cam2": cam2_shapes}
 
 
-def verdict_point(main_items: list[dict], cam2: dict | None,
-                  radius: float = 90.0, scale: float = 1.0,
-                  dx: float = 0.0, dy: float = 0.0) -> dict:
-    """点模式（粗略线性映射，**不是标定**）：主相机点 → 副相机点最近邻匹配。"""
+def verdict_point(main_items, cam2, radius=90.0, scale=1.0, dx=0.0, dy=0.0) -> dict:
     if cam2 is None:
         return {"mode": "point", "verdict": "UNPROVEN", "reason": "副相机无数据",
-                "pairs": []}
+                "pairs": [], "main": _shape_counts(main_items), "cam2": {}}
     dets = cam2.get("detections", [])
     pairs, unmatched = [], []
     for it in main_items:
-        mx = it["x"] * scale + dx
-        my = it["y"] * scale + dy
+        mx, my = it["x"] * scale + dx, it["y"] * scale + dy
         best, best_d = None, 1e9
         for d in dets:
             x1, y1, x2, y2 = d["box"]
-            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
-            dist = ((cx - mx) ** 2 + (cy - my) ** 2) ** 0.5
+            dist = (((x1 + x2) / 2.0 - mx) ** 2 + ((y1 + y2) / 2.0 - my) ** 2) ** 0.5
             if dist < best_d:
                 best, best_d = d, dist
         if best is not None and best_d <= radius:
@@ -310,9 +302,7 @@ def verdict_point(main_items: list[dict], cam2: dict | None,
                           "same_shape": it["shape"] == best["shape"]})
         else:
             unmatched.append(it["seq"])
-    if not main_items:
-        verdict = "UNPROVEN"
-    elif not pairs:
+    if not main_items or not pairs:
         verdict = "UNPROVEN"
     elif all(p["same_shape"] for p in pairs) and not unmatched:
         verdict = "CONFIRMED"
@@ -320,283 +310,342 @@ def verdict_point(main_items: list[dict], cam2: dict | None,
         verdict = "CONTRADICTED"
     return {"mode": "point", "verdict": verdict, "pairs": pairs,
             "unmatched_main": unmatched,
-            "reason": "未匹配主相机件：%s" % unmatched if unmatched else ""}
+            "reason": "未匹配：%s" % unmatched if unmatched else "",
+            "main": _shape_counts(main_items),
+            "cam2": _shape_counts(dets)}
 
 
 # --------------------------------------------------------------------------- #
-# 展示：终端三块 + 可选三栏窗口
+# 渲染
 # --------------------------------------------------------------------------- #
-def _fmt_shape(shape: int) -> str:
-    return "%d(%s)" % (shape, SHAPES.get(shape, "?"))
+W, H = 1500, 620
+COL = W // 3
 
 
-def render_terminal(main_items, cam2, fusion, round_no: int) -> str:
-    lines = []
-    lines.append("=" * 74)
-    lines.append("第 %d 批   主相机 %d 件" % (round_no, len(main_items)))
-    lines.append("-" * 74)
-    lines.append("[1] 主相机判断（MaixCAM → BATCH_TARGETS）")
-    if not main_items:
-        lines.append("    （无件）")
-    for it in main_items:
-        lines.append("    seq=%d 形状=%s conf=%d 像素=(%d,%d)" % (
-            it["seq"], _fmt_shape(it["shape"]), it["conf"], it["x"], it["y"]))
-
-    lines.append("[2] 副相机判断（DF200 via Pi 快照）")
-    if cam2 is None:
-        lines.append("    （无数据）")
-    else:
-        lines.append("    全帧主色=%s(%.3f)  检测 %d 件  模型=%s" % (
-            cam2.get("frame_color", "?"), cam2.get("frame_color_frac", 0.0),
-            len(cam2.get("detections", [])), cam2.get("model", "off")))
-        for d in cam2.get("detections", []):
-            lines.append("    %s  conf=%.2f 颜色=%s 框=%s" % (
-                _fmt_shape(d["shape"]), d["conf"], d["color"], d["box"]))
-
-    lines.append("[3] 融合判断")
-    lines.append("    模式=%s  结论=%s  %s" % (
-        fusion["mode"], fusion["verdict"], fusion.get("reason", "")))
-    if fusion["mode"] == "point":
-        for p in fusion.get("pairs", []):
-            lines.append("    seq=%d 主=%s 副=%s(色=%s) 距=%.1fpx %s" % (
-                p["seq"], _fmt_shape(p["main_shape"]),
-                _fmt_shape(p["cam2_shape"]), p["cam2_color"], p["dist_px"],
-                "✓" if p["same_shape"] else "✗"))
-    else:
-        lines.append("    主相机形状计数=%s" % fusion.get("main"))
-        lines.append("    副相机形状计数=%s" % fusion.get("cam2"))
-    return "\n".join(lines)
+def _fit(img, cw, ch):
+    canvas = np.zeros((ch, cw, 3), np.uint8)
+    if img is None:
+        return canvas, 0, 0, 1.0
+    ih, iw = img.shape[:2]
+    r = min(cw / iw, ch / ih)
+    nw, nh = max(1, int(iw * r)), max(1, int(ih * r))
+    small = cv2.resize(img, (nw, nh))
+    x0, y0 = (cw - nw) // 2, (ch - nh) // 2
+    canvas[y0:y0 + nh, x0:x0 + nw] = small
+    return canvas, x0, y0, r
 
 
-def render_window(state: dict, size=(1280, 720)) -> None:
-    """三栏窗口：主相机结果画布 | 副相机实时帧 | 融合文本。"""
-    if cv2 is None or np is None:
-        return
-    w, h = size
-    col_w = w // 3
-    canvas = np.zeros((h, w, 3), np.uint8)
+def render(state: dict):
+    canvas = np.zeros((H, W, 3), np.uint8)
 
-    # 左：主相机（无图像，画点阵 + 文本）
-    panel = np.zeros((h, col_w, 3), np.uint8)
-    cv2.putText(panel, "MAIN (MaixCAM)", (8, 22),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-    scale_x = col_w / 1280.0
-    scale_y = h / 720.0
+    # 左：主相机
+    has_main = state.get("main_frame") is not None
+    left, ox, oy, lr = _fit(state.get("main_frame"), COL, H)
     for it in state["main_items"]:
-        px = int(it["x"] * scale_x)
-        py = int(it["y"] * scale_y)
-        cv2.circle(panel, (px, py), 6, (0, 255, 0), -1)
-        cv2.putText(panel, "%s %d" % (SHAPES.get(it["shape"], "?"), it["conf"]),
-                    (px + 8, py - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
-                    (200, 255, 200), 1)
-    canvas[:, :col_w] = panel
+        if has_main:
+            px, py = int(it["x"] * lr + ox), int(it["y"] * lr + oy)
+        else:
+            px, py = int(it["x"] * COL / 1280.0), int(it["y"] * H / 720.0)
+        cv2.circle(left, (px, py), 7, (0, 255, 0), 2)
+        cv2.putText(left, "%s %d" % (SHAPES.get(it["shape"], "?"), it["conf"]),
+                    (px + 9, py - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
+    cv2.putText(left, "MAIN (MaixCAM) %d pcs  %.1fs" % (
+        len(state["main_items"]), state["main_age"]), (8, 22),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    canvas[:, 0:COL] = left
 
-    # 中：副相机画面
-    frame = state.get("cam2_frame")
-    if frame is not None:
-        fh, fw = frame.shape[:2]
-        ratio = min(col_w / fw, h / fh)
-        small = cv2.resize(frame, (int(fw * ratio), int(fh * ratio)))
-        y0 = (h - small.shape[0]) // 2
-        x0 = col_w + (col_w - small.shape[1]) // 2
-        canvas[y0:y0 + small.shape[0], x0:x0 + small.shape[1]] = small
-        off_x = x0
-        off_y = y0
-    else:
-        off_x = off_y = 0
-        cv2.putText(canvas, "CAM2 no frame", (col_w + 10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
-    cv2.putText(canvas, "CAM2 (DF200)", (col_w + 8, 22),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+    # 中：副相机
+    mid, mx0, my0, mr = _fit((state.get("cam2") or {}).get("frame"), COL, H)
     for d in (state.get("cam2") or {}).get("detections", []):
         x1, y1, x2, y2 = d["box"]
-        if frame is not None:
-            r = min(col_w / frame.shape[1], h / frame.shape[0])
-            x1, y1, x2, y2 = (int(x1 * r + off_x), int(y1 * r + off_y),
-                              int(x2 * r + off_x), int(y2 * r + off_y))
-        cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 255, 255), 1)
-        cv2.putText(canvas, "%s/%s" % (SHAPES.get(d["shape"], "?"), d["color"]),
-                    (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+        x1, y1 = int(x1 * mr + mx0), int(y1 * mr + my0)
+        x2, y2 = int(x2 * mr + mx0), int(y2 * mr + my0)
+        cv2.rectangle(mid, (x1, y1), (x2, y2), (0, 255, 255), 1)
+        cv2.putText(mid, "%s/%s %.2f" % (SHAPES.get(d["shape"], "?"), d["color"],
+                                         d["conf"]),
+                    (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.42,
                     (0, 255, 255), 1)
+    cam2 = state.get("cam2")
+    cv2.putText(mid, "CAM2 (DF200) %d pcs  %s" % (
+        len((cam2 or {}).get("detections", [])),
+        (cam2 or {}).get("model", "-")), (8, 22),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+    if cam2 and cam2.get("frame_color"):
+        cv2.putText(mid, "frame color: %s %.3f" % (
+            cam2["frame_color"], cam2.get("frame_color_frac", 0.0)), (8, 46),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 200, 255), 1)
+    canvas[:, COL:2 * COL] = mid
 
-    # 右：融合判决
-    x_text = 2 * col_w + 8
+    # 右：融合
+    right = np.zeros((H, COL, 3), np.uint8)
     fusion = state["fusion"]
-    color = {"CONFIRMED": (0, 255, 0), "CONTRADICTED": (0, 0, 255)}.get(
-        fusion["verdict"], (0, 200, 255))
-    cv2.putText(canvas, "FUSION", (x_text, 22),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-    cv2.putText(canvas, fusion["verdict"], (x_text, 58),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-    y = 90
-    for line in str(fusion.get("reason", "")).split("\n")[:3]:
-        cv2.putText(canvas, line[:34], (x_text, y),
+    v = fusion["verdict"]
+    vcolor = {"CONFIRMED": (0, 255, 0), "CONTRADICTED": (0, 0, 255)}.get(
+        v, (0, 200, 255))
+    cv2.putText(right, "FUSION  (%s)" % fusion["mode"], (10, 24),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+    cv2.putText(right, v, (10, 68), cv2.FONT_HERSHEY_SIMPLEX, 1.0, vcolor, 2)
+    y = 100
+    reason = str(fusion.get("reason", ""))
+    for i in range(0, min(len(reason), 90), 30):
+        cv2.putText(right, reason[i:i + 30], (10, y),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1)
-        y += 22
-    y += 6
-    cv2.putText(canvas, "main=%s" % fusion.get("main", {}), (x_text, y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 255, 180), 1)
-    y += 20
-    cv2.putText(canvas, "cam2=%s" % fusion.get("cam2", {}), (x_text, y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 220, 255), 1)
+        y += 20
+    y += 8
+    for title, key, color in (("main shapes:", "main", (180, 255, 180)),
+                              ("cam2 shapes:", "cam2", (180, 220, 255))):
+        cv2.putText(right, title, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+        y += 18
+        for k, cnt in sorted(fusion.get(key, {}).items()):
+            cv2.putText(right, "  %s x%d" % (SHAPES.get(k, "?"), cnt), (10, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+            y += 17
+        y += 6
+    stat = "conn=%s main=%s cam2=%s fps=%.1f" % (
+        state.get("conn", "?"), "OK" if state.get("main_ok") else "DOWN",
+        "OK" if state.get("cam2_ok") else "NO", state.get("fps", 0.0))
+    cv2.putText(right, stat[:60], (10, H - 34), cv2.FONT_HERSHEY_SIMPLEX, 0.42,
+                (200, 200, 200), 1)
+    cv2.putText(right, "q=quit s=save 1=set 2=point m=idmode", (10, H - 14),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (160, 160, 160), 1)
+    canvas[:, 2 * COL:] = right
+    return canvas
 
-    cv2.imshow("three-way view  (q = quit)", canvas)
-    if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-        raise KeyboardInterrupt
+
+def render_terminal(state: dict) -> str:
+    fusion = state["fusion"]
+    return "\n".join([
+        "=" * 70,
+        "主相机 %d 件 | 副相机 %d 件 | fps %.1f | conn=%s" % (
+            len(state["main_items"]),
+            len((state.get("cam2") or {}).get("detections", [])),
+            state.get("fps", 0.0), state.get("conn", "?")),
+        "[1] 主相机: " + ("; ".join(
+            "seq%d=%s(%d)" % (it["seq"], SHAPES.get(it["shape"], "?"), it["conf"])
+            for it in state["main_items"]) or "（无件）"),
+        "[2] 副相机: " + ("; ".join(
+            "%s/%s(%.2f)" % (SHAPES.get(d["shape"], "?"), d["color"], d["conf"])
+            for d in (state.get("cam2") or {}).get("detections", []))
+            or "（无数据）"),
+        "[3] 融合[%s] %s：%s" % (fusion["mode"], fusion["verdict"],
+                                fusion.get("reason", "")),
+        "    主=%s 副=%s" % (fusion.get("main"), fusion.get("cam2")),
+    ])
 
 
 # --------------------------------------------------------------------------- #
-# 主流程
+# 合成模式（无设备验证窗口）
 # --------------------------------------------------------------------------- #
-def _grab_cam2(args) -> dict | None:
-    """取副相机数据：优先本地图/离线 json，其次 Pi 快照 URL。"""
-    frame = None
-    dets: list[dict] = []
-    frame_color, frame_frac = "unknown", 0.0
-
-    if args.cam2_json:
-        data = json.loads(Path(args.cam2_json).read_text(encoding="utf-8-sig"))
-        return {"detections": data.get("detections", []),
-                "frame_color": data.get("frame_color", "?"),
-                "frame_color_frac": data.get("frame_color_frac", 0.0),
-                "model": "json"}
-    if args.cam2_image:
-        if not have_images():
-            raise RuntimeError("缺 cv2/numpy：无法读 --cam2-image")
-        frame = cv2.imread(args.cam2_image)
-    elif args.cam2_url:
-        frame = grab_jpeg(args.cam2_url)
-
-    if frame is not None:
-        frame_color, frame_frac = color_of(frame)
-        if args.roi:
-            x, y, w, h = [int(v) for v in args.roi.split(",")]
-            roi = frame[max(0, y):y + h, max(0, x):x + w]
-            if roi.size:
-                crop_color, crop_frac = color_of(roi)
-                frame_color, frame_frac = crop_color, crop_frac
-        dets = args.sess.detect(frame) if args.sess is not None else []
-    return {"detections": dets, "frame_color": frame_color,
-            "frame_color_frac": frame_frac,
-            "model": (args.sess.reason if args.sess is not None else "off"),
-            "frame": frame}
+def synthetic_state(t: float) -> dict:
+    import math
+    items = []
+    for i in range(4):
+        ang = t + i * math.pi / 2
+        items.append({"seq": i + 1, "id": 1 + i, "conf": 70 + i * 5,
+                      "shape": 1 + (i % 6),
+                      "x": int(640 + 300 * math.cos(ang)),
+                      "y": int(360 + 200 * math.sin(ang))})
+    main_frame = cam2_frame = None
+    dets = []
+    if cv2 is not None and np is not None:
+        main_frame = np.full((720, 1280, 3), 30, np.uint8)
+        cv2.putText(main_frame, "SYNTHETIC MAIN", (420, 360),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 180, 0), 2)
+        cam2_frame = np.full((720, 1280, 3), 45, np.uint8)
+        for it in items:
+            x, y = it["x"] // 2 + 320, it["y"] // 2 + 120
+            cv2.circle(cam2_frame, (x, y), 30, (60, 60, 200), -1)
+            dets.append({"shape": it["shape"], "conf": 0.9, "color": "red",
+                         "box": (x - 30, y - 30, x + 30, y + 30)})
+    return {"main_items": items, "main_age": 0.0, "main_ok": True,
+            "main_frame": main_frame, "cam2_ok": True,
+            "cam2": {"detections": dets, "frame": cam2_frame,
+                     "frame_color": "red", "frame_color_frac": 0.2,
+                     "model": "synthetic"},
+            "fusion": verdict_set(items, {"detections": dets}),
+            "fps": 0.0, "conn": "synthetic"}
 
 
 def _self_test() -> int:
-    """无设备、无 cv2 也能验证：报文解析 + 集合判决 + 点判决。"""
     body = bytes([2]) + (7).to_bytes(2, "big")
-    body += bytes([1, 90]) + (640).to_bytes(2, "big") + (360).to_bytes(2, "big") + bytes([0xFF])
-    body += bytes([3, 80]) + (200).to_bytes(2, "big") + (400).to_bytes(2, "big") + bytes([0xFF])
-    task_id, items = parse_batch(body, "shape")
-    assert task_id == 7 and len(items) == 2, (task_id, items)
-    assert items[0]["shape"] == 1 and items[1]["shape"] == 3
-    assert items[0]["x"] == 640
-
-    code_body = bytes([1, 0, 9, 11, 88, 0, 10, 1, 44, 0xFF])
-    _, code_items = parse_batch(code_body, "code")
+    body += bytes([1, 90]) + (640).to_bytes(2, "big") + (360).to_bytes(2, "big") + bytes([255])
+    body += bytes([3, 80]) + (200).to_bytes(2, "big") + (400).to_bytes(2, "big") + bytes([255])
+    _, items = parse_batch(body, "shape")
+    assert len(items) == 2 and items[0]["shape"] == 1 and items[1]["shape"] == 3
+    _, code_items = parse_batch(bytes([1, 0, 9, 11, 88, 0, 10, 1, 44, 255]), "code")
     assert code_items[0]["shape"] == 3 and code_items[0]["color"] == 1
-
     cam2 = {"detections": [{"shape": 1, "conf": 0.9, "color": "red",
                             "box": (600, 320, 680, 400)},
                            {"shape": 3, "conf": 0.8, "color": "blue",
                             "box": (160, 360, 240, 440)}]}
-    f = verdict_set(items, cam2)
-    assert f["verdict"] == "CONFIRMED", f
-    f_bad = verdict_set(items, {"detections": [cam2["detections"][0]]})
-    assert f_bad["verdict"] == "CONTRADICTED", f_bad
-    p = verdict_point(items, cam2, radius=90.0)
-    assert p["verdict"] == "CONFIRMED", p
-    print("self-test OK：报文解析(shape/code) + 集合判决 + 点判决 全部通过")
+    assert verdict_set(items, cam2)["verdict"] == "CONFIRMED"
+    assert verdict_set(items, {"detections": cam2["detections"][:1]})["verdict"] == "CONTRADICTED"
+    assert verdict_point(items, cam2, 90.0)["verdict"] == "CONFIRMED"
+    assert verdict_set(items, None)["verdict"] == "UNPROVEN"
+    st = synthetic_state(0.0)
+    assert len(st["main_items"]) == 4
+    if have_images():
+        assert render(st).shape == (H, W, 3)
+    print("self-test OK：解析(shape/code) + 集合/点判决 + 合成渲染 全部通过")
     return 0
 
 
+# --------------------------------------------------------------------------- #
+# 主循环
+# --------------------------------------------------------------------------- #
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="主相机/副相机/融合 三路对比视图")
-    ap.add_argument("--maixcam", default="172.20.10.9", help="MaixCAM IP")
+    ap = argparse.ArgumentParser(description="三路实时观测窗口（主/副/融合）")
+    ap.add_argument("--maixcam", default="172.20.10.9")
     ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--id-mode", choices=("shape", "code"), default="shape",
-                    help="主相机 id 字节语义（shape=现状）")
-    ap.add_argument("--cam2-url", default="http://172.20.10.8:8080/snap",
-                    help="副相机快照 URL（Pi 上那个 HTTP 服务）")
-    ap.add_argument("--cam2-image", default="", help="离线：本地副相机图")
-    ap.add_argument("--cam2-json", default="", help="离线：副相机检测结果 json")
-    ap.add_argument("--roi", default="", help="副相机 ROI `x,y,w,h`（判色/落料位）")
+    ap.add_argument("--id-mode", choices=("shape", "code"), default="shape")
+    ap.add_argument("--main-url", default="",
+                    help="主相机快照 URL（默认自动试 http://<maixcam>:8766/snap）")
+    ap.add_argument("--cam2-url", default="http://172.20.10.8:8080/snap")
+    ap.add_argument("--roi", default="", help="副相机 ROI x,y,w,h")
     ap.add_argument("--model", default="", help="副相机 6 类 ONNX（可空）")
     ap.add_argument("--conf", type=float, default=0.30)
-    ap.add_argument("--mode", choices=("set", "point"), default="set",
-                    help="融合模式：set=只比形状计数（无标定）；point=按像素近邻匹配")
+    ap.add_argument("--mode", choices=("set", "point"), default="set")
     ap.add_argument("--radius", type=float, default=90.0)
     ap.add_argument("--map-scale", type=float, default=1.0)
     ap.add_argument("--map-dx", type=float, default=0.0)
     ap.add_argument("--map-dy", type=float, default=0.0)
-    ap.add_argument("--headless", action="store_true", help="不开窗口，只打印终端")
-    ap.add_argument("--no-image", action="store_true", help="不取副相机图像（最快）")
-    ap.add_argument("--evidence", default="", help="证据目录：每轮存 json(+jpg)")
-    ap.add_argument("--max-batches", type=int, default=0, help="0=一直跑")
+    ap.add_argument("--headless", action="store_true")
+    ap.add_argument("--synthetic", action="store_true", help="合成动画（无设备验窗口）")
+    ap.add_argument("--evidence", default="")
+    ap.add_argument("--target-fps", type=float, default=20.0)
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
 
     if args.self_test:
         return _self_test()
 
-    args.sess = Cam2Model(args.model, args.conf) if args.model else None
-    if args.sess is not None and not args.sess.ok:
-        print("[warn] 副相机模型不可用：%s ⇒ 只用 HSV 判色" % args.sess.reason)
+    if not args.headless and not have_images():
+        print("[warn] 当前 Python 没有 cv2/numpy ⇒ 无法开窗口，自动切 --headless")
+        print("       请用装了 opencv 的环境运行（例如 Anaconda 训练环境）")
+        args.headless = True
 
-    client = MainCamClient(args.maixcam, args.port, args.id_mode)
-    print("连 MaixCAM %s:%d ..." % (args.maixcam, args.port))
-    client.connect()
-    print("已连接。Ctrl-C 退出。")
+    sess = Cam2Model(args.model, args.conf) if args.model else None
+    if sess is not None and not sess.ok:
+        print("[warn] 副相机模型不可用：%s ⇒ 只用 HSV 判色" % sess.reason)
+
+    client = None
+    if not args.synthetic:
+        client = MainCamClient(args.maixcam, args.port, args.id_mode)
+        print("连 MaixCAM %s:%d ..." % (args.maixcam, args.port))
+        ok = client.connect()
+        print("已连接" if ok else "连接失败：%s（继续看副相机）" % client.last_error)
+        if not args.main_url:
+            args.main_url = "http://%s:8766/snap" % args.maixcam
+
     if args.evidence:
         Path(args.evidence).mkdir(parents=True, exist_ok=True)
 
-    round_no = 0
+    state = {"main_items": [], "main_age": 9.9, "main_ok": False,
+             "main_frame": None, "cam2": None, "cam2_ok": False,
+             "fusion": {"mode": args.mode, "verdict": "UNPROVEN",
+                        "reason": "等待数据", "main": {}, "cam2": {}},
+             "fps": 0.0, "conn": "synthetic" if args.synthetic else "connecting"}
+    last_main_ts = 0.0
+    fps_t, fps_n, fps = time.time(), 0, 0.0
+    last_term = 0.0
+    t0 = time.time()
+    mode, id_mode = args.mode, args.id_mode
+    running = True
+
     try:
-        while True:
-            got = client.recv_one()
-            if got is None:
-                print("连接断开")
-                break
-            task_id, main_items = got
-            if not main_items and args.max_batches == 0:
-                continue
-            round_no += 1
-            cam2 = None
-            if not args.no_image:
-                try:
-                    cam2 = _grab_cam2(args)
-                except Exception as exc:
-                    print("[warn] 副相机取数失败：%s" % exc)
-            fusion = (verdict_point(main_items, cam2, args.radius,
-                                    args.map_scale, args.map_dx, args.map_dy)
-                      if args.mode == "point" else verdict_set(main_items, cam2))
-            print(render_terminal(main_items, cam2, fusion, round_no))
+        while running:
+            loop_start = time.time()
+            if args.synthetic:
+                state.update(synthetic_state(time.time() - t0))
+                state["fps"] = fps
+            else:
+                got = client.poll() if client is not None else None
+                if got is not None:
+                    _, items = got
+                    state["main_items"] = items
+                    last_main_ts = time.time()
+                    state["conn"] = "ok"
+                state["main_ok"] = client is not None and client.sock is not None
+                state["main_age"] = (time.time() - last_main_ts) if last_main_ts else 9.9
+                state["main_frame"] = grab_jpeg(args.main_url) if args.main_url else None
 
-            if args.evidence:
-                stamp = time.strftime("%Y%m%d-%H%M%S")
-                rec = {"round": round_no, "task_id": task_id,
-                       "main": main_items, "cam2": cam2, "fusion": fusion,
-                       "time": stamp}
-                (Path(args.evidence) / ("round_%s_%03d.json" % (stamp, round_no))
-                 ).write_text(json.dumps(rec, ensure_ascii=False, indent=2),
-                              encoding="utf-8")
-                if cam2 and cam2.get("frame") is not None and cv2 is not None:
-                    cv2.imwrite(str(Path(args.evidence) /
-                                    ("round_%s_%03d_cam2.jpg" % (stamp, round_no))),
-                                cam2["frame"])
+                cam2 = None
+                frame = grab_jpeg(args.cam2_url)
+                if frame is not None:
+                    fc, ff = color_of(frame)
+                    if args.roi:
+                        try:
+                            x, y, w, h = [int(v) for v in args.roi.split(",")]
+                            roi = frame[max(0, y):y + h, max(0, x):x + w]
+                            if roi.size:
+                                fc, ff = color_of(roi)
+                        except Exception:
+                            pass
+                    cam2 = {"detections": sess.detect(frame) if (sess and sess.ok) else [],
+                            "frame": frame, "frame_color": fc,
+                            "frame_color_frac": ff,
+                            "model": sess.reason if sess is not None else "HSV only"}
+                    state["cam2"] = cam2
+                state["cam2_ok"] = state.get("cam2") is not None
+                if mode == "point":
+                    state["fusion"] = verdict_point(state["main_items"], state["cam2"],
+                                                    args.radius, args.map_scale,
+                                                    args.map_dx, args.map_dy)
+                else:
+                    state["fusion"] = verdict_set(state["main_items"], state["cam2"])
 
-            if not args.headless:
-                try:
-                    render_window({"main_items": main_items, "cam2": cam2,
-                                   "fusion": fusion})
-                except KeyboardInterrupt:
-                    break
-            if args.max_batches and round_no >= args.max_batches:
-                break
+            fps_n += 1
+            if time.time() - fps_t >= 0.5:
+                fps = fps_n / (time.time() - fps_t)
+                fps_t, fps_n = time.time(), 0
+                state["fps"] = fps
+
+            if args.headless:
+                now = time.time()
+                if now - last_term >= 1.0:
+                    print(render_terminal(state))
+                    last_term = now
+            else:
+                cv2.imshow("three-way view  (q quit / s save / 1 set / 2 point / m id-mode)",
+                           render(state))
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord("q"), 27):
+                    running = False
+                elif key == ord("s") and args.evidence:
+                    stamp = time.strftime("%Y%m%d-%H%M%S")
+                    rec = {"main": state["main_items"],
+                           "cam2": {k: v for k, v in (state["cam2"] or {}).items()
+                                    if k != "frame"},
+                           "fusion": state["fusion"], "time": stamp}
+                    (Path(args.evidence) / ("snap_%s.json" % stamp)).write_text(
+                        json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+                    if state["cam2"] and state["cam2"].get("frame") is not None:
+                        cv2.imwrite(str(Path(args.evidence) /
+                                        ("snap_%s_cam2.jpg" % stamp)),
+                                    state["cam2"]["frame"])
+                    if state["main_frame"] is not None:
+                        cv2.imwrite(str(Path(args.evidence) /
+                                        ("snap_%s_main.jpg" % stamp)),
+                                    state["main_frame"])
+                    print("已保存证据到 %s" % args.evidence)
+                elif key == ord("1"):
+                    mode = "set"
+                elif key == ord("2"):
+                    mode = "point"
+                elif key == ord("m"):
+                    id_mode = "code" if id_mode == "shape" else "shape"
+                    if client is not None:
+                        client.id_mode = id_mode
+                    print("主相机 id 语义切换为 %s（需发送端同步）" % id_mode)
+
+            dt = time.time() - loop_start
+            if dt < 1.0 / max(1.0, args.target_fps):
+                time.sleep(1.0 / max(1.0, args.target_fps) - dt)
     except KeyboardInterrupt:
         print("\n手动中断")
     finally:
-        client.close()
+        if client is not None:
+            client.close()
         if cv2 is not None and not args.headless:
             try:
                 cv2.destroyAllWindows()

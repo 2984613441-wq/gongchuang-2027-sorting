@@ -158,6 +158,77 @@ def encode_batch_targets(dets, task_id: int) -> bytes:
     return bytes(body)
 
 
+# ---------------------------------------------------------------------------
+# 2026-11-05：可选 HTTP 快照服务（GET /snap → 当前帧 JPEG）
+# 给 PC 的 _pi_tools/three_way_view.py 当"主相机画面"用；不开也不影响发送。
+# ---------------------------------------------------------------------------
+_snap_latest = {"jpeg": b""}
+
+
+def _jpeg_of(frame):
+    """优先 to_jpeg()，失败返回 b""（不同固件 API 有差异，失败只是没有画面）。"""
+    for name in ("to_jpeg", "to_jpg"):
+        fn = getattr(frame, name, None)
+        if callable(fn):
+            try:
+                data = fn()
+                if data:
+                    return bytes(data)
+            except Exception:
+                pass
+    return b""
+
+
+def _snap_server(port: int):
+    import socket as _socket
+    import threading as _threading
+
+    def handle(conn):
+        try:
+            conn.settimeout(2.0)
+            req = b""
+            while b"\r\n\r\n" not in req and len(req) < 2048:
+                chunk = conn.recv(1024)
+                if not chunk:
+                    return
+                req += chunk
+            jpeg = _snap_latest["jpeg"]
+            if not jpeg:
+                body = b"no frame yet\n"
+                conn.sendall(b"HTTP/1.1 503 Service Unavailable\r\n"
+                             b"Content-Type: text/plain\r\n"
+                             b"Content-Length: " + str(len(body)).encode() +
+                             b"\r\nConnection: close\r\n\r\n" + body)
+                return
+            conn.sendall(b"HTTP/1.1 200 OK\r\n"
+                         b"Content-Type: image/jpeg\r\n"
+                         b"Content-Length: " + str(len(jpeg)).encode() +
+                         b"\r\nConnection: close\r\n"
+                         b"Cache-Control: no-store\r\n\r\n" + jpeg)
+        except Exception:
+            pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def loop():
+        srv = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        srv.bind(("0.0.0.0", int(port)))
+        srv.listen(4)
+        print("快照服务：http://0.0.0.0:%d/snap" % int(port))
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except Exception:
+                continue
+            _threading.Thread(target=handle, args=(conn,), daemon=True).start()
+
+    _threading.Thread(target=loop, daemon=True).start()
+
+
 class Sender:
     def __init__(self, host: str, port: int, dry_run: bool = False):
         self.host = host
@@ -223,6 +294,9 @@ def main() -> int:
     ap.add_argument("--display", type=int, default=0, help="1 = 屏幕同步显示")
     ap.add_argument("--dry-run", action="store_true", help="只打印不联网")
     ap.add_argument("--verbose", type=int, default=1)
+    ap.add_argument("--snap-port", type=int, default=0,
+                    help=">0 时在本机开 HTTP 快照服务（GET /snap 返回当前帧 JPEG），"
+                         "给 PC 三路窗口当主相机画面用；0=不开")
     ap.add_argument("--id-mode", choices=("shape", "code"), default="shape",
                     help="id 字节语义：shape=shape_id(1..6)（默认，现状）；"
                          "code=code(1..30)（协议 V1.0，颜色进链路）")
@@ -270,6 +344,9 @@ def main() -> int:
     last_print = t_start
     ok_frames = 0
 
+    if args.snap_port > 0:
+        _snap_server(args.snap_port)
+
     print("开始（Ctrl-C 停止）")
     try:
         while not app.need_exit():
@@ -279,6 +356,10 @@ def main() -> int:
             if frame is None:
                 continue
             frames += 1
+            if args.snap_port > 0:
+                # 约 10 fps 更新快照，避免编码占用检测时间
+                if frames % max(1, int(round(30 / max(1.0, args.fps)))) == 0:
+                    _snap_latest["jpeg"] = _jpeg_of(frame)
 
             t0 = time.time()
             try:
