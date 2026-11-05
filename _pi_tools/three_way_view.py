@@ -245,6 +245,23 @@ class Cam2Model:
             cname, _ = color_of(crop) if crop.size else ("unknown", 0.0)
             dets.append({"shape": cid + 1, "conf": round(conf, 3), "color": cname,
                          "box": (x1, y1, x2, y2)})
+        # NMS（同一目标会被多类/多锚点重复检出；不加会把 1 件画成几十个框）
+        if not dets:
+            return []
+        boxes = [[b["box"][0], b["box"][1],
+                  b["box"][2] - b["box"][0], b["box"][3] - b["box"][1]] for b in dets]
+        scores = [b["conf"] for b in dets]
+        try:
+            keep = cv2.dnn.NMSBoxes(boxes, scores, self.conf, 0.45)
+            keep = list(keep) if len(keep) else []
+            if keep and isinstance(keep[0], (list, tuple)):
+                keep = [int(k[0]) for k in keep]
+            else:
+                keep = [int(k) for k in keep]
+            if keep:
+                dets = [dets[i] for i in keep]
+        except Exception:
+            pass
         return dets
 
 
