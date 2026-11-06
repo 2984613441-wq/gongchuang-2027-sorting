@@ -314,11 +314,36 @@ def main() -> int:
     ap.add_argument("--id-mode", choices=("shape", "code"), default="shape",
                     help="id 字节语义：shape=shape_id(1..6)（默认，现状）；"
                          "code=code(1..30)（协议 V1.0，颜色进链路）")
+    # 🆕 2026-11-06：分类别置信度阈值（默认空 = 关闭，保持现状）
+    ap.add_argument("--min-conf-by-class", type=str, default="",
+                    help='分类别置信度阈值，格式"class_id:threshold,class_id:threshold"'
+                         '（class_id 0-based），不写的类用 --conf；'
+                         '例："2:0.55,3:0.55" 对 cylinder/penta 用 0.55，其他用 0.40')
+    ap.add_argument("--unknown-as-code0", action="store_true",
+                    help="--id-mode code 时，置信度介于 --conf 与分类阈值之间的件"
+                         "发 code=0（判不出）而不是丢掉；默认关闭（保持现状：直接丢掉）")
     args = ap.parse_args()
 
     if not os.path.exists(args.model):
         print("❌ 模型不存在: %s" % args.model)
         return 1
+
+    # 🆕 2026-11-06：解析分类别置信度阈值
+    class_conf_map = {}
+    if args.min_conf_by_class:
+        try:
+            for pair in args.min_conf_by_class.split(","):
+                pair = pair.strip()
+                if not pair:
+                    continue
+                cid_str, thresh_str = pair.split(":")
+                cid = int(cid_str.strip())
+                thresh = float(thresh_str.strip())
+                class_conf_map[cid] = thresh
+        except Exception as e:
+            print("❌ --min-conf-by-class 格式错误: %s" % e)
+            print("   正确格式示例: \"2:0.55,3:0.55\"")
+            return 1
 
     print("=" * 66)
     print("  MaixCAM v11 → 8765 发送")
@@ -326,6 +351,10 @@ def main() -> int:
     print("  model  = %s" % args.model)
     print("  target = %s:%d  task_id=%d  conf=%.2f"
           % (args.host, args.port, args.task_id, args.conf))
+    if class_conf_map:
+        print("  分类别阈值 = %s" % class_conf_map)
+    if args.unknown_as_code0:
+        print("  低置信发 code=0 已启用（--unknown-as-code0）")
     print("  note   = id_byte 暂发 shape_id(1..6)，**不是正式 code(1..30)**")
 
     # ① 相机 → ② 显示 → ③ 模型（顺序不能反）
@@ -357,6 +386,10 @@ def main() -> int:
     frames = 0
     last_print = t_start
     ok_frames = 0
+    # 🆕 2026-11-06：每帧统计（sent / dropped_low_conf / dropped_class）
+    stats_sent = 0
+    stats_dropped_low_conf = 0
+    stats_dropped_class = 0
 
     if args.snap_port > 0:
         _snap_server(args.snap_port)
@@ -384,10 +417,36 @@ def main() -> int:
             ms = (time.time() - t0) * 1000.0
 
             dets = []
+            frame_dropped_low = 0
+            frame_dropped_class = 0
             for o in objs:
                 cls = int(o.class_id)
                 if cls not in SHAPE_ID:
                     continue          # 只发 6 类（防越界 id 让整批被拒）
+
+                # 🆕 2026-11-06：分类别置信度阈值判定
+                conf_score = float(o.score)
+                effective_thresh = class_conf_map.get(cls, args.conf)
+
+                # 判定：conf < 全局阈值 ⇒ 丢弃（原有逻辑）
+                if conf_score < args.conf:
+                    frame_dropped_low += 1
+                    continue
+
+                # 判定：conf ∈ [全局阈值, 分类阈值) ⇒ 看 --unknown-as-code0
+                if conf_score < effective_thresh:
+                    if args.unknown_as_code0 and args.id_mode == "code":
+                        # 发 code=0（判不出）
+                        cx = int(o.x + o.w / 2)
+                        cy = int(o.y + o.h / 2)
+                        dets.append((CODE_UNKNOWN, int(round(conf_score * 100)), cx, cy))
+                        stats_sent += 1
+                    else:
+                        # 默认：丢弃
+                        frame_dropped_class += 1
+                    continue
+
+                # 通过阈值：正常编码
                 cx = int(o.x + o.w / 2)
                 cy = int(o.y + o.h / 2)
                 shape_id = SHAPE_ID[cls]
@@ -397,7 +456,11 @@ def main() -> int:
                     id_byte = code_of(shape_id, color_id)
                 else:
                     id_byte = shape_id
-                dets.append((id_byte, int(round(float(o.score) * 100)), cx, cy))
+                dets.append((id_byte, int(round(conf_score * 100)), cx, cy))
+                stats_sent += 1
+
+            stats_dropped_low_conf += frame_dropped_low
+            stats_dropped_class += frame_dropped_class
 
             now = time.time()
             # 有件 ⇒ 立刻发；无件 ⇒ 500ms 心跳空帧（让树莓派区分"没货"和"断链"）
@@ -430,6 +493,9 @@ def main() -> int:
                 last_print = now
                 print("[统计 t=%.0fs] 帧=%d 已发送=%d 失败=%d 检测耗时=%.1fms"
                       % (now - t_start, frames, sender.sent, sender.failed, ms))
+                if class_conf_map or args.unknown_as_code0:
+                    print("              目标统计：sent=%d dropped_low_conf=%d dropped_class=%d"
+                          % (stats_sent, stats_dropped_low_conf, stats_dropped_class))
     except KeyboardInterrupt:
         print("用户中断")
     finally:
@@ -438,6 +504,9 @@ def main() -> int:
         print("=" * 66)
         print("结束: %.1fs, 帧=%d (%.1f fps), 发送=%d 成功帧=%d, 失败=%d"
               % (el, frames, frames / el, sender.sent, ok_frames, sender.failed))
+        if class_conf_map or args.unknown_as_code0:
+            print("目标统计：sent=%d dropped_low_conf=%d dropped_class=%d"
+                  % (stats_sent, stats_dropped_low_conf, stats_dropped_class))
         print("=" * 66)
     return 0
 

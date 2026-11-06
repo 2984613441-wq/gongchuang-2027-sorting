@@ -150,6 +150,15 @@ class SocketVisionSource:
         #   ⚠️ 丢弃**不会吊死**：链的空闲钟会收场，代价只是本件晚一小会儿。
         #   ⚠️ 阈值不能太小，否则会把"刚在 permit 之前一刻到达"的正常帧也丢光。
         max_batch_age_s: float = 2.5,
+        # 🆕 2026-11-06：**多帧类别投票**（默认关闭，保持现状）。
+        # 为什么需要：主相机 6 类模型在五棱柱/正方体/长方体三类上互相误判约 5%，
+        # 且 25~29% 预测落 background（误检）。根因：俯视投影下三类都是多边形，
+        # cube vs cuboid 只差长宽比，penta 第五条边小件/模糊时看不出。
+        # ⇒ 对同一目标维护最近 N 帧历史，class_id 至少 quorum 票才采纳。
+        class_vote_enabled: bool = False,
+        class_vote_frames: int = 3,         # 历史窗口大小（默认 3 帧）
+        class_vote_quorum: int = 2,         # 最少票数（默认 2/3）
+        class_vote_max_wait_frames: int = 6,  # 超时上限（等不到 quorum 就按不可用处理）
     ) -> None:
         self._round_id = round_id
         self._task_id = task_id
@@ -193,6 +202,17 @@ class SocketVisionSource:
         self._served_skipped = 0
         # 2026-09-22：陈旧帧护栏丢弃计数（限频日志用）。
         self._stale_dropped = 0
+        # 🆕 2026-11-06：多帧类别投票的私有状态。
+        self._vote_enabled = bool(class_vote_enabled)
+        self._vote_frames = max(1, int(class_vote_frames))
+        self._vote_quorum = max(1, int(class_vote_quorum))
+        self._vote_max_wait = max(1, int(class_vote_max_wait_frames))
+        # 目标历史：{target_key → [(class_id, conf, pixel_coord), ...]}
+        # target_key = (target_seq, 像素坐标栅格化) 或纯位置匹配
+        self._vote_history: dict[tuple, list[tuple[int, int, tuple[int, int]]]] = {}
+        self._vote_stats_accepted = 0
+        self._vote_stats_rejected = 0
+        self._vote_stats_timeout = 0
 
     def _is_served(self, payload: ItemTaskPayload) -> bool:
         """这个 payload 的位置是否落在某个【已派发过】的位置附近。"""
@@ -233,6 +253,14 @@ class SocketVisionSource:
         """把刚派出去的位置记账（next_if_permitted 内部自动调用）。"""
         if self._served_radius_mm10 > 0:
             self._served_positions.append((int(x_mm10), int(y_mm10)))
+
+    def vote_stats(self) -> dict[str, int]:
+        """返回投票统计（accepted / rejected_no_quorum / timeout）。"""
+        return {
+            "accepted": self._vote_stats_accepted,
+            "rejected_no_quorum": self._vote_stats_rejected,
+            "timeout": self._vote_stats_timeout,
+        }
 
     def set_permitted(self, permitted: bool) -> None:
         self._permitted = permitted
@@ -299,6 +327,87 @@ class SocketVisionSource:
                          len(skipped), [t.target_seq for t in skipped])
         return BatchTargets(task_id=batch.task_id, targets=tuple(kept))
 
+    def _apply_class_vote(self, batch: BatchTargets) -> BatchTargets:
+        """🆕 2026-11-06：多帧类别投票（默认关闭）。
+
+        对同一目标维护最近 N 帧的 (class_id, conf, 像素坐标) 历史，
+        class_id 至少 quorum 票才采纳；未达 quorum 时该件不产出（视为不可用）。
+
+        目标关联：优先用 target_seq；若 target_seq 每帧变化（当前不保证唯一），
+        退化为**最近位置匹配**（阈值 40mm 像素，约等于件尺寸）。
+
+        关闭时（class_vote_enabled=False）行为与改动前逐字节等价。
+        """
+        if not self._vote_enabled:
+            return batch
+
+        # 位置匹配阈值（像素）：40 像素约 40mm（粗略，未精确标定）
+        POS_MATCH_THRESHOLD_PX = 40
+
+        kept_targets = []
+
+        for target in batch.targets:
+            # 1. 构造目标键：优先 target_seq，否则用位置栅格
+            px, py = target.pixel_x, target.pixel_y
+            grid_key = (int(px) // 50, int(py) // 50)  # 50像素栅格
+
+            # 如果 target_seq 看起来可靠（非0且非None），用它
+            if target.target_seq and target.target_seq != 0:
+                target_key = ("seq", target.target_seq)
+            else:
+                # 退化为位置匹配：找最近的已有键
+                target_key = ("pos", grid_key)
+                matched_key = None
+                min_dist = float('inf')
+                for hist_key, hist_list in self._vote_history.items():
+                    if not hist_list or hist_key[0] != "pos":
+                        continue
+                    last_pos = hist_list[-1][2]  # (class_id, conf, (px, py))
+                    dist = ((px - last_pos[0]) ** 2 + (py - last_pos[1]) ** 2) ** 0.5
+                    if dist < POS_MATCH_THRESHOLD_PX and dist < min_dist:
+                        matched_key = hist_key
+                        min_dist = dist
+                if matched_key:
+                    target_key = matched_key
+
+            # 2. 更新历史（FIFO窗口）
+            if target_key not in self._vote_history:
+                self._vote_history[target_key] = []
+            hist = self._vote_history[target_key]
+            hist.append((int(target.class_id), int(target.confidence), (int(px), int(py))))
+            if len(hist) > self._vote_frames:
+                hist.pop(0)
+
+            # 3. 投票：统计最近 N 帧内各 class_id 的票数
+            votes = {}
+            for cid, _, _ in hist:
+                votes[cid] = votes.get(cid, 0) + 1
+
+            # 4. 判定：至少 quorum 票才采纳
+            if not votes:
+                continue
+            best_cid, best_count = max(votes.items(), key=lambda x: x[1])
+
+            # 5. 超时检查：等待帧数超过 max_wait 仍未达 quorum
+            if best_count >= self._vote_quorum:
+                # 采纳：用投票胜出的 class_id
+                kept_targets.append(_replace(target, class_id=best_cid))
+                self._vote_stats_accepted += 1
+            elif len(hist) >= self._vote_max_wait:
+                # 超时：等不到 quorum，该件按不可用处理（不产出）
+                self._vote_stats_timeout += 1
+                _LOGGER.warning(
+                    "类别投票超时（target_seq=%d, 位置=(%d,%d)）：等待 %d 帧仍未达 %d 票"
+                    "（最高票 %d 票 class_id=%d）⇒ 本件不派",
+                    target.target_seq, px, py, len(hist), self._vote_quorum,
+                    best_count, best_cid,
+                )
+            else:
+                # 未达 quorum 且未超时：该件暂不产出
+                self._vote_stats_rejected += 1
+
+        return BatchTargets(task_id=batch.task_id, targets=tuple(kept_targets))
+
     def _resolve_box_ids(self, batch: BatchTargets) -> BatchTargets:
         """code 模式下把 `VisionTarget.box_id`（None）补成货格号（2026-11-01 动态分配）。
 
@@ -341,6 +450,7 @@ class SocketVisionSource:
             return None
         keys = []
         batch = self._resolve_box_ids(batch)
+        batch = self._apply_class_vote(batch)        # 🆕 2026-11-06：多帧类别投票
         batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
 
         for target in batch.targets:
@@ -421,6 +531,7 @@ class SocketVisionSource:
         不抛异常（抛出去会冒到 run() 兜底，把整条链带走），也绝不猜盒。
         """
         batch = self._resolve_box_ids(batch)          # 2026-11-01：code → box_id
+        batch = self._apply_class_vote(batch)         # 🆕 2026-11-06：多帧类别投票
         batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
         for target in batch.targets:
             if target.box_id is None:
