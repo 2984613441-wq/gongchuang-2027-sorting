@@ -318,7 +318,8 @@ def main() -> int:
     ap.add_argument("--min-conf-by-class", type=str, default="",
                     help='分类别置信度阈值，格式"class_id:threshold,class_id:threshold"'
                          '（class_id 0-based），不写的类用 --conf；'
-                         '例："2:0.55,3:0.55" 对 cylinder/penta 用 0.55，其他用 0.40')
+                         '例："2:0.55,3:0.55" 对 cylinder/penta 用 0.55，其他用 0.40；'
+                         '⚠️ 分类别阈值应 ≥ --conf（低于全局阈值时不起作用）')
     ap.add_argument("--unknown-as-code0", action="store_true",
                     help="--id-mode code 时，置信度介于 --conf 与分类阈值之间的件"
                          "发 code=0（判不出）而不是丢掉；默认关闭（保持现状：直接丢掉）")
@@ -425,8 +426,9 @@ def main() -> int:
                     continue          # 只发 6 类（防越界 id 让整批被拒）
 
                 # 🆕 2026-11-06：分类别置信度阈值判定
+                # 🔴 2026-11-07：effective_thresh 必须 >= args.conf（分类阈值低于全局阈值时不起作用）
                 conf_score = float(o.score)
-                effective_thresh = class_conf_map.get(cls, args.conf)
+                effective_thresh = max(args.conf, class_conf_map.get(cls, args.conf))
 
                 # 判定：conf < 全局阈值 ⇒ 丢弃（原有逻辑）
                 if conf_score < args.conf:

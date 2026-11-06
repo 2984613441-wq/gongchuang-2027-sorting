@@ -159,6 +159,9 @@ class SocketVisionSource:
         class_vote_frames: int = 3,         # 历史窗口大小（默认 3 帧）
         class_vote_quorum: int = 2,         # 最少票数（默认 2/3）
         class_vote_max_wait_frames: int = 6,  # 超时上限（等不到 quorum 就按不可用处理）
+        class_vote_mode: str = "unanimous",  # 🔴 2026-11-07：投票模式（"majority"|"unanimous"）
+        class_vote_grid_px: int = 80,        # 🔴 2026-11-07：位置栅格大小（像素）
+        class_vote_match_radius_px: int = 80,  # 🔴 2026-11-07：位置匹配半径（像素）
     ) -> None:
         self._round_id = round_id
         self._task_id = task_id
@@ -207,9 +210,20 @@ class SocketVisionSource:
         self._vote_frames = max(1, int(class_vote_frames))
         self._vote_quorum = max(1, int(class_vote_quorum))
         self._vote_max_wait = max(1, int(class_vote_max_wait_frames))
+        # 🔴 2026-11-07：投票模式验证
+        if class_vote_mode not in ("majority", "unanimous"):
+            raise ValueError(f"class_vote_mode 必须是 'majority' 或 'unanimous'，实际: {class_vote_mode!r}")
+        self._vote_mode = str(class_vote_mode)
+        self._vote_grid_px = max(1, int(class_vote_grid_px))
+        self._vote_match_radius_px = max(1, int(class_vote_match_radius_px))
         # 目标历史：{target_key → [(class_id, conf, pixel_coord), ...]}
-        # target_key = (target_seq, 像素坐标栅格化) 或纯位置匹配
-        self._vote_history: dict[tuple, list[tuple[int, int, tuple[int, int]]]] = {}
+        # 🔴 2026-11-07：target_key 改用位置栅格键 (grid_x, grid_y)
+        self._vote_history: dict[tuple[int, int], list[tuple[int, int, tuple[int, int]]]] = {}
+        # 🔴 2026-11-07：目标年龄计数：{target_key → 已见帧数}（自该 key 首次出现算起）
+        self._vote_seen: dict[tuple[int, int], int] = {}
+        # 未出现计数：{target_key → 连续未出现帧数}
+        self._vote_absent: dict[tuple[int, int], int] = {}
+        self._vote_timeout_warned: set[tuple[int, int]] = set()  # 已警告过的 key（每 key 只警告一次）
         self._vote_stats_accepted = 0
         self._vote_stats_rejected = 0
         self._vote_stats_timeout = 0
@@ -264,6 +278,12 @@ class SocketVisionSource:
 
     def set_permitted(self, permitted: bool) -> None:
         self._permitted = permitted
+        # 🔴 2026-11-07：新一轮开始时清空投票历史（防止跨轮污染）
+        if permitted and self._vote_enabled:
+            self._vote_history.clear()
+            self._vote_seen.clear()
+            self._vote_absent.clear()
+            self._vote_timeout_warned.clear()
 
     def next_if_permitted(self) -> ItemTaskContext | None:
         if not self._permitted:
@@ -333,48 +353,60 @@ class SocketVisionSource:
         对同一目标维护最近 N 帧的 (class_id, conf, 像素坐标) 历史，
         class_id 至少 quorum 票才采纳；未达 quorum 时该件不产出（视为不可用）。
 
-        目标关联：优先用 target_seq；若 target_seq 每帧变化（当前不保证唯一），
-        退化为**最近位置匹配**（阈值 40mm 像素，约等于件尺寸）。
+        🔴 2026-11-07 第2轮修复：
+        - 位置匹配：统一用位置栅格键 (grid_x, grid_y)，grid_px=80 像素
+        - 超时按目标年龄计：_vote_seen[key] 每帧自增，>= max_wait 时触发 timeout
+        - 投票模式：unanimous（窗口满且全一致）或 majority（默认 quorum）
+        - 跨轮清理：set_permitted(True) 时清空；淘汰 frames*2 帧未再出现的 key
 
         关闭时（class_vote_enabled=False）行为与改动前逐字节等价。
         """
         if not self._vote_enabled:
             return batch
 
-        # 位置匹配阈值（像素）：40 像素约 40mm（粗略，未精确标定）
-        POS_MATCH_THRESHOLD_PX = 40
-
         kept_targets = []
+        current_keys = set()  # 本帧出现的所有 key
+        processed_keys = set()  # 本帧已处理过的 key（防重复记录）
 
         for target in batch.targets:
-            # 1. 构造目标键：优先 target_seq，否则用位置栅格
+            # 1. 构造目标键：位置栅格 (grid_x, grid_y)，单位像素
             px, py = target.pixel_x, target.pixel_y
-            grid_key = (int(px) // 50, int(py) // 50)  # 50像素栅格
+            grid_x = round(px / self._vote_grid_px)
+            grid_y = round(py / self._vote_grid_px)
 
-            # 如果 target_seq 看起来可靠（非0且非None），用它
-            if target.target_seq and target.target_seq != 0:
-                target_key = ("seq", target.target_seq)
-            else:
-                # 退化为位置匹配：找最近的已有键
-                target_key = ("pos", grid_key)
-                matched_key = None
-                min_dist = float('inf')
-                for hist_key, hist_list in self._vote_history.items():
-                    if not hist_list or hist_key[0] != "pos":
-                        continue
-                    last_pos = hist_list[-1][2]  # (class_id, conf, (px, py))
-                    dist = ((px - last_pos[0]) ** 2 + (py - last_pos[1]) ** 2) ** 0.5
-                    if dist < POS_MATCH_THRESHOLD_PX and dist < min_dist:
-                        matched_key = hist_key
-                        min_dist = dist
-                if matched_key:
-                    target_key = matched_key
+            # 检查是否有相邻已有键（中心距 < match_radius）可复用
+            target_key = None
+            for existing_key in list(self._vote_history.keys()):
+                ex_x, ex_y = existing_key
+                # 计算两个栅格中心的像素距离
+                center_dist = (
+                    ((grid_x - ex_x) * self._vote_grid_px) ** 2 +
+                    ((grid_y - ex_y) * self._vote_grid_px) ** 2
+                ) ** 0.5
+                if center_dist < self._vote_match_radius_px:
+                    target_key = existing_key
+                    break
+
+            if target_key is None:
+                target_key = (grid_x, grid_y)
+
+            current_keys.add(target_key)
 
             # 2. 更新历史（FIFO窗口）
             if target_key not in self._vote_history:
                 self._vote_history[target_key] = []
+                self._vote_seen[target_key] = 0
+
             hist = self._vote_history[target_key]
-            hist.append((int(target.class_id), int(target.confidence), (int(px), int(py))))
+            # 同一帧同一 key 只记一次（防止同一批次内重复计数）
+            if target_key not in processed_keys:
+                hist.append((int(target.class_id), int(target.confidence), (int(px), int(py))))
+                self._vote_seen[target_key] = self._vote_seen.get(target_key, 0) + 1
+                processed_keys.add(target_key)
+
+            # 本帧出现，重置未出现计数
+            self._vote_absent[target_key] = 0
+
             if len(hist) > self._vote_frames:
                 hist.pop(0)
 
@@ -383,28 +415,55 @@ class SocketVisionSource:
             for cid, _, _ in hist:
                 votes[cid] = votes.get(cid, 0) + 1
 
-            # 4. 判定：至少 quorum 票才采纳
+            # 4. 判定：按投票模式决定是否采纳
             if not votes:
                 continue
-            best_cid, best_count = max(votes.items(), key=lambda x: x[1])
 
-            # 5. 超时检查：等待帧数超过 max_wait 仍未达 quorum
-            if best_count >= self._vote_quorum:
+            best_cid, best_count = max(votes.items(), key=lambda x: x[1])
+            window_full = len(hist) >= self._vote_frames
+
+            # 🔴 2026-11-07：投票模式判断
+            if self._vote_mode == "unanimous":
+                # unanimous：窗口满 且 窗口内 class_id 全一致
+                accept = window_full and len(votes) == 1
+            else:  # majority
+                # majority：达到 quorum 票数
+                accept = best_count >= self._vote_quorum
+
+            if accept:
                 # 采纳：用投票胜出的 class_id
                 kept_targets.append(_replace(target, class_id=best_cid))
                 self._vote_stats_accepted += 1
-            elif len(hist) >= self._vote_max_wait:
-                # 超时：等不到 quorum，该件按不可用处理（不产出）
+            elif self._vote_seen[target_key] >= self._vote_max_wait:
+                # 🔴 2026-11-07：超时按目标年龄计（不是 len(hist)）
                 self._vote_stats_timeout += 1
-                _LOGGER.warning(
-                    "类别投票超时（target_seq=%d, 位置=(%d,%d)）：等待 %d 帧仍未达 %d 票"
-                    "（最高票 %d 票 class_id=%d）⇒ 本件不派",
-                    target.target_seq, px, py, len(hist), self._vote_quorum,
-                    best_count, best_cid,
-                )
+                if target_key not in self._vote_timeout_warned:
+                    self._vote_timeout_warned.add(target_key)
+                    _LOGGER.warning(
+                        "类别投票超时（位置栅格=(%d,%d), 像素≈(%d,%d)）：等待 %d 帧仍未达标"
+                        "（最高票 %d 票 class_id=%d，模式=%s）⇒ 本件不派",
+                        grid_x, grid_y, int(px), int(py), self._vote_seen[target_key],
+                        best_count, best_cid, self._vote_mode,
+                    )
+                # 超时后丢弃该 key 的历史
+                del self._vote_history[target_key]
+                del self._vote_seen[target_key]
             else:
-                # 未达 quorum 且未超时：该件暂不产出
+                # 未达标且未超时：该件暂不产出
                 self._vote_stats_rejected += 1
+
+        # 🔴 2026-11-07：每帧淘汰连续 frames*2 帧未再出现的 key（防内存增长）
+        stale_threshold = self._vote_frames * 2
+        for key in list(self._vote_history.keys()):
+            if key not in current_keys:
+                # 本帧未出现，增加未出现计数
+                self._vote_absent[key] = self._vote_absent.get(key, 0) + 1
+                if self._vote_absent[key] >= stale_threshold:
+                    # 淘汰：连续多帧未出现
+                    del self._vote_history[key]
+                    del self._vote_seen[key]
+                    del self._vote_absent[key]
+                    self._vote_timeout_warned.discard(key)
 
         return BatchTargets(task_id=batch.task_id, targets=tuple(kept_targets))
 
