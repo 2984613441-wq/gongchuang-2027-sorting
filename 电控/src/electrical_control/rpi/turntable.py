@@ -48,6 +48,11 @@ PULSE_MAX_US = 2500
 # 0 = 释放（无脉冲，舵机失力）。除调试外不要用。
 PULSE_RELEASE_US = 0
 
+# ST-3215 总线舵机的位置域（0~4095 覆盖 360°）。2026-11-07 新增位置域 API：
+# 360° 分度下角度可到 ±180°，脉宽域 [500,2500]µs 只有 ±137° ⇒ 再走脉宽域会被拦死。
+POS_MIN = 0
+POS_MAX = 4095
+
 DEFAULT_PW_FILE = "/home/pi/pw.txt"
 
 
@@ -90,6 +95,11 @@ class TurntableConfig:
     angle_table: dict[int, float] = field(default_factory=dict)
     settle_s: float = 0.6
     name: str = "turntable"
+    # 🔴 2026-11-07：位置域直通参数（ST-3215）。360° 分度必须走位置域，
+    #    因为脉宽域 [500,2500]µs 只能覆盖 ±137°，±180° 会被 fail-closed 拦死。
+    #    与 SerialServoBackend 的同名默认值保持一致（2026-10-17 实测）。
+    center_pos: int = 2048
+    counts_per_90: int = 1024
 
     def __post_init__(self) -> None:
         if not (PULSE_MIN_US <= self.zero_pulse_us <= PULSE_MAX_US):
@@ -102,8 +112,16 @@ class TurntableConfig:
             raise TurntableUncalibrated(f"angle_sign={self.angle_sign} 只能是 +1/-1")
         if self.settle_s < 0:
             raise TurntableUncalibrated(f"settle_s={self.settle_s} 不能为负")
+        if not (POS_MIN <= self.center_pos <= POS_MAX):
+            raise TurntableUncalibrated(
+                f"center_pos={self.center_pos} 不在 [{POS_MIN},{POS_MAX}]"
+            )
+        if self.counts_per_90 <= 0:
+            raise TurntableUncalibrated(
+                f"counts_per_90={self.counts_per_90} 必须 > 0"
+            )
 
-    # ---- 换算 ----
+    # ---- 换算（脉宽域，旧）----
 
     def pulse_for_angle(self, angle_deg: float) -> int:
         """角度 → 脉宽（四舍五入到 µs）。**越界即 raise，不做 clamp 静默截断。**"""
@@ -114,6 +132,39 @@ class TurntableConfig:
                 f"角度 {angle_deg:.1f}° → 脉宽 {pulse}µs 超出 [{PULSE_MIN_US},{PULSE_MAX_US}]"
                 f"（零位 {self.zero_pulse_us}µs、{self.us_per_degree:.4f}µs/度）。"
                 f"若这是第 6 格，说明 6 格没排进行程 —— 见模块头注释。"
+            )
+        return pulse
+
+    # ---- 换算（位置域，2026-11-07 新增）----
+
+    @property
+    def us_per_90(self) -> float:
+        return self.us_per_degree * 90.0
+
+    def pos_for_angle(self, angle_deg: float) -> int:
+        """角度 → 位置值（0~4095）。**越界即 raise**，与脉宽域同一 fail-closed 口径。
+
+        与 `pulse_for_angle` 同一条直线：把「角度→脉宽」的位移按
+        `counts_per_90 / us_per_90` 换成位置位移，基准是 `center_pos`。
+        """
+        delta_us = self.angle_sign * float(angle_deg) * self.us_per_degree
+        raw = self.center_pos + delta_us * self.counts_per_90 / self.us_per_90
+        pos = int(round(raw))
+        if not (POS_MIN <= pos <= POS_MAX):
+            raise TurntableUncalibrated(
+                f"角度 {angle_deg:.1f}° → 位置 {pos} 超出 [{POS_MIN},{POS_MAX}]"
+                f"（中位 {self.center_pos}、{self.counts_per_90}counts/90°、sign={self.angle_sign:+d}）"
+            )
+        return pos
+
+    def pulse_for_position(self, pos: int) -> int:
+        """位置值 → 脉宽（仅 ±137° 内可用）。给只有脉宽后端（pw/pigpio）的兼容路径用。"""
+        delta_pos = int(pos) - self.center_pos
+        pulse = int(round(self.zero_pulse_us + delta_pos * self.us_per_90 / self.counts_per_90))
+        if not (PULSE_MIN_US <= pulse <= PULSE_MAX_US):
+            raise TurntableUncalibrated(
+                f"位置 {pos} → 脉宽 {pulse}µs 超出 [{PULSE_MIN_US},{PULSE_MAX_US}]："
+                f"该后端只支持 ±137°，360° 请用 SerialServoBackend（位置域）"
             )
         return pulse
 
@@ -128,10 +179,19 @@ class TurntableConfig:
     def pulse_for_box(self, box_id: int) -> int:
         return self.pulse_for_angle(self.angle_for_box(box_id))
 
+    def pos_for_box(self, box_id: int) -> int:
+        """货格号 → 位置值（0~4095）。360° 分度的生产路径。"""
+        return self.pos_for_angle(self.angle_for_box(box_id))
+
     def coverage(self) -> tuple[int, int]:
         """角度表里最小/最大脉宽 —— 上机前用它自查有没有越界。"""
         pulses = [self.pulse_for_angle(a) for a in self.angle_table.values()]
         return (min(pulses), max(pulses)) if pulses else (0, 0)
+
+    def position_coverage(self) -> tuple[int, int]:
+        """角度表里最小/最大位置值 —— 360° 上机前自查用。"""
+        positions = [self.pos_for_angle(a) for a in self.angle_table.values()]
+        return (min(positions), max(positions)) if positions else (0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +403,22 @@ class SerialServoBackend:
             raise TurntableError("转盘舵机无响应（写目标位置失败，%s）" % self.port)
         logger.debug("转盘 %dµs → 位置 %d", pulse_us, pos)
 
+    def set_position(self, pos: int) -> None:
+        """🔴 2026-11-07：位置域直发（0~4095，覆盖 360°）。**不经过脉宽换算**。
+
+        360° 分度必须走这条路：脉宽域 [500,2500]µs 只有 ±137°，±180° 会被拦住。
+        """
+        pos = int(pos)
+        if not (POS_MIN <= pos <= POS_MAX):
+            raise TurntableError(
+                "拒绝下发位置 %d：超出 [%d,%d]" % (pos, POS_MIN, POS_MAX)
+            )
+        if not self._write16(self.ADDR_GOAL_TIME, self.move_ms):
+            raise TurntableError("转盘舵机无响应（写目标时间失败，%s）" % self.port)
+        if not self._write16(self.ADDR_GOAL_POS, pos):
+            raise TurntableError("转盘舵机无响应（写目标位置失败，%s）" % self.port)
+        logger.debug("转盘 位置 %d", pos)
+
     def close(self) -> None:
         try:
             self._ser.close()
@@ -393,11 +469,18 @@ class Turntable:
         self.backend = backend
         self._current_box: int | None = None
         self._locked = False
-        lo, hi = config.coverage()
+        # 脉宽覆盖范围只是"上机前自查"信息：360° 角度表（±180°）天然超出
+        # [500,2500]µs，此时**不能**在构造期 raise（位置域才是 360° 的正路）。
+        try:
+            lo, hi = config.coverage()
+            pulse_txt = "脉宽范围=[%d,%d]µs" % (lo, hi)
+        except TurntableUncalibrated:
+            pulse_txt = "脉宽域不可用（超 ±137°，走位置域）"
+        plo, phi = config.position_coverage()
         logger.info(
-            "[%s] 就绪：零位=%dµs 比例=%.4fµs/度 sign=%+d 角度表=%s 脉宽范围=[%d,%d]µs",
+            "[%s] 就绪：零位=%dµs 比例=%.4fµs/度 sign=%+d 角度表=%s %s 位置范围=[%d,%d]",
             config.name, config.zero_pulse_us, config.us_per_degree, config.angle_sign,
-            sorted(config.angle_table), lo, hi,
+            sorted(config.angle_table), pulse_txt, plo, phi,
         )
 
     # ---- 动作 ----
@@ -434,6 +517,51 @@ class Turntable:
         self.backend.set_pulse_us(pulse)
         self._current_box = box_id
         return pulse
+
+    # ---- 位置域动作（2026-11-07：360° 分度用这条路）----
+
+    def command_box_position(self, box_id: int) -> int:
+        """**只下发目标位置、不等整定**，返回目标位置值（0~4095）。
+
+        与 `command_box` 的分工：`command_box` 走脉宽域（±137°，旧 PWM 后端），
+        本方法走位置域（0~4095 覆盖 360°，ST-3215 总线舵机）。
+        越界/未知格在 `pos_for_box` 里就 raise（fail-closed），不会写进舵机。
+        """
+        if self._locked:
+            raise TurntableLocked("转盘已锁定，拒绝动作（重新标定后需新建实例）")
+        pos = self.config.pos_for_box(box_id)
+        self._emit_position(pos)
+        self._current_box = box_id
+        return pos
+
+    def goto_box_position(self, box_id: int) -> int:
+        """转到货格 `box_id`（位置域）**并等待整定**，返回目标位置值。"""
+        pos = self.command_box_position(box_id)
+        time.sleep(self.config.settle_s)
+        logger.info("[%s] 转到货格 %d：角度 %.1f° → 位置 %d",
+                    self.config.name, box_id, self.config.angle_for_box(box_id), pos)
+        return pos
+
+    def goto_position(self, pos: int) -> int:
+        """直接下发一个位置值（0~4095，标定/测量工具用）。**不做货格映射**。"""
+        if self._locked:
+            raise TurntableLocked("转盘已锁定，拒绝动作")
+        pos = int(pos)
+        if not (POS_MIN <= pos <= POS_MAX):
+            raise TurntableUncalibrated(
+                f"位置 {pos} 超出 [{POS_MIN},{POS_MAX}]（fail-closed，不做 clamp）"
+            )
+        self._emit_position(pos)
+        time.sleep(self.config.settle_s)
+        return pos
+
+    def _emit_position(self, pos: int) -> None:
+        """优先走后端的位置域接口；只有脉宽后端时退化为位置→脉宽（±137° 内可用）。"""
+        setter = getattr(self.backend, "set_position", None)
+        if callable(setter):
+            setter(int(pos))
+            return
+        self.backend.set_pulse_us(self.config.pulse_for_position(pos))
 
     def goto_zero(self) -> int:
         """回零位（角度 0）。"""
@@ -486,13 +614,23 @@ def zero_check(config: TurntableConfig, backend: PulseBackend, *, prompt_s: floa
 # ---------------------------------------------------------------------------
 
 class FakeBackend:
-    """把下发的脉宽记进列表，供断言。"""
+    """把下发的脉宽/位置记进列表，供断言。"""
 
     def __init__(self) -> None:
         self.pulses: list[int] = []
+        self.positions: list[int] = []
+        self.position: int = 2048   # 读回值（模拟舵机当前位）
+        self.read_fail: bool = False
 
     def set_pulse_us(self, pulse_us: int) -> None:
         self.pulses.append(pulse_us)
+
+    def set_position(self, pos: int) -> None:
+        self.positions.append(int(pos))
+        self.position = int(pos)
+
+    def read_pos(self) -> int | None:
+        return None if self.read_fail else self.position
 
     def close(self) -> None:
         return
@@ -590,6 +728,8 @@ __all__ = [
     "PULSE_MIN_US",
     "PULSE_MAX_US",
     "PULSE_RELEASE_US",
+    "POS_MIN",
+    "POS_MAX",
     "DEFAULT_PW_FILE",
     "FakeBackend",
     "PigpioBackend",

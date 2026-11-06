@@ -1436,6 +1436,10 @@ def run(args: argparse.Namespace) -> int:
     outbound = OutboundGateway(  # 出站：ITEM_TASK / DISPLAY_ACK（task_id 与 round 严格校验）
         link, config=OutboundConfig(round_task_id=round_task_id)
     )
+    # 2026-11-07：`place_runtime` 必须在分支**之前**初始化 —— 它只在真实模式分支里被赋值，
+    # 而主循环（约 1704 行）无条件读它 ⇒ `--fake-link` 一进主循环就 UnboundLocalError。
+    # 占位源/演示模式本来就没有复看，置 None 即正确语义（默认 off 行为不变）。
+    place_runtime = None
     if demo:
         scheduler.load_source(
             build_placeholder_source(round_id=round_id, round_task_id=round_task_id, demo=demo)
