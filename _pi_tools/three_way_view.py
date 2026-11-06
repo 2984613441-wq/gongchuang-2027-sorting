@@ -162,6 +162,70 @@ class MainCamClient:
 
 
 # --------------------------------------------------------------------------- #
+# 服务端模式：PC 自己监听 8765 收 MaixCAM 推来的 BATCH_TARGETS
+# （正常生产链里 8765 的监听方是树莓派；临时观测时让 MaixCAM 直接发 PC）
+# --------------------------------------------------------------------------- #
+class MainCamServer:
+    def __init__(self, port: int = 8765, id_mode: str = "shape"):
+        import threading
+        self.port, self.id_mode = port, id_mode
+        self.latest_items: list[dict] = []
+        self.latest_task_id = 0
+        self.latest_ts = 0.0
+        self.conn_ok = False
+        self.error = ""
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("0.0.0.0", port))
+        self._sock.listen(4)
+        self._sock.settimeout(1.0)
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self):
+        while True:
+            try:
+                conn, _ = self._sock.accept()
+            except socket.timeout:
+                continue
+            except Exception as exc:
+                self.error = str(exc)
+                return
+            self.conn_ok = True
+            conn.settimeout(3.0)
+            try:
+                while True:
+                    hdr = b""
+                    while len(hdr) < 3:
+                        ch = conn.recv(3 - len(hdr))
+                        if not ch:
+                            raise ConnectionError("closed")
+                        hdr += ch
+                    need = hdr[0] * _TARGET_BYTES
+                    body = b""
+                    while len(body) < need:
+                        ch = conn.recv(need - len(body))
+                        if not ch:
+                            raise ConnectionError("closed")
+                        body += ch
+                    task_id, items = parse_batch(hdr + body, self.id_mode)
+                    self.latest_task_id, self.latest_items = task_id, items
+                    self.latest_ts = time.time()
+            except Exception:
+                self.conn_ok = False
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def close(self):
+        try:
+            self._sock.close()
+        except Exception:
+            pass
+
+
+# --------------------------------------------------------------------------- #
 # 取图 / 判色 / 可选 ONNX
 # --------------------------------------------------------------------------- #
 def grab_jpeg(url: str, timeout: float = 1.5):
@@ -526,6 +590,8 @@ def main(argv=None) -> int:
     ap.add_argument("--map-scale", type=float, default=1.0)
     ap.add_argument("--map-dx", type=float, default=0.0)
     ap.add_argument("--map-dy", type=float, default=0.0)
+    ap.add_argument("--listen-main", type=int, default=0,
+                    help=">0 则 PC 自己监听该端口收主相机 BATCH_TARGETS（MaixCAM 需指向本机 IP）")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--synthetic", action="store_true", help="合成动画（无设备验窗口）")
     ap.add_argument("--evidence", default="")
@@ -545,8 +611,14 @@ def main(argv=None) -> int:
     if sess is not None and not sess.ok:
         print("[warn] 副相机模型不可用：%s ⇒ 只用 HSV 判色" % sess.reason)
 
+    server = None
     client = None
-    if not args.synthetic:
+    if not args.synthetic and args.listen_main > 0:
+        server = MainCamServer(args.listen_main, args.id_mode)
+        print("监听主相机端口 %d（MaixCAM 请发到本机）..." % args.listen_main)
+        if not args.main_url:
+            args.main_url = "http://%s:8766/snap" % args.maixcam
+    if not args.synthetic and server is None:
         client = MainCamClient(args.maixcam, args.port, args.id_mode)
         print("连 MaixCAM %s:%d ..." % (args.maixcam, args.port))
         ok = client.connect()
@@ -577,12 +649,21 @@ def main(argv=None) -> int:
                 state["fps"] = fps
             else:
                 got = client.poll() if client is not None else None
+                if server is not None:
+                    if server.latest_ts and server.latest_ts != last_main_ts:
+                        state["main_items"] = server.latest_items
+                        last_main_ts = server.latest_ts
+                        state["conn"] = "ok" if server.conn_ok else "peer-closed"
+                    else:
+                        state["conn"] = "listening" if not server.conn_ok else "ok"
+                    got = None
                 if got is not None:
                     _, items = got
                     state["main_items"] = items
                     last_main_ts = time.time()
                     state["conn"] = "ok"
-                state["main_ok"] = client is not None and client.sock is not None
+                state["main_ok"] = ((client is not None and client.sock is not None)
+                                    or (server is not None))
                 state["main_age"] = (time.time() - last_main_ts) if last_main_ts else 9.9
                 state["main_frame"] = grab_jpeg(args.main_url) if args.main_url else None
 
@@ -663,6 +744,8 @@ def main(argv=None) -> int:
     finally:
         if client is not None:
             client.close()
+        if server is not None:
+            server.close()
         if cv2 is not None and not args.headless:
             try:
                 cv2.destroyAllWindows()

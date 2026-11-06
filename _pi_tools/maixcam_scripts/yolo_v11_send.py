@@ -166,7 +166,11 @@ _snap_latest = {"jpeg": b""}
 
 
 def _jpeg_of(frame):
-    """优先 to_jpeg()，失败返回 b""（不同固件 API 有差异，失败只是没有画面）。"""
+    """把当前帧编码成 JPEG。依次尝试多种 MaixPy API，全失败返回 b""。
+
+    MaixPy 各版本 API 不一致：有的有 to_jpeg()，有的只能 save() 到文件。
+    最后一条路是 save() 到 /tmp 再读文件（慢一点，但稳）。
+    """
     for name in ("to_jpeg", "to_jpg"):
         fn = getattr(frame, name, None)
         if callable(fn):
@@ -176,6 +180,16 @@ def _jpeg_of(frame):
                     return bytes(data)
             except Exception:
                 pass
+    # 退路：save 到文件再读
+    try:
+        path = "/tmp/_snap_cur.jpg"
+        frame.save(path)
+        with open(path, "rb") as f:
+            data = f.read()
+        if data:
+            return data
+    except Exception:
+        pass
     return b""
 
 
