@@ -142,15 +142,16 @@ def _emit_config(slots: dict[int, int], drop_x: float | None, drop_y: float | No
             ("%.1f" % drop_x) if drop_x is not None else "<待测 X>",
             ("%.1f" % drop_y) if drop_y is not None else "<待测 Y>",
         ),
-        "# 6 个货格角度（第 1 格 = 0°；顺时针为正，按实测位置值换算）",
+        "# 6 个货格：原始位置值 0~4095（直接来自 --read，不存角度）",
+        "# 说明：角度仅为注释（相对第 1 格），生产链按 pos: 值直通，不经角度/脉宽换算",
     ]
     for b in range(1, 7):
         if b not in slots:
-            lines.append("# %d = <缺>" % b)
+            lines.append("# %d = pos:<缺>" % b)
             continue
         delta = (slots[b] - base) % 4096
         deg = delta / COUNTS_PER_DEG
-        lines.append("%d = %.1f   # pos=%d  delta=%d" % (b, deg, slots[b], delta))
+        lines.append("%d = pos:%d   # delta=%d（相对第1格）≈ %.1f°" % (b, slots[b], delta, deg))
     return "\n".join(lines) + "\n"
 
 
