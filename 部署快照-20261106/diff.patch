@@ -1,0 +1,862 @@
+--- repo/电控/deploy/run_chain.py
++++ device/电控/deploy/run_chain.py
+@@ -165,8 +165,6 @@
+         self.latest_vision_batch: dict | None = None
+         self.latest_item_task: dict | None = None
+         self.latest_item_result: dict | None = None
+-        self.latest_place_check: dict | None = None
+-        self.place_runtime = None          # 2026-11-01：落料位复看运行时（可空）
+ 
+     def start(self, logger: logging.Logger) -> None:
+         """启动监控服务器"""
+@@ -267,27 +265,6 @@
+             'basis': basis,
+             'success': result_code == 0x00,
+         }
+-        # 2026-11-01：落料完成（ITEM_RESULT 成功）→ 用副相机在落料位复看
+-        rt = self.place_runtime
+-        if rt is not None and rt.enabled():
+-            code = None
+-            task = self.latest_item_task or {}
+-            if task.get('target_seq') == target_seq:
+-                code = task.get('class_id')
+-            box_id = None
+-            batch = self.latest_vision_batch or {}
+-            for t in (batch.get('targets') or []):
+-                if t.get('target_seq') == target_seq:
+-                    box_id = t.get('box_id')
+-                    break
+-            if code is not None:
+-                try:
+-                    self.latest_place_check = rt.on_item_result(
+-                        target_seq=target_seq, class_id=int(code),
+-                        box_id=box_id, result_code=int(result_code))
+-                except Exception:
+-                    self.latest_place_check = {"verdict": "UNKNOWN",
+-                                               "reason": "复看运行时异常"}
+         self._send_status()
+ 
+     def _send_status(self) -> None:
+@@ -297,7 +274,6 @@
+             'vision': self.latest_vision_batch,
+             'item_task': self.latest_item_task,
+             'item_result': self.latest_item_result,
+-            'place_check': getattr(self, 'latest_place_check', None),
+         }
+         self.broadcast(status)
+ 
+@@ -336,11 +312,7 @@
+     p = Path(path)
+     if not p.exists():
+         return None
+-    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+-    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+-    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+-    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++    cfg = configparser.ConfigParser()
+     cfg.read(p, encoding="utf-8")
+     if not cfg.has_section("PickPoint"):
+         return None
+@@ -368,11 +340,7 @@
+     p = Path(path)
+     if not p.exists():
+         return False
+-    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+-    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+-    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+-    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++    cfg = configparser.ConfigParser()
+     try:
+         cfg.read(p, encoding="utf-8-sig")
+     except (configparser.Error, UnicodeDecodeError, OSError):
+@@ -390,11 +358,7 @@
+     p = Path(path)
+     if not p.exists():
+         return {}
+-    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+-    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+-    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+-    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++    cfg = configparser.ConfigParser()
+     cfg.read(p, encoding="utf-8")
+     if not cfg.has_section("DropPoints"):
+         return {}
+@@ -418,11 +382,7 @@
+     p = Path(path)
+     if not p.exists():
+         return {}
+-    # 2026-10-23：统一剥行内注释。configparser 默认不剥 ⇒ 值后写 `# 注释`
+-    # 会让该值解析失败/被静默跳过，而错误信息看不出真因。已核对现行
+-    # sorting_config.ini 的所有值里都没有 `#`，此参数安全。
+-    # ⚠️ 与 pixel_to_device.py:210、drop_strategy.py 保持一致。
+-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++    cfg = configparser.ConfigParser()
+     cfg.read(p, encoding="utf-8")
+     if not cfg.has_section("BoxMap"):
+         return {}
+@@ -544,53 +504,6 @@
+         "--pick-strategy-config",
+         default=_env("PICK_STRATEGY_CONFIG", "/home/pi/电控/deploy/pick_strategy.ini"),
+         help="--pick-strategy=order 时使用的策略配置文件（缺失或解析失败 ⇒ 自动退回 off）",
+-    )
+-    parser.add_argument(
+-        "--verify-place", choices=("off", "observe", "correct"),
+-        default=_env("VERIFY_PLACE", "off"),
+-        help="落料位复看（副相机 + Pi 本地 HSV 判色）：off=不看（默认）；"
+-             "observe=只看只统计；correct=不符时纠正货格分配台账",
+-    )
+-    parser.add_argument(
+-        "--place-eye-config", default=_env("PLACE_EYE_CONFIG", None),
+-        help="[PlaceEye] 所在 ini（缺省=与 --config 同一个 sorting_config.ini）",
+-    )
+-    parser.add_argument(
+-        "--slot-mode", choices=("static", "dynamic"), default=_env("SLOT_MODE", "static"),
+-        help="货格分配：static=用 [BoxMap] 静态表（默认，行为不变）；"
+-             "dynamic=运行时按 code 分配货格（同 code 复用同格、同侧优先少换挡）",
+-    )
+-    parser.add_argument(
+-        "--slot-journal", default=_env("SLOT_JOURNAL", "/home/pi/slot_alloc.json"),
+-        help="dynamic 模式的分配台账路径（按 round_id 持久化，重启不丢）",
+-    )
+-    parser.add_argument(
+-        "--anchor",
+-        choices=("last_drop", "fixed"),
+-        default=_env("SORT_ANCHOR", "last_drop"),
+-        help="排序锚点（审核 D1）：last_drop=用『上一次落料点』（默认，修掉固定 (0,0)）；"
+-             "fixed=沿用构造时的固定锚点（一键回退用）。",
+-    )
+-    parser.add_argument(
+-        "--order-mode",
+-        choices=("auto", "legacy", "group", "difficulty", "open_edge", "five_key",
+-                 "weighted"),
+-        default=_env("ORDER_MODE", "auto"),
+-        help="夹取策略排序口径（仅 --pick-strategy=order 生效）。"
+-             "auto=用配置 [Strategy] order_mode（缺省 legacy=不排序）；"
+-             "group=分组→待定→难度→行扫描（现状默认）；"
+-             "difficulty=只按难度分层；open_edge=离无壁边最近；"
+-             "five_key=停稳→待定→难度→隔离度→落点距离（2026-11-01 新增）；"
+-             "weighted=加权评分：前端/夹取/路线/隔离度（2026-11-02 新增，权重见 [Strategy]）；"
+-             "legacy=不排序（原顺序）。",
+-    )
+-    parser.add_argument(
+-        "--settle-frames", type=int, default=_env_int("SETTLE_FRAMES", 3),
+-        help="five_key 模式：连续多少帧位置不变才算『停稳』（默认 3）",
+-    )
+-    parser.add_argument(
+-        "--settle-shift-mm", type=float, default=float(_env_int("SETTLE_SHIFT_MM", 4)),
+-        help="five_key 模式：停稳判据的中心位移阈值 mm（默认 4）",
+     )
+     parser.add_argument(
+         "--first-dispatch-settle",
+@@ -935,9 +848,6 @@
+     fixed_pick_point: tuple[int, int] | None = None,
+     # 夹取策略（--pick-strategy=order）注入的「选哪一件」排序器；默认 None ⇒ 行为不变。
+     payload_orderer: Callable[[tuple[object, ...]], tuple[object, ...]] | None = None,
+-    current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
+-    box_id_resolver: Callable[[int], int | None] | None = None,
+-    class_id_filter: Callable[[int], bool] | None = None,
+     # 首件稳定门（见 SocketVisionSource 的注释）。两个默认值 = **关闭**，
+     # 由 run_chain 的 --first-dispatch-settle 传下来（默认 3 帧）。
+     first_dispatch_settle_frames: int = 0,
+@@ -1015,9 +925,6 @@
+         drop_point_for_box=drop_point_for_box,
+         grasp_point_for_target=grasp_point_for_target,
+         payload_orderer=payload_orderer,
+-        current_position_provider=current_position_provider,
+-        box_id_resolver=box_id_resolver,
+-        class_id_filter=class_id_filter,
+         first_dispatch_settle_frames=first_dispatch_settle_frames,
+         first_dispatch_max_wait_s=first_dispatch_max_wait_s,
+     )
+@@ -1443,128 +1350,28 @@
+     else:
+         # 夹取策略（默认 off）：只在启用时构造排序器；构造失败自动退回 off（fail-safe）。
+         payload_orderer = None
+-        # 2026-11-01（审核 D1）：「上一次落料点」—— 排序锚点与 five_key 落点键共用。
+-        last_drop_state: dict[str, object] = {"pt_mm": None}
+-
+-        def _drop_point_memo(box_id: int):
+-            pt = strategy.get_drop_point(box_id)
+-            if pt is not None:
+-                # strategy.get_drop_point 返回 0.1mm 记账坐标 ⇒ 换算成物料装置坐标 mm
+-                last_drop_state["pt_mm"] = (pt[0] / 10.0, pt[1] / 10.0)
+-            return pt
+-
+-        def _current_position_mm10():
+-            pt = last_drop_state["pt_mm"]
+-            if pt is None:
+-                return None
+-            return (int(round(pt[0] * 10.0)), int(round(pt[1] * 10.0)))
+-
+-        def _last_drop_point():
+-            from electrical_control.pick_strategy.geometry import Point as _Pt
+-            pt = last_drop_state["pt_mm"]
+-            return None if pt is None else _Pt(pt[0], pt[1])
+-
+         if args.pick_strategy == "order":
+             from electrical_control.pick_strategy.chain_adapter import (
+                 payload_orderer_from_ini,
+             )
+-            from electrical_control.pick_strategy.orderer import SettleTracker
+-
+-            settle_tracker = None
+-            if args.order_mode == "five_key":
+-                settle_tracker = SettleTracker(
+-                    settle_frames=max(1, int(args.settle_frames)),
+-                    settle_shift_mm=float(args.settle_shift_mm),
+-                )
+-
+-            resolved_mode = None if args.order_mode == "auto" else args.order_mode
+-            payload_orderer = payload_orderer_from_ini(
+-                args.pick_strategy_config,
+-                order_mode=resolved_mode,
+-                settle=settle_tracker,
+-                last_drop_provider=_last_drop_point,
+-            )
++
++            payload_orderer = payload_orderer_from_ini(args.pick_strategy_config)
+             if payload_orderer is None:
+                 logger.warning(
+                     "夹取策略：--pick-strategy=order 但排序器构造失败 ⇒ 本次退回默认排序"
+                 )
+             else:
+                 logger.info(
+-                    "夹取策略：已启用（α：只改顺序、不丢件）；order_mode=%s 配置=%s",
+-                    "配置 [Strategy] order_mode" if args.order_mode == "auto" else args.order_mode,
++                    "夹取策略：已启用【顺序】模式（α：只改顺序、不丢件），配置=%s",
+                     args.pick_strategy_config,
+                 )
+-        # 2026-11-02：主动放弃难夹形状（为得分）。规则放在 pick_strategy.ini 的
+-        # [Strategy] skip_shapes（0=全抓，3=圆柱，5=圆锥）。默认 0 ⇒ 行为不变。
+-        class_id_filter = None
+-        try:
+-            from electrical_control.pick_strategy.config import build_config as _build_pcfg
+-            from electrical_control.pick_strategy.selector import shape_of_class_id
+-
+-            _pc = _build_pcfg(args.pick_strategy_config)
+-            _skip = tuple(getattr(_pc, "skip_shapes", ()) or ())
+-            _cid_mode = getattr(_pc, "class_id_mode", "box_id")
+-            if _skip:
+-                class_id_filter = (
+-                    lambda cid, _s=_skip, _m=_cid_mode:
+-                    shape_of_class_id(cid, _m) in _s
+-                )
+-                logger.warning("主动放弃形状：跳过分拣 %s（class_id_mode=%s）",
+-                               _skip, _cid_mode)
+-        except Exception:
+-            logger.warning("读取 skip_shapes 失败：本次不跳过任何形状", exc_info=True)
+-
+-        # 2026-11-01（动态分配）：code → box_id。默认 static（走旧静态表，行为不变）。
+-        slot_allocator = None
+-        box_id_resolver = None
+-        if args.slot_mode == "dynamic":
+-            from electrical_control.rpi.slot_allocator import SlotAllocator
+-
+-            side_of_box = {}
+-            get_sides = getattr(strategy, "side_of_box", None)
+-            if callable(get_sides):
+-                try:
+-                    side_of_box = dict(get_sides())
+-                except Exception:
+-                    logger.warning("取转盘侧表失败：动态分配按无侧信息处理", exc_info=True)
+-            slot_allocator = SlotAllocator(
+-                box_ids=(1, 2, 3, 4, 5, 6),
+-                mode="dynamic",
+-                side_of_box=side_of_box,
+-                journal_path=args.slot_journal,
+-                round_id=round_id,
+-            )
+-            box_id_resolver = slot_allocator.box_for
+-            logger.info("货格动态分配：已启用（台账=%s，round=%s）",
+-                        args.slot_journal, round_id)
+-
+-        # 2026-11-01：落料位复看（默认 off）。复用同一个 slot_allocator 做台账纠正。
+-        place_runtime = None
+-        if args.verify_place != "off":
+-            from electrical_control.rpi.place_eye import load_place_eye_config
+-            from electrical_control.rpi.place_verify_runtime import PlaceVerifyRuntime
+-
+-            eye_cfg = load_place_eye_config(args.place_eye_config or args.config)
+-            if eye_cfg is None:
+-                logger.warning("落料位复看：--verify-place=%s 但 [PlaceEye] 未启用/未标定"
+-                               "⇒ 本次按不可用处理（统计记 UNKNOWN）", args.verify_place)
+-            place_runtime = PlaceVerifyRuntime(
+-                args.verify_place, cfg=eye_cfg, allocator=slot_allocator)
+-            monitor.place_runtime = place_runtime
+-            logger.info("落料位复看：已启用 %s（配置=%s）",
+-                        args.verify_place, args.place_eye_config or args.config)
+-
+         source = build_socket_source(
+             round_id=round_id,
+             round_task_id=round_task_id,
+-            drop_point_for_box=_drop_point_memo,
++            drop_point_for_box=strategy.get_drop_point,
+             calibration_config=args.calibration_config,
+             fixed_pick_point=fixed_pick_point,
+             payload_orderer=payload_orderer,
+-            box_id_resolver=box_id_resolver,
+-            class_id_filter=class_id_filter,
+-            current_position_provider=(_current_position_mm10
+-                                      if args.anchor == "last_drop" else None),
+             first_dispatch_settle_frames=args.first_dispatch_settle,
+             first_dispatch_max_wait_s=args.first_dispatch_max_wait,
+         )
+@@ -1671,25 +1478,8 @@
+             #     `payload.class_id` **就是货格号**（校赛模式，见 vision_ingest），
+             #     所以这里零协议改动：ITEM_TASK 的 12 字节一个都没动。
+             if turn_guard is not None:
+-                # 2026-11-01（协议 V1.0）：code(1..30) 下 class_id **不再是货格号**，
+-                # 必须先映射成 box_id(1..6) 再下发转盘；否则转盘会转到错角度。
+-                # 默认 static + box_id 模式下 tt_box == payload.class_id，行为与改动前一致。
+-                tt_box = int(task.payload.class_id)
+-                if slot_allocator is not None:
+-                    try:
+-                        mapped = slot_allocator.box_for(tt_box)
+-                        if mapped is not None:
+-                            tt_box = int(mapped)
+-                        else:
+-                            logger.error("转盘预置失败：code=%d 无可用货格（分配器满）"
+-                                         "⇒ 本件不发，停链", tt_box)
+-                            cl.record(FAULT, now=time.monotonic(),
+-                                      detail="货格分配器满，无法预置转盘")
+-                            return 1
+-                    except Exception:
+-                        logger.warning("货格映射失败：沿用 class_id 作货格号", exc_info=True)
+                 try:
+-                    refused = turn_guard.before_dispatch(tt_box)
++                    refused = turn_guard.before_dispatch(task.payload.class_id)
+                 except TurntableError as exc:
+                     cl.record(FAULT, now=time.monotonic(), detail=f"转盘拒绝动作: {exc}")
+                     logger.error("转盘拒绝动作，本件不发 ITEM_TASK，链路停止：%s", exc)
+@@ -1700,10 +1490,6 @@
+                     return 1
+             raw = outbound.send_item_task(task)  # ITEM_TASK 出站（状态 → WAIT_MOTION_DONE）
+             done_items += 1
+-            # 2026-11-01：每 4 件打一条落料位复看统计（含 MATCH/MISMATCH/UNKNOWN 计数）
+-            if (place_runtime is not None and place_runtime.enabled()
+-                    and done_items % 4 == 0):
+-                logger.info(place_runtime.summary())
+             last_task_sent_at = time.monotonic()
+             last_task_context = task
+             success_info = None  # 新的一件：清掉上一件遗留的「分拣成功」载荷
+
+--- repo/电控/deploy/pick_strategy.ini
++++ device/电控/deploy/pick_strategy.ini
+@@ -96,24 +96,8 @@
+ 
+ [Drop]
+ # 落点是**滑台记账坐标**（与线上同口径，不叠加 ToolOffset）。
+-#
+-# ============================================================================
+-# 🚨 2026-10-22 T3 复核：**本段只给离线演示用，不是生产落点！**
+-#
+-#   读取者：`deploy/run_pick_strategy.py:152,201,355`
+-#           （该脚本头部明写"不会打开串口、不会连相机、不会驱动任何实物"）
+-#
+-#   生产链（run_chain.py:1232,1243 → drop_strategy.load_strategy_from_config）
+-#   **完全不读本段**，它读的是：
+-#       sorting_config.ini 的 [DropPoints]（方案A，六盒）
+-#       或 [TurntableAngles]（方案B，转盘落点）
+-#
+-#   ⇒ 所以 "x=20.0, y=74.0" 与 sorting_config.ini 的落点**不冲突**，
+-#     只是**两个不同入口各用各的**。改生产落点请改 sorting_config.ini。
+-#   ⚠️ 生产落点现在有可达域校验（X≤90.0, Y≤92.5），越界会拒绝启动。
+-# ============================================================================
+-x_mm = 20.0       # 【待实测】生产落点请改 sorting_config.ini（本段只管离线演示）
+-y_mm = 74.0       # 【待实测】生产落点请改 sorting_config.ini（本段只管离线演示）
++x_mm = 20.0       # 【待实测】现场六盒标定后替换
++y_mm = 74.0       # 【待实测】
+ 
+ # [ObjectSize]
+ # contour 选择模式必需（半尺寸 mm）。未实测 ⇒ 保持注释状态。
+@@ -122,17 +106,3 @@
+ # [Obstacle]
+ # 缝隙/障碍不可通行区：x_min, x_max, y_min, y_max。未实测 ⇒ 保持注释状态，
+ # 并把 [Tray] require_gap_geometry 保持 true。
+-
+-# ============================================================================
+-# 2026-11-01 新增：五键排序（--order-mode=five_key）参数
+-# ============================================================================
+-# 这些参数**不在本 ini 里读取**（本 ini 是 fail-closed 的逐行来源标注格式，
+-# 加新键会让旧 ini 解析失败）；它们由 run_chain 的 CLI/环境变量提供：
+-#
+-#   --order-mode legacy|group|difficulty|open_edge|five_key   （环境变量 ORDER_MODE）
+-#   --settle-frames N       停稳判据：连续 N 帧位置不变（环境变量 SETTLE_FRAMES，默认 3）
+-#   --settle-shift-mm X     停稳判据：中心位移阈值 mm（环境变量 SETTLE_SHIFT_MM，默认 4）
+-#   隔离度环带 = max(夹爪包络半宽) + 10 mm（代码内常量，见 orderer.DEFAULTS）
+-#
+-# 【待实测】：停稳帧数/位移阈值尚未在实机标定，当前 3 帧 / 4 mm 为估计值。
+-# 回退：--order-mode=group（= 接入前的现状口径）或 --pick-strategy=off。
+
+--- repo/电控/src/electrical_control/rpi/vision_ingest.py
++++ device/电控/src/electrical_control/rpi/vision_ingest.py
+@@ -7,8 +7,6 @@
+ """
+ 
+ from __future__ import annotations
+-
+-import os
+ 
+ import logging
+ from collections.abc import Callable, Iterable, Iterator
+@@ -34,7 +32,7 @@
+ 
+ 
+ # Frozen active class-id set (interface-contract §5.2): 1=cuboid absent this round.
+-ACTIVE_CLASS_IDS = frozenset({0, 2, 3, 4, 5, 6})
++ACTIVE_CLASS_IDS = frozenset({0, 1, 2, 3, 4, 5, 6})
+ 
+ # ── BATCH_TARGETS 的 id 字节语义（2026-09-17 用户批准）────────────────
+ # True  = 校赛模式（当前）：该字节承载 box_id(1..6)，视觉侧把颜色折叠成货格号。
+@@ -53,46 +51,6 @@
+ #       docs/design/2026-09-16-货物图片命名与image_id裁决.md
+ BATCH_ID_BYTE_IS_BOX_ID = True
+ 
+-# ── 2026-11-01 新增：id 字节 = code(1..30) 模式 ──────────────────────────────
+-# 背景（docs/协议影响分析-20261101.md、interface-contract V1.0 草案）：
+-#   颜色必须进决策；主相机本地「YOLO 形状 + 同框 HSV 颜色」算出
+-#   code = (shape-1)*5 + color + 1（shape 1..6 = cube/cuboid/cylinder/
+-#   pentagonal_prism/cone/tetrahedron；color 1..5 = red/yellow/green/blue/white），
+-#   一个字节就能放下 1..30，**线格式不变**。
+-#   code = 0 表示「形状或颜色判不出」⇒ 只丢该件（不猜）。
+-#
+-# 开关取值：
+-#   "box_id"（默认，保持现状）：id 字节 = box_id(1..6)，颜色由视觉侧折叠成货格号
+-#   "code"                   ：id 字节 = code(1..30)，由上层按 [BoxMap] 映射货格
+-# 环境变量 BATCH_ID_BYTE_MODE 可覆盖（部署时逐台切换，避免两端同时改）。
+-BATCH_ID_BYTE_MODE = os.environ.get("BATCH_ID_BYTE_MODE", "box_id").strip().lower()
+-
+-#: code(1..30) 的两个分量。shape 1..6、color 1..5。
+-SHAPE_COUNT = 6
+-COLOR_COUNT = 5
+-CODE_UNKNOWN = 0
+-
+-
+-def code_to_shape_color(code: int) -> tuple[int, int] | None:
+-    """code(1..30) → (shape 1..6, color 1..5)；非法/未知返回 None。"""
+-    code = int(code)
+-    if not (1 <= code <= SHAPE_COUNT * COLOR_COUNT):
+-        return None
+-    shape = (code - 1) // COLOR_COUNT + 1
+-    color = (code - 1) % COLOR_COUNT + 1
+-    return shape, color
+-
+-
+-def shape_color_to_code(shape: int, color: int) -> int:
+-    """(shape 1..6, color 1..5) → code(1..30)。"""
+-    shape = int(shape)
+-    color = int(color)
+-    if not (1 <= shape <= SHAPE_COUNT):
+-        raise PayloadError(f"shape {shape} out of range 1..{SHAPE_COUNT}")
+-    if not (1 <= color <= COLOR_COUNT):
+-        raise PayloadError(f"color {color} out of range 1..{COLOR_COUNT}")
+-    return (shape - 1) * COLOR_COUNT + color
+-
+ _LOGGER = logging.getLogger(__name__)
+ # BATCH_TARGETS per-target wire size (interface-contract §5.1, frozen 2026-09-01).
+ _BATCH_TARGET_BYTES = 7
+@@ -145,21 +103,7 @@
+         #    那一支会让 box_id 留 None → 上层 socket_vision_source 全部拒识
+         #    → 一件都出不了货。必须先补 class_id → box_id 的映射。
+         #    详见本文件顶部 :37-47 的说明。
+-        if BATCH_ID_BYTE_MODE == "code":
+-            # 2026-11-01：id 字节 = code(1..30)（见文件顶部说明）
+-            if id_byte == CODE_UNKNOWN:
+-                _LOGGER.warning(
+-                    "id 字节 0（code 模式）= 形状/颜色判不出：拒识该件，其余照常")
+-                continue
+-            pair = code_to_shape_color(id_byte)
+-            if pair is None:
+-                _LOGGER.warning(
+-                    "id 字节 %d 不在 code 1..%d（code 模式）：拒识该件，其余照常",
+-                    id_byte, SHAPE_COUNT * COLOR_COUNT)
+-                continue
+-            class_id = id_byte          # 冻结口径：class_id = code(1..30)
+-            box_id = None               # 由上层 [BoxMap] 映射（不在解析层猜）
+-        elif BATCH_ID_BYTE_IS_BOX_ID:
++        if BATCH_ID_BYTE_IS_BOX_ID:
+             if not (1 <= id_byte <= 6):
+                 # 0（或其它越界值）= 视觉认不出这个件的颜色 → 只丢这一件，
+                 # 不能整帧抛错：否则同一帧里认得出来的件会被一起丢掉。
+
+--- repo/电控/src/electrical_control/rpi/socket_vision_source.py
++++ device/电控/src/electrical_control/rpi/socket_vision_source.py
+@@ -36,8 +36,6 @@
+ 
+ from __future__ import annotations
+ 
+-from dataclasses import replace as _replace
+-
+ import logging
+ import socket
+ import threading
+@@ -115,13 +113,6 @@
+         # 为什么需要：排序器只在**同一帧内**比较，而链在视觉线程起来后 ~167ms 就派了第一件
+         # （现场 18:55:35,405 → :572），那一帧件不全 ⇒ "Y 最大那件"被排到第三发。
+         # 排序键没错，是**输入不全**。
+-        # 2026-11-01：排序锚点提供器（返回 0.1mm 记账坐标）。
+-        # 传它以后，TSP 与策略排序都用『上一次落料点』而不是固定 (0,0)。
+-        current_position_provider: Callable[[], tuple[int, int] | None] | None = None,
+-        box_id_resolver: Callable[[int], int | None] | None = None,
+-        # 2026-11-02：主动放弃某些形状（为得分）。返回 True ⇒ 该 class_id 不派件，
+-        # 但**仍留在帧里**（上层几何/障碍判断不受影响）。
+-        class_id_filter: Callable[[int], bool] | None = None,
+         first_dispatch_settle_frames: int = 0,
+         # 稳定门的**等待上限（秒）**。必须有：无上限时"操作员还在摆件"会让链在起轮处
+         # 无限等，而 15s 失活窗/显示红线是从起轮算起的 ⇒ 那比顺序错严重得多。
+@@ -149,7 +140,10 @@
+         #   ⇒ 年龄超过本值的批次**丢弃不派**（返回 None，等下一批新鲜帧）。
+         #   ⚠️ 丢弃**不会吊死**：链的空闲钟会收场，代价只是本件晚一小会儿。
+         #   ⚠️ 阈值不能太小，否则会把"刚在 permit 之前一刻到达"的正常帧也丢光。
+-        max_batch_age_s: float = 2.5,
++        # 2026-09-23 改（用户现场：每件都会重新看，但相机偶发断供>2.5s ⇒ 那帧被丢 ⇒
++    #   链再也拿不到新帧、表现成'只看第一帧'、整件被跳过）
++    #   2.5 -> 8.0：件是静止的，超龄帧仍可用；真正的相机断供由 15s 空闲钟兜底
++    max_batch_age_s: float = 8.0,
+     ) -> None:
+         self._round_id = round_id
+         self._task_id = task_id
+@@ -168,9 +162,6 @@
+         # ponytail: 固定锚点；若实机每件后回零，用上一次落点当锚点更准。
+         self._current_position = current_position
+         self._payload_orderer = payload_orderer
+-        self._current_position_provider = current_position_provider
+-        self._box_id_resolver = box_id_resolver
+-        self._class_id_filter = class_id_filter
+         self._permitted = False
+         self._lock = threading.Lock()
+         self._latest: BatchTargets | None = None
+@@ -276,52 +267,6 @@
+                     self.note_served(_p.pick_x_position, _p.pick_y_position)
+         return contexts[0] if contexts else None
+ 
+-    def _filter_skipped(self, batch: BatchTargets) -> BatchTargets:
+-        """把「主动放弃的形状」从本帧可派发集合里剔除（2026-11-02）。
+-
+-        只影响**是否派件**；不修改视觉帧本身，也不改 wire。
+-        被剔除的件下一帧还会出现，仍被剔除（不会重复派发，也不会报"空台面"）。
+-        """
+-        if self._class_id_filter is None:
+-            return batch
+-        kept = []
+-        skipped = []
+-        for target in batch.targets:
+-            try:
+-                drop = bool(self._class_id_filter(int(target.class_id)))
+-            except Exception:
+-                _LOGGER.warning("跳过判定抛错（class_id=%s）：按不跳过处理",
+-                                getattr(target, "class_id", None), exc_info=True)
+-                drop = False
+-            (skipped if drop else kept).append(target)
+-        if skipped:
+-            _LOGGER.info("主动放弃形状：本帧跳过 %d 件（target_seq=%s）",
+-                         len(skipped), [t.target_seq for t in skipped])
+-        return BatchTargets(task_id=batch.task_id, targets=tuple(kept))
+-
+-    def _resolve_box_ids(self, batch: BatchTargets) -> BatchTargets:
+-        """code 模式下把 `VisionTarget.box_id`（None）补成货格号（2026-11-01 动态分配）。
+-
+-        只在 box_id 为 None 时补，**绝不覆盖**视觉给出的真值；resolver 抛错 ⇒ 按无格处理
+-        （该件随后被 `_expand` 拒识，链路继续，不猜盒）。
+-        """
+-        if self._box_id_resolver is None:
+-            return batch
+-        patched = []
+-        for target in batch.targets:
+-            if target.box_id is None:
+-                try:
+-                    box = self._box_id_resolver(int(target.class_id))
+-                except Exception:
+-                    _LOGGER.warning(
+-                        "货格分配器抛错（code=%d）：该件按无格处理", target.class_id,
+-                        exc_info=True)
+-                    box = None
+-                if box is not None:
+-                    target = _replace(target, box_id=int(box))
+-            patched.append(target)
+-        return BatchTargets(task_id=batch.task_id, targets=tuple(patched))
+-
+     # ---- 首件稳定门（2026-09-22）----
+ 
+     def _visibility_signature(self, batch: BatchTargets) -> tuple | None:
+@@ -340,9 +285,6 @@
+         if self._grasp_point_for_target is None:
+             return None
+         keys = []
+-        batch = self._resolve_box_ids(batch)
+-        batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
+-
+         for target in batch.targets:
+             if target.box_id is None:
+                 continue
+@@ -420,8 +362,6 @@
+         box_id 缺失（None）= 该件没有颜色真值 → 拒识该件、记 WARNING、链路继续。
+         不抛异常（抛出去会冒到 run() 兜底，把整条链带走），也绝不猜盒。
+         """
+-        batch = self._resolve_box_ids(batch)          # 2026-11-01：code → box_id
+-        batch = self._filter_skipped(batch)           # 2026-11-02：主动放弃形状
+         for target in batch.targets:
+             if target.box_id is None:
+                 _LOGGER.warning(
+@@ -514,19 +454,10 @@
+             # 否则每帧刷一条告警把真问题淹掉。
+             _LOGGER.debug("抓取点缺失（像素→mm 未注入）：跳过 TSP 排序，按原顺序取件")
+             return payloads
+-        # 2026-11-01（审核 D1）：锚点优先取『上一次落料点』，取不到才用构造时固定锚点。
+-        anchor = self._current_position
+-        if self._current_position_provider is not None:
+-            try:
+-                provided = self._current_position_provider()
+-                if provided is not None:
+-                    anchor = provided
+-            except Exception:
+-                _LOGGER.warning('取『上一次落料点』作排序锚点失败：沿用固定锚点', exc_info=True)
+         try:
+             ordered = greedy_tsp(
+                 list(payloads),
+-                anchor,
++                self._current_position,
+                 position=lambda p: (p.pick_x_position, p.pick_y_position),
+             )
+         except Exception:
+
+--- repo/电控/src/electrical_control/rpi/drop_strategy.py
++++ device/电控/src/electrical_control/rpi/drop_strategy.py
+@@ -219,81 +219,11 @@
+     return drop_points
+ 
+ 
+-# ============================================================================
+-# 可达域校验（2026-10-22 T3 新增）
+-# ============================================================================
+-# 数值来源：电控/firmware/stm32f407_m144z/App/Inc/ec_motion_plan.h
+-#   EC_MOTION_HOME_X_MM10       = -950   原点 X（最负角，上电手工推到这里）
+-#   EC_MOTION_HOME_Y_MM10       = -975   原点 Y
+-#   EC_MOTION_REACH_FAR_X_MM10  = +900   正端（相对 ±950 极限留 5mm 余量）
+-#   EC_MOTION_REACH_FAR_Y_MM10  = +925   正端（相对 ±975 极限留 5mm 余量）
+-#
+-# 🔴 为什么必须校验：
+-#    X/Y **没有限位开关**，超出可达域会持续堵转 → 电流拉满、发热
+-#    → 把主控带挂（历史实测已发生 3 次，见 sorting_config.ini [DropPoints] 注释）。
+-#    固件侧自己没法发现越界（它只会闷头走完），所以必须在**启动期**拦住。
+-#
+-# ⚠️ 坐标系：滑台记账坐标（与固件同口径），单位 0.1mm。
+-#    原点 = 装置最负角 = HOME，所以范围是 [-950, +900] 而不是 [0, +1850]。
+-REACH_X_MIN_MM10 = -950
+-REACH_X_MAX_MM10 = 900
+-REACH_Y_MIN_MM10 = -975
+-REACH_Y_MAX_MM10 = 925
+-
+-
+-def _check_within_reach(strategy: DropStrategy, config_path: str | Path) -> None:
+-    """启动期校验：所有落料点必须落在可达域内。
+-
+-    fail-closed：任一货格越界 → SystemExit（**拒绝启动**，绝不带着越界配置跑）。
+-
+-    只由 `load_strategy_from_config`（读真实文件）调用；
+-    `load_strategy_from_cfg`（自检/单测用）**不受影响** —— 那些自检用的是
+-    任意构造的坐标，不代表物理可达域。
+-    """
+-    violations: list[str] = []
+-    for box_id in range(1, 7):
+-        point = strategy.get_drop_point(box_id)
+-        if point is None:
+-            continue  # 未知货格（fail-closed 由各 strategy 自行处理）
+-        x_mm10, y_mm10 = point
+-        if not (REACH_X_MIN_MM10 <= x_mm10 <= REACH_X_MAX_MM10) or not (
+-            REACH_Y_MIN_MM10 <= y_mm10 <= REACH_Y_MAX_MM10
+-        ):
+-            violations.append(
+-                "货格 %d 落点 (%.1f, %.1f)mm 超可达域 "
+-                "X[%.1f, %.1f] Y[%.1f, %.1f]"
+-                % (
+-                    box_id, x_mm10 / 10.0, y_mm10 / 10.0,
+-                    REACH_X_MIN_MM10 / 10.0, REACH_X_MAX_MM10 / 10.0,
+-                    REACH_Y_MIN_MM10 / 10.0, REACH_Y_MAX_MM10 / 10.0,
+-                )
+-            )
+-    if violations:
+-        raise SystemExit(
+-            "落料点越界（X/Y 无限位开关，超程会堵转并把主控带挂，实测已发生 3 次）：\n"
+-            "  配置：%s\n  %s" % (config_path, "\n  ".join(violations))
+-        )
+-
+-
+ def load_strategy_from_config(config_path: str | Path) -> DropStrategy:
+-    """从 sorting_config.ini **文件**加载落料策略（A/B/C 自动识别）。
+-
+-    与 `load_strategy_from_cfg` 的唯一区别：
+-    **本函数额外做可达域校验**（`_check_within_reach`），因为只有它代表"要真跑"。
+-    """
+-    # 🔴 2026-10-23：必须剥行内注释。configparser 默认**不**剥，于是
+-    #      `1 = -112.5   # 脉宽 681µs`
+-    #    解出来的 value 是 `-112.5   # 脉宽 681µs`，float() 抛 ValueError 后被
+-    #    load_strategy_from_cfg 里的 `except ValueError: continue` **静默跳过**，
+-    #    最后报 "方案B 转盘角度表不完整：缺货格 [1,2,3,4,5,6]"
+-    #    —— 真正原因（行内注释）在错误信息里完全看不出来。2026-10-23 实际踩过。
+-    # ⚠️ 与 pixel_to_device.py:210 保持同一行为（那里早就加了，本处遗漏）。
+-    # ⚠️ 已核对：现行 sorting_config.ini 的所有值里都没有 `#`，加此参数安全。
+-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++    """从 sorting_config.ini **文件**加载落料策略（A/B/C 自动识别）。"""
++    cfg = configparser.ConfigParser()
+     cfg.read(config_path, encoding="utf-8")
+-    strategy = load_strategy_from_cfg(cfg, config_path)
+-    _check_within_reach(strategy, config_path)
+-    return strategy
++    return load_strategy_from_cfg(cfg, config_path)
+ 
+ 
+ def load_strategy_from_cfg(
+@@ -464,9 +394,7 @@
+     from io import StringIO
+ 
+     def _selftest_load(text: str) -> DropStrategy:
+-        # 2026-10-23：自检必须用与 load_strategy_from_config 同一种解析器，
+-        # 否则测的行为和真实路径不一致（行内注释在那边会被剥、在这边不会）。
+-        _cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
++        _cfg = configparser.ConfigParser()
+         _cfg.read_string(text)
+         return load_strategy_from_cfg(_cfg, "<selftest>")
+ 
+@@ -507,59 +435,6 @@
+     assert not strategy_b.uses_drop_points()
+     print("✅ TurntableStrategy 自检通过")
+ 
+-    # 自检 2b（2026-10-23）：**行内注释必须被正确剥掉**。
+-    #
+-    # 历史：configparser 默认不剥行内注释，于是
+-    #     1 = -112.5   # 脉宽 681µs
+-    # 解出来的 value 是 "-112.5   # 脉宽 681µs"，float() 抛 ValueError，
+-    # 被 load_strategy_from_cfg 的 `except ValueError: continue` **静默跳过**，
+-    # 最终报 "方案B 转盘角度表不完整：缺货格 [1,2,3,4,5,6]"
+-    # —— 真因（行内注释）在错误信息里完全看不出来。2026-10-23 实际踩过。
+-    #
+-    # 修法：所有 ConfigParser 统一加 inline_comment_prefixes=("#",)
+-    #       （与 pixel_to_device.py:210 早就在用的行为对齐）。
+-    #
+-    # 本断言固定修好后的行为：**带行内注释的角度表必须能正常解析**，
+-    # 且值等于注释前面的那个数。若有人把这个参数去掉，这条会立刻红 ——
+-    # 这正是我们要的警报，因为去掉它会让配置里的注释变成隐形地雷。
+-    cfg_b_inline_comment = StringIO("""[TurntableAngles]
+-turntable_drop_point = 90.0, 88.5   # 固定落料点（装置坐标 mm）
+-1 = -112.5   # 脉宽 681µs
+-2 = -67.5    # 脉宽 1009µs
+-3 = -22.5    # 脉宽 1336µs
+-4 = 22.5     # 脉宽 1664µs
+-5 = 67.5     # 脉宽 1991µs
+-6 = 112.5    # 脉宽 2319µs
+-""")
+-    strategy_b_inline = _selftest_load(cfg_b_inline_comment.getvalue())
+-    assert isinstance(strategy_b_inline, TurntableStrategy)
+-    assert strategy_b_inline.get_angle(1) == -112.5, "行内注释把值带进 float() 了"
+-    assert strategy_b_inline.get_angle(6) == 112.5
+-    assert strategy_b_inline.get_drop_point(1) == (900, 885), "落料点的行内注释未被剥掉"
+-    for _b in range(1, 7):
+-        assert strategy_b_inline.get_angle(_b) is not None, "有格子被静默跳过"
+-    print("✅ 行内注释正确剥除自检通过（2026-10-23 修复后行为）")
+-
+-    # 反向对照：注释单独占行也必须照常工作（两种写法都支持）。
+-    cfg_b_own_line_comment = StringIO("""[TurntableAngles]
+-turntable_drop_point = 0, 0
+-# 这是单独占行的注释，不影响解析
+-1 = -112.5
+-2 = -67.5
+-3 = -22.5
+-4 = 22.5
+-5 = 67.5
+-6 = 112.5
+-""")
+-    strategy_b2 = _selftest_load(cfg_b_own_line_comment.getvalue())
+-    assert isinstance(strategy_b2, TurntableStrategy)
+-    assert strategy_b2.get_angle(1) == -112.5
+-    assert strategy_b2.get_angle(6) == 112.5
+-    for _b in range(1, 7):
+-        assert strategy_b2.get_angle(_b) is not None
+-    print("✅ 独立注释行自检通过（注释占行也照常工作）")
+-
+-
+     # 自检 3：fail-closed（缺货格）
+     cfg_bad = "[DropPoints]\n1 = 0, 0\n"   # 只有 1 号，缺 2-6
+     try:
+
+--- repo/工具/p_look2.py
++++ device/p_look2.py
+@@ -0,0 +1,75 @@
++# -*- coding: utf-8 -*-
++"""只读监听 8765：解出全部可见物块的 像素 -> 装置 -> 滑台 坐标。
++⚠️ pixel_to_device 返回的是 0.1mm（mm10），必须 /10 之后再加 ToolOffset(mm)。"""
++import socket, sys, time
++import configparser
++sys.path.insert(0, "/home/pi/电控/src")
++from electrical_control.rpi.vision_ingest import parse_batch_targets
++from electrical_control.rpi.pixel_to_device import PixelToDeviceConverter
++
++_CFG = "/home/pi/电控/calibration_config.ini"
++conv = PixelToDeviceConverter(_CFG)
++# 🔴 2026-09-21 修：这里原本写死 TO = (-120.5, -43.5)，而配置文件早已改成 y=-52.5
++#    ⇒ 打印出来的"滑台取料点"Y 方向偏 9mm。用这个偏值去走，再目视量偏移，
++#    量到的 9mm 会被误当成"夹爪又偏了"⇒ 二次修正 ToolOffset。**必须只有一份真相。**
++_cp = configparser.ConfigParser()
++_cp.read(_CFG, encoding="utf-8")
++TO = (float(_cp.get("ToolOffset", "x_mm")), float(_cp.get("ToolOffset", "y_mm")))
++# 工作区限值也读同一份（滑台系）——判据必须和链一模一样，不许有第二份
++WX = (_cp.getfloat("WorkspaceLimits", "x_min"), _cp.getfloat("WorkspaceLimits", "x_max"))
++WY = (_cp.getfloat("WorkspaceLimits", "y_min"), _cp.getfloat("WorkspaceLimits", "y_max"))
++print("[p_look2] ToolOffset 读自 %s = (%.1f, %.1f) mm" % (_CFG, TO[0], TO[1]))
++print("[p_look2] 工作区(滑台系) = x[%.1f,%.1f] y[%.1f,%.1f]" % (WX + WY))
++NAMES = {1:"青-正方体",2:"绿-正方体",3:"红-三棱柱",4:"蓝-三棱柱",5:"黑-圆柱",6:"橙-圆柱"}
++
++srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
++srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
++srv.bind(("0.0.0.0", 8765)); srv.listen(4); srv.settimeout(2.0)
++print("监听 8765（最多 8 秒）……\n")
++t0 = time.time(); shown = 0
++while time.time() - t0 < 8.0 and shown == 0:
++    try:
++        conn, _ = srv.accept()
++    except socket.timeout:
++        continue
++    conn.settimeout(2.0)
++    data = b""
++    while len(data) < 300:
++        try: ch = conn.recv(300 - len(data))
++        except socket.timeout: break
++        if not ch: break
++        data += ch
++        if len(data) >= 3 and len(data) >= 3 + 7*data[0]: break
++    conn.close()
++    if len(data) < 3: continue
++    b = parse_batch_targets(data)
++    print("task_id=%s  count=%d" % (b.task_id, len(b.targets)))
++    for t in b.targets:
++        # 🔴 2026-09-21 修：原来用默认 check_workspace=True，等于拿【装置坐标】去比
++        #    【滑台系】的 [WorkspaceLimits]（pixel_to_device.py:332-333 自己写明：
++        #    运动链要先叠加 ToolOffset、再检查最终 PICK，所以链传 False）。
++        #    后果是判定全反：装置 x=102.4 的件滑台点其实 = -18.1 在范围内（链**会**抓），
++        #    却被报成"越界"；而滑台 x=-96.8 的件机械够不到，却一声不响。
++        #    现在与链同口径：先叠加 ToolOffset，再比滑台工作区。
++        dev = conv.pixel_to_device(t.pixel_x, t.pixel_y, t.box_id, check_workspace=False)
++        print("  box_id=%d (%s)  px=%d py=%d" % (t.box_id, NAMES.get(t.box_id,"?"), t.pixel_x, t.pixel_y))
++        if dev is None:
++            print("      ❌ 像素域外 / 缺 [ObjectHeights] —— 这件取不到")
++            continue
++        dx_mm, dy_mm = dev[0]/10.0, dev[1]/10.0          # ★ mm10 -> mm
++        sx_mm, sy_mm = dx_mm + TO[0], dy_mm + TO[1]
++        print("      装置 = (%.1f, %.1f) mm" % (dx_mm, dy_mm))
++        if not (WX[0] <= sx_mm <= WX[1] and WY[0] <= sy_mm <= WY[1]):
++            print("      ❌ 滑台取料点 = (%.1f, %.1f) mm **超出工作区** "
++                  "[%.1f,%.1f]x[%.1f,%.1f] ⇒ 这件链不会抓（机械够不到）"
++                  % (sx_mm, sy_mm, WX[0], WX[1], WY[0], WY[1]))
++            continue
++        print("      ★滑台取料点 = (%.1f, %.1f) mm  ✅ 在可达区内" % (sx_mm, sy_mm))
++    # PATCH-20261029-heartbeat：发送端每 0.5s 会发 count=0 心跳；
++    # 旧逻辑「收到第一批就退出」会被心跳骗成「可见件数=0」⇒ 门禁误判没件。
++    # 现改为：空批次跳过，只有**含目标**的批次才算看到，8s 到期为止。
++    if b.targets:
++        shown = 1
++    else:
++        print('  (心跳空帧，继续监听)')
++srv.close()

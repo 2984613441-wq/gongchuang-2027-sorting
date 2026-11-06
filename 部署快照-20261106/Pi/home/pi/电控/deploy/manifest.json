@@ -1,0 +1,335 @@
+{
+  "note": "image_id = (shape_id-1)*5 + color_id + 1；class_id 与 image_id 冻结 1:1",
+  "shapes": {
+    "1": "cube",
+    "2": "cuboid",
+    "3": "cylinder",
+    "4": "pentagonal_prism",
+    "5": "cone",
+    "6": "tetrahedron"
+  },
+  "shape_names_zh": {
+    "1": "正方体",
+    "2": "长方体",
+    "3": "圆柱",
+    "4": "五棱柱",
+    "5": "圆锥",
+    "6": "正四面体"
+  },
+  "colors": {
+    "0": "red",
+    "1": "yellow",
+    "2": "green",
+    "3": "blue",
+    "4": "white"
+  },
+  "color_names_zh": {
+    "0": "红色",
+    "1": "黄色",
+    "2": "绿色",
+    "3": "蓝色",
+    "4": "白色"
+  },
+  "entries": [
+    {
+      "image_id": 1,
+      "shape_id": 1,
+      "shape": "cube",
+      "shape_zh": "正方体",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "1.png"
+    },
+    {
+      "image_id": 2,
+      "shape_id": 1,
+      "shape": "cube",
+      "shape_zh": "正方体",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "2.png"
+    },
+    {
+      "image_id": 3,
+      "shape_id": 1,
+      "shape": "cube",
+      "shape_zh": "正方体",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "3.png"
+    },
+    {
+      "image_id": 4,
+      "shape_id": 1,
+      "shape": "cube",
+      "shape_zh": "正方体",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "4.png"
+    },
+    {
+      "image_id": 5,
+      "shape_id": 1,
+      "shape": "cube",
+      "shape_zh": "正方体",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "5.png"
+    },
+    {
+      "image_id": 6,
+      "shape_id": 2,
+      "shape": "cuboid",
+      "shape_zh": "长方体",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "6.png"
+    },
+    {
+      "image_id": 7,
+      "shape_id": 2,
+      "shape": "cuboid",
+      "shape_zh": "长方体",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "7.png"
+    },
+    {
+      "image_id": 8,
+      "shape_id": 2,
+      "shape": "cuboid",
+      "shape_zh": "长方体",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "8.png"
+    },
+    {
+      "image_id": 9,
+      "shape_id": 2,
+      "shape": "cuboid",
+      "shape_zh": "长方体",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "9.png"
+    },
+    {
+      "image_id": 10,
+      "shape_id": 2,
+      "shape": "cuboid",
+      "shape_zh": "长方体",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "10.png"
+    },
+    {
+      "image_id": 11,
+      "shape_id": 3,
+      "shape": "cylinder",
+      "shape_zh": "圆柱",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "11.png"
+    },
+    {
+      "image_id": 12,
+      "shape_id": 3,
+      "shape": "cylinder",
+      "shape_zh": "圆柱",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "12.png"
+    },
+    {
+      "image_id": 13,
+      "shape_id": 3,
+      "shape": "cylinder",
+      "shape_zh": "圆柱",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "13.png"
+    },
+    {
+      "image_id": 14,
+      "shape_id": 3,
+      "shape": "cylinder",
+      "shape_zh": "圆柱",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "14.png"
+    },
+    {
+      "image_id": 15,
+      "shape_id": 3,
+      "shape": "cylinder",
+      "shape_zh": "圆柱",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "15.png"
+    },
+    {
+      "image_id": 16,
+      "shape_id": 4,
+      "shape": "pentagonal_prism",
+      "shape_zh": "五棱柱",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "16.png"
+    },
+    {
+      "image_id": 17,
+      "shape_id": 4,
+      "shape": "pentagonal_prism",
+      "shape_zh": "五棱柱",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "17.png"
+    },
+    {
+      "image_id": 18,
+      "shape_id": 4,
+      "shape": "pentagonal_prism",
+      "shape_zh": "五棱柱",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "18.png"
+    },
+    {
+      "image_id": 19,
+      "shape_id": 4,
+      "shape": "pentagonal_prism",
+      "shape_zh": "五棱柱",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "19.png"
+    },
+    {
+      "image_id": 20,
+      "shape_id": 4,
+      "shape": "pentagonal_prism",
+      "shape_zh": "五棱柱",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "20.png"
+    },
+    {
+      "image_id": 21,
+      "shape_id": 5,
+      "shape": "cone",
+      "shape_zh": "圆锥",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "21.png"
+    },
+    {
+      "image_id": 22,
+      "shape_id": 5,
+      "shape": "cone",
+      "shape_zh": "圆锥",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "22.png"
+    },
+    {
+      "image_id": 23,
+      "shape_id": 5,
+      "shape": "cone",
+      "shape_zh": "圆锥",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "23.png"
+    },
+    {
+      "image_id": 24,
+      "shape_id": 5,
+      "shape": "cone",
+      "shape_zh": "圆锥",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "24.png"
+    },
+    {
+      "image_id": 25,
+      "shape_id": 5,
+      "shape": "cone",
+      "shape_zh": "圆锥",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "25.png"
+    },
+    {
+      "image_id": 26,
+      "shape_id": 6,
+      "shape": "tetrahedron",
+      "shape_zh": "正四面体",
+      "color_id": 0,
+      "color": "red",
+      "color_zh": "红色",
+      "file": "26.png"
+    },
+    {
+      "image_id": 27,
+      "shape_id": 6,
+      "shape": "tetrahedron",
+      "shape_zh": "正四面体",
+      "color_id": 1,
+      "color": "yellow",
+      "color_zh": "黄色",
+      "file": "27.png"
+    },
+    {
+      "image_id": 28,
+      "shape_id": 6,
+      "shape": "tetrahedron",
+      "shape_zh": "正四面体",
+      "color_id": 2,
+      "color": "green",
+      "color_zh": "绿色",
+      "file": "28.png"
+    },
+    {
+      "image_id": 29,
+      "shape_id": 6,
+      "shape": "tetrahedron",
+      "shape_zh": "正四面体",
+      "color_id": 3,
+      "color": "blue",
+      "color_zh": "蓝色",
+      "file": "29.png"
+    },
+    {
+      "image_id": 30,
+      "shape_id": 6,
+      "shape": "tetrahedron",
+      "shape_zh": "正四面体",
+      "color_id": 4,
+      "color": "white",
+      "color_zh": "白色",
+      "file": "30.png"
+    }
+  ]
+}

@@ -51,12 +51,16 @@ DEVICES = {
     "pi": {
         "ssh": "pi@172.20.10.8",
         "paths": [
-            "/home/pi/电控/src/electrical_control",
+            "/home/pi/电控/src",
             "/home/pi/电控/deploy",
             "/home/pi/sorting_config.ini",
             "/home/pi/calibration_config.ini",
             "/home/pi/p_look2.py",
             "/home/pi/pi_pw.py",
+            "/home/pi/pi_turntable.py",
+            "/home/pi/pi_cam2_capture.py",
+            "/home/pi/pi_cam2_stream.py",
+            "/home/pi/pi_cam2_grab.py",
             "/home/pi/check_turntable_strategy.py",
         ],
         "models": [],
