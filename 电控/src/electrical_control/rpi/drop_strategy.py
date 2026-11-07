@@ -88,26 +88,46 @@ class TurntableStrategy(DropStrategy):
         self,
         turntable_drop_point: tuple[int, int],
         angle_table: dict[int, float],
+        pos_table: dict[int, int] | None = None,
     ):
         """
         Args:
             turntable_drop_point: 固定落料点 (x_0.1mm, y_0.1mm)
-            angle_table: {box_id: angle_degrees}（0° = 货格1零位，顺时针）
+            angle_table: {box_id: angle_degrees}（旧口径：0° = 货格1零位，顺时针）
+            pos_table: {box_id: 原始位置值 0..4095}（2026-11-07 定稿口径）。
+                非空时**优先**；360° 六格只能用这个（角度表缺绝对基准且 ±180° 出界）。
         """
         self._drop_point = turntable_drop_point
         self._angles = angle_table
+        self._positions = dict(pos_table or {})
         logger.info(
-            "[Turntable] 固定落料点=%s，角度表=%s",
-            self._drop_point, sorted(self._angles.keys())
+            "[Turntable] 固定落料点=%s，角度表=%s，位置表=%s",
+            self._drop_point, sorted(self._angles.keys()), sorted(self._positions.keys())
         )
 
+    @property
+    def angle_table(self) -> dict[int, float]:
+        return dict(self._angles)
+
+    @property
+    def pos_table(self) -> dict[int, int]:
+        return dict(self._positions)
+
+    def uses_position_domain(self) -> bool:
+        """True ⇒ 该配置走位置域（0~4095），转盘必须用 SerialServoBackend/位置 API。"""
+        return bool(self._positions)
+
+    def get_position(self, box_id: int) -> int | None:
+        """查货格原始位置值（pos: 口径），未配置返回 None。"""
+        return self._positions.get(box_id)
+
     def get_drop_point(self, box_id: int) -> tuple[int, int] | None:
-        """方案B：所有货格用同一落料点，box_id 只决定转盘角度。"""
-        angle = self._angles.get(box_id)
-        if angle is None:
+        """方案B：所有货格用同一落料点，box_id 只决定转盘角度/位置。"""
+        if box_id not in self._positions and box_id not in self._angles:
             logger.warning(
                 "[Turntable] 未知 box_id=%d（表中只有 %s），拒识该件",
-                box_id, sorted(self._angles.keys())
+                box_id,
+                sorted(set(self._positions) | set(self._angles)),
             )
             return None
         # 方案B：落料点固定，所有货格用同一坐标
@@ -327,26 +347,54 @@ def load_strategy_from_cfg(
             ) from exc
         drop_point = (int(round(x_mm * 10)), int(round(y_mm * 10)))
 
-        # 读角度表（box_id = angle_degrees）
+        # 读表（box_id = 角度 或 pos:NNNN 原始位置值；2026-11-07 定稿）
+        # 两种写法**同一段里禁止混用**（混用 ⇒ SystemExit，避免一半角度一半位置）。
         angle_table: dict[int, float] = {}
+        pos_table: dict[int, int] = {}
         for key, value in cfg.items("TurntableAngles"):
             if key == "turntable_drop_point":
                 continue  # 跳过非角度配置项
             try:
                 box_id = int(key)
-                angle = float(value)
             except ValueError:
                 continue  # 跳过格式错误项
-            if 1 <= box_id <= 6:
-                angle_table[box_id] = angle
+            if not (1 <= box_id <= 6):
+                continue
+            raw = value.strip()
+            if raw.lower().startswith("pos:"):
+                try:
+                    pos = int(raw[4:].strip())
+                except ValueError as exc:
+                    raise SystemExit(
+                        f"方案B pos 值格式错误（需 pos:0..4095）：{key} = {value}（{config_path}）"
+                    ) from exc
+                if not (0 <= pos <= 4095):
+                    raise SystemExit(
+                        f"方案B pos 值越界（需 0..4095）：{key} = {pos}（{config_path}）"
+                    )
+                pos_table[box_id] = pos
+            else:
+                try:
+                    angle_table[box_id] = float(raw)
+                except ValueError:
+                    continue  # 跳过格式错误项（既有行为）
 
-        missing = [b for b in range(1, 7) if b not in angle_table]
-        if missing:
+        if pos_table and angle_table:
             raise SystemExit(
-                f"方案B 转盘角度表不完整：{config_path} [TurntableAngles] "
+                f"方案B [TurntableAngles] 混用了 pos: 与角度（{config_path}）："
+                f"pos 格={sorted(pos_table)} 角度格={sorted(angle_table)}。"
+                "同一段只允许一种写法——360° 六格请统一用 pos:NNNN。"
+            )
+
+        chosen: dict = pos_table if pos_table else angle_table
+        missing = [b for b in range(1, 7) if b not in chosen]
+        if missing:
+            kind = "pos:" if pos_table else "角度"
+            raise SystemExit(
+                f"方案B 转盘{kind}表不完整：{config_path} [TurntableAngles] "
                 f"缺货格 {missing}"
             )
-        return TurntableStrategy(drop_point, angle_table)
+        return TurntableStrategy(drop_point, angle_table, pos_table)
     elif cfg.has_section("TurntablePositions"):
         # 方案C：3 个固定落点 × 转盘 2 个位置（2026-09-21 用户裁决）
         return _load_two_position_strategy(cfg, config_path)

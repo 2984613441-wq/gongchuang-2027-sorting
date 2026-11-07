@@ -1288,6 +1288,70 @@ def _mm10(value: int | None) -> str:
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
+def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
+    """装配方案B 的转盘：位置域 `Turntable` + 读回到位守卫（2026-11-07）。
+
+    位置表来自 `[TurntableAngles]` 的 `pos:NNNN`（drop_strategy 已解析，混用/缺格已
+    fail-closed）。`[Turntable]` 段是**可选**的现场覆盖（settle_s / 到位容差 / 超时），
+    缺省用 `turntable.py` 里 2026-10-17 实测的默认值。
+    """
+    from electrical_control.rpi.turntable import (
+        FakeBackend,
+        Turntable,
+        TurntableConfig,
+        make_backend,
+    )
+    from electrical_control.rpi.turntable_position_guard import (
+        ArrivalConfig,
+        PositionTurnGuard,
+    )
+
+    angles = dict(getattr(strategy, "angle_table", {}) or {})
+    positions = dict(getattr(strategy, "pos_table", {}) or {})
+    if not positions:
+        logger.warning(
+            "方案B 用的是角度表（旧 270° 口径）：360° 分度请把 [TurntableAngles] "
+            "改成 pos:NNNN 写法（角度表缺绝对基准，±180° 以上会越界）"
+        )
+
+    settle_s, tol, timeout_s = 0.6, 20, 2.5
+    try:
+        cp = configparser.ConfigParser(inline_comment_prefixes=("#",))
+        cp.read(config_path, encoding="utf-8")
+        if cp.has_section("Turntable"):
+            def _num(key: str, default, cast):
+                try:
+                    return cast(cp.get("Turntable", key))
+                except (configparser.Error, ValueError):
+                    logger.warning("[Turntable] %s 解析失败，用默认 %s", key, default)
+                    return default
+
+            settle_s = float(_num("settle_s", settle_s, float))
+            tol = int(_num("arrive_tolerance_counts", tol, int))
+            timeout_s = float(_num("arrive_timeout_s", timeout_s, float))
+    except Exception:  # noqa: BLE001 - 配置读失败不应阻断装配（默认值可用）
+        logger.warning("读 [Turntable] 段失败：按默认值装配", exc_info=True)
+
+    config = TurntableConfig(
+        zero_pulse_us=1500,
+        us_per_degree=655.0 / 90.0,
+        angle_sign=-1,
+        angle_table=angles,
+        pos_table=positions,
+        settle_s=settle_s,
+    )
+    backend = FakeBackend() if demo else make_backend()
+    turntable = Turntable(config, backend)
+    guard = PositionTurnGuard(
+        turntable, ArrivalConfig(tolerance_counts=tol, timeout_s=timeout_s)
+    )
+    logger.info(
+        "落料策略=方案B（转盘选格·位置域）：%d 格，容差 ±%d counts，超时 %.1fs，后端=%s",
+        len(config.boxes()), tol, timeout_s, type(backend).__name__,
+    )
+    return turntable, guard
+
+
 def run(args: argparse.Namespace) -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -1318,7 +1382,8 @@ def run(args: argparse.Namespace) -> int:
     #   否则                   → 方案A（读 [DropPoints]，且六盒必须齐全，缺一即 SystemExit）
     # 方案A 的校验与"缺货格就拒启动"行为与接线前【完全一致】，只是搬进了工厂函数。
     if demo:
-        if config_has_section(args.config, "TurntablePositions"):
+        if (config_has_section(args.config, "TurntablePositions")
+                or config_has_section(args.config, "TurntableAngles")):
             # --fake-link 主机冒烟：--config 里配了方案C 就按方案C 装配
             # （转盘后端换成 FakeBackend + 假索引）。没有这一支，"转盘接线"在主机上
             # 一行都执行不到，等于没测。
@@ -1351,19 +1416,18 @@ def run(args: argparse.Namespace) -> int:
                 "对应关系可校验。建议用 工具/control_panel.py 冻结后再跑"
             )
 
-    # ---- 转盘守卫（仅方案C；方案A/B ⇒ None ⇒ 主循环里相关代码整体不执行）----
+    # ---- 转盘守卫（2026-11-07：方案B 已接线）----
+    #   方案B（[TurntableAngles]）→ PositionTurnGuard：读回位置值判到位（360° 位置域）
+    #   方案C（[TurntablePositions]+[TurntableSides]）→ TurntableGuard：GPIO17 索引
+    #   方案A（[DropPoints]）→ 两者皆 None ⇒ 主循环里转盘相关代码整体不执行
+    turntable = None
     if strategy.requires_turntable_control() and not strategy.uses_drop_points():
-        # 方案B（[TurntableAngles]）在 run_chain 里**从来没有驱动过转盘**
-        # （本文件全篇不实例化 Turntable）。继续跑 = 6 个货格全落到同一个固定点，
-        # 而且现场看不出异常 ⇒ 显式拒绝，而不是静默投错格。
-        raise SystemExit(
-            "方案B（[TurntableAngles]）：转盘驱动从未接入本链路，继续跑会让 6 个货格"
-            "全落到同一个固定点。请改用方案C（[TurntablePositions]+[TurntableSides]）"
-            "或方案A（只留 [DropPoints]）。"
+        turntable, turn_guard = _wire_position_turntable(
+            strategy, args.config, demo=demo, logger=logger
         )
-
-    turn_guard = build_turn_guard(strategy, demo=demo)
-    if turn_guard is not None:
+    else:
+        turn_guard = build_turn_guard(strategy, demo=demo)
+    if turn_guard is not None and turntable is None:
         # 🔴 2026-09-22 加（安全加固，用户批准）：**链开工前先把转盘置回中位 1500µs**
         #    为什么：pw.txt 是链与常驻输出进程（/home/pi/pi_pw.py，见 /etc/init.d/S98turntable）
         #    之间的**唯一通路** —— 链只写文件，真正的 GPIO18 输出由那个常驻进程完成。
@@ -1407,6 +1471,37 @@ def run(args: argparse.Namespace) -> int:
                 f"转盘开工自检失败，拒绝启动（未打开串口、未开始轮次）：{exc}"
             ) from exc
 
+    # ---- 方案B 开工自检（位置域，2026-11-07 接线）----
+    if turntable is not None and not demo:
+        # 开工回中位：位置域等价于旧的「写 1500µs」——清掉上一场遗留位置。
+        # 注意 360° 六格并不以"中位"为货格 1；回中位只是安全起点，不参与落料坐标。
+        try:
+            turntable.goto_zero()
+            logger.info("转盘已回中位（位置域，后端=%s）",
+                        type(turntable.backend).__name__)
+        except Exception as exc:  # noqa: BLE001 - 加固失败不阻断开工（会记警告）
+            logger.warning("转盘回中位失败（不阻断）：%s", exc)
+        try:
+            turn_guard.preflight()
+        except TurntableError as exc:
+            raise SystemExit(
+                f"转盘开工自检失败，拒绝启动（位置域读回不可用）：{exc}"
+            ) from exc
+        # 方案B 落料时转盘必须按「货格号」转；code 模式下 class_id 是 code(1..30)，
+        # 不是货格号 ⇒ 必须开动态分配把 code 映射成 box_id，否则会按 code 转错格。
+        from electrical_control.rpi.vision_ingest import BATCH_ID_BYTE_IS_BOX_ID
+
+        if not BATCH_ID_BYTE_IS_BOX_ID and args.slot_mode != "dynamic":
+            raise SystemExit(
+                "方案B（[TurntableAngles]）在 code 模式下需要 --slot-mode dynamic："
+                "class_id 是 code(1..30) 而不是货格号，没有动态分配就会按 code 转错格。"
+                "（或改用 BATCH_TARGETS 校赛模式 BATCH_ID_BYTE_IS_BOX_ID=True。）"
+            )
+        logger.warning(
+            "方案B 已启用（位置域转盘）：到位判据 = 读回位置与目标差 ≤ %d counts，"
+            "超时/读不到 ⇒ 锁死停链。", turn_guard.config.tolerance_counts
+        )
+
     font_path = resolve_font(args.font, logger)
     names = load_names(args.names_file, demo=demo)
     image_loader = build_image_loader(args.image_dir, demo=demo)
@@ -1436,10 +1531,12 @@ def run(args: argparse.Namespace) -> int:
     outbound = OutboundGateway(  # 出站：ITEM_TASK / DISPLAY_ACK（task_id 与 round 严格校验）
         link, config=OutboundConfig(round_task_id=round_task_id)
     )
-    # 2026-11-07：`place_runtime` 必须在分支**之前**初始化 —— 它只在真实模式分支里被赋值，
-    # 而主循环（约 1704 行）无条件读它 ⇒ `--fake-link` 一进主循环就 UnboundLocalError。
-    # 占位源/演示模式本来就没有复看，置 None 即正确语义（默认 off 行为不变）。
+    # 2026-11-07：`place_runtime` / `slot_allocator` 必须在分支**之前**初始化 ——
+    # 它们只在真实模式分支里被赋值，而主循环无条件读它们 ⇒ 一进主循环就
+    # UnboundLocalError（`--fake-link` 冒烟曾因此完全不可用）。
+    # demo 模式本来就没有复看/动态分配（单件 class_id 直接是货格号），置 None 即正确语义。
     place_runtime = None
+    slot_allocator = None
     if demo:
         scheduler.load_source(
             build_placeholder_source(round_id=round_id, round_task_id=round_task_id, demo=demo)

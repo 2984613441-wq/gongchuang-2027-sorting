@@ -95,6 +95,11 @@ class TurntableConfig:
     angle_table: dict[int, float] = field(default_factory=dict)
     settle_s: float = 0.6
     name: str = "turntable"
+    # 🔴 2026-11-07（用户定稿）：`[TurntableAngles]` 支持 `pos:NNNN` 原始位置值。
+    #    360° 六格**不能**用角度表表达：角度是"相对第 1 格"，位置域是舵机绝对坐标，
+    #    两者差一个绝对基准；且中心到边界只有 ±2048 counts（±180°），300° 张角必然出界。
+    #    pos_table 优先；angle_table 只给旧 ±137° 脉宽后端 / 旧模板。
+    pos_table: dict[int, int] = field(default_factory=dict)
     # 🔴 2026-11-07：位置域直通参数（ST-3215）。360° 分度必须走位置域，
     #    因为脉宽域 [500,2500]µs 只能覆盖 ±137°，±180° 会被 fail-closed 拦死。
     #    与 SerialServoBackend 的同名默认值保持一致（2026-10-17 实测）。
@@ -120,6 +125,13 @@ class TurntableConfig:
             raise TurntableUncalibrated(
                 f"counts_per_90={self.counts_per_90} 必须 > 0"
             )
+        for box, pos in self.pos_table.items():
+            if box not in range(1, 7):
+                raise TurntableUncalibrated(f"pos_table 货格 {box} 不在 1..6")
+            if not (POS_MIN <= int(pos) <= POS_MAX):
+                raise TurntableUncalibrated(
+                    f"pos_table 货格 {box} 位置 {pos} 不在 [{POS_MIN},{POS_MAX}]"
+                )
 
     # ---- 换算（脉宽域，旧）----
 
@@ -180,8 +192,22 @@ class TurntableConfig:
         return self.pulse_for_angle(self.angle_for_box(box_id))
 
     def pos_for_box(self, box_id: int) -> int:
-        """货格号 → 位置值（0~4095）。360° 分度的生产路径。"""
+        """货格号 → 位置值（0~4095）。**pos_table 优先**（2026-11-07 定稿）。
+
+        只有 pos_table 里没有该格时才退回"角度→位置"换算（旧角度写法兼容路径）。
+        """
+        if box_id in self.pos_table:
+            pos = int(self.pos_table[box_id])
+            if not (POS_MIN <= pos <= POS_MAX):
+                raise TurntableUncalibrated(
+                    f"货格 {box_id} 的 pos={pos} 不在 [{POS_MIN},{POS_MAX}]"
+                )
+            return pos
         return self.pos_for_angle(self.angle_for_box(box_id))
+
+    def boxes(self) -> list[int]:
+        """已知货格（pos_table ∪ angle_table），升序。"""
+        return sorted(set(self.pos_table) | set(self.angle_table))
 
     def coverage(self) -> tuple[int, int]:
         """角度表里最小/最大脉宽 —— 上机前用它自查有没有越界。"""
@@ -189,8 +215,13 @@ class TurntableConfig:
         return (min(pulses), max(pulses)) if pulses else (0, 0)
 
     def position_coverage(self) -> tuple[int, int]:
-        """角度表里最小/最大位置值 —— 360° 上机前自查用。"""
-        positions = [self.pos_for_angle(a) for a in self.angle_table.values()]
+        """角度表/位置表里最小/最大位置值 —— 360° 上机前自查用。"""
+        positions = []
+        for box in self.boxes():
+            if box in self.pos_table:
+                positions.append(int(self.pos_table[box]))
+            else:
+                positions.append(self.pos_for_angle(self.angle_table[box]))
         return (min(positions), max(positions)) if positions else (0, 0)
 
 
@@ -478,9 +509,9 @@ class Turntable:
             pulse_txt = "脉宽域不可用（超 ±137°，走位置域）"
         plo, phi = config.position_coverage()
         logger.info(
-            "[%s] 就绪：零位=%dµs 比例=%.4fµs/度 sign=%+d 角度表=%s %s 位置范围=[%d,%d]",
+            "[%s] 就绪：零位=%dµs 比例=%.4fµs/度 sign=%+d 格=%s %s 位置范围=[%d,%d]",
             config.name, config.zero_pulse_us, config.us_per_degree, config.angle_sign,
-            sorted(config.angle_table), pulse_txt, plo, phi,
+            config.boxes(), pulse_txt, plo, phi,
         )
 
     # ---- 动作 ----
@@ -538,8 +569,11 @@ class Turntable:
         """转到货格 `box_id`（位置域）**并等待整定**，返回目标位置值。"""
         pos = self.command_box_position(box_id)
         time.sleep(self.config.settle_s)
-        logger.info("[%s] 转到货格 %d：角度 %.1f° → 位置 %d",
-                    self.config.name, box_id, self.config.angle_for_box(box_id), pos)
+        angle_txt = ""
+        if box_id in self.config.angle_table:
+            angle_txt = "角度 %.1f° → " % self.config.angle_for_box(box_id)
+        logger.info("[%s] 转到货格 %d：%s位置 %d",
+                    self.config.name, box_id, angle_txt, pos)
         return pos
 
     def goto_position(self, pos: int) -> int:
