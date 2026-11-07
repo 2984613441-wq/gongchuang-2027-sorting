@@ -12,12 +12,15 @@
 * 不修改 `ITEM_TASK`：落点照旧在 offset 3-6 传，动态分配是 Pi 内部决策。
 * 默认 `mode="static"`（走旧 `[BoxMap]`），显式 `dynamic` 才启用分配 ⇒ 一键回退。
 
-分配规则（按优先级）
---------------------
+分配规则（按优先级，2026-11-07 S2 定稿）
+----------------------------------------
 1. **同 code 复用**：该 (shape,color) 已分配到某格 ⇒ 继续用同一格（集中落点、少换格）。
-2. **优先「与当前转盘挡位相同」的空格**：减少转盘换挡次数（方案C 下 `side` 只有两个值）。
-3. **再按格号升序**（1..6），保证可复现。
-4. 全满 ⇒ 返回 ``None``（上层拒识/等待，不猜）。
+2. **空格选择 = 编号最小（1→6）**：保证转盘角度单调 +60°、不回摆，且完全可复现。
+3. 全满 ⇒ 返回 ``None``（上层拒识/等待，不猜）。
+
+~~2. 优先「与当前转盘挡位相同」的空格~~ —— **已删除**（2026-11-07，S2）：
+360° 转盘每格差 60°、位置域是绝对坐标，"同侧"没有意义；保留 `side_of_box`
+构造参数只为兼容旧调用，**传了也会被忽略**并打一条 WARNING。
 """
 
 from __future__ import annotations
@@ -56,7 +59,14 @@ class SlotAllocator:
         if not self._boxes:
             raise ValueError("box_ids 不能为空")
         self._static = dict(static_map or {})
-        self._side_of_box = dict(side_of_box or {})
+        # ⚠️ 2026-11-07（S2）：side_of_box 已废弃 —— 选格固定 1→6，不再按"侧"挑格。
+        #    参数保留只为旧调用方不炸；传了就忽略并提示。
+        if side_of_box:
+            _LOGGER.warning(
+                "slot_allocator：side_of_box 已废弃（2026-11-07 S2：选格固定 1→6），"
+                "本次忽略 %s", side_of_box,
+            )
+        self._side_of_box: dict[int, str] = {}
         self._journal = Path(journal_path) if journal_path else None
         self._round_id = round_id
         self._strict = bool(strict)
@@ -92,12 +102,7 @@ class SlotAllocator:
                             sorted(self._box_to_code.items()), code)
             return None
 
-        prev_side = self._side_of_box.get(self._last_box) if self._last_box else None
-        if prev_side is not None:
-            same_side = [b for b in free if self._side_of_box.get(b) == prev_side]
-            if same_side:
-                free = same_side
-
+        # 2026-11-07（S2）：两侧逻辑已删除 —— 空格里直接取编号最小的（1→6 单调）
         chosen = min(free)
         self._assign(code, chosen)
         return chosen

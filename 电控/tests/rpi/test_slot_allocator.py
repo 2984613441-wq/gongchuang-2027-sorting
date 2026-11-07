@@ -74,15 +74,46 @@ def test_full_allocator_can_raise_in_strict_mode():
 
 
 # --------------------------------------------------------------------------- #
-# 转盘换挡优化：优先与上次同侧
+# S2（2026-11-07）：去"两侧"，选格固定 1→6
 # --------------------------------------------------------------------------- #
-def test_prefers_same_side_to_reduce_turntable_moves():
+def test_side_of_box_is_deprecated_and_ignored():
+    """传了 side_of_box 也不影响选格：空格一律取编号最小（1→6）。"""
     sides = {1: "A", 2: "B", 3: "A", 4: "B", 5: "A", 6: "B"}
     alloc = SlotAllocator(mode="dynamic", side_of_box=sides)
-    assert alloc.box_for(11) == 1                 # 首次取最小格 → A 侧
-    assert alloc.box_for(12) == 3                 # A 侧还有空格 ⇒ 优先 A（不是 2）
-    assert alloc.box_for(13) == 5
-    assert alloc.box_for(14) == 2                 # A 侧满 ⇒ 才去 B
+    assert [alloc.box_for(c) for c in (11, 12, 13, 14)] == [1, 2, 3, 4]
+
+
+def test_selection_is_monotonic_1_to_6():
+    """A→1、B→2、A 复用→1、C→3 …… 六件按 1..6 单调占用（转盘不回摆）。"""
+    alloc = SlotAllocator(mode="dynamic")
+    assert alloc.box_for(11) == 1
+    assert alloc.box_for(12) == 2
+    assert alloc.box_for(11) == 1          # 同 code 复用
+    assert alloc.box_for(13) == 3
+    assert alloc.box_for(14) == 4
+    assert alloc.box_for(15) == 5
+    assert alloc.box_for(16) == 6
+    assert alloc.occupancy() == {1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16}
+    assert alloc.box_for(17) is None       # 满格拒识
+
+
+def test_correct_conflict_only_logs_and_keeps_old_mapping():
+    """复看纠正冲突：actual code 已映射到别格 ⇒ 只记日志、不改旧映射、返回 False。"""
+    alloc = SlotAllocator(mode="dynamic")
+    assert alloc.box_for(11) == 1
+    assert alloc.box_for(21) == 2
+    ok = alloc.correct(expected_code=11, actual_code=21, box_id=1)  # 21 已在 box2
+    assert ok is False
+    assert alloc.assignment() == {11: 1, 21: 2}
+
+
+def test_correct_moves_expected_mapping():
+    """复看纠正正常路径：把 11→box1 的台账改成实际 code=22→box1。"""
+    alloc = SlotAllocator(mode="dynamic")
+    assert alloc.box_for(11) == 1
+    assert alloc.correct(expected_code=11, actual_code=22, box_id=1) is True
+    assert alloc.assignment() == {22: 1}
+    assert alloc.box_for(22) == 1
 
 
 # --------------------------------------------------------------------------- #

@@ -375,9 +375,17 @@ def load_strategy_from_cfg(
                 pos_table[box_id] = pos
             else:
                 try:
-                    angle_table[box_id] = float(raw)
+                    angle = float(raw)
                 except ValueError:
                     continue  # 跳过格式错误项（既有行为）
+                # 2026-11-07（复核建议 1）：漏写 `pos:` 的纯数字会被当角度，
+                # 现场写 `1 = 2048` 会变成"角度 2048°"，要到运行期才 raise —— 提前拦住。
+                if abs(angle) > 360.0:
+                    raise SystemExit(
+                        f"方案B [TurntableAngles] 的 {box_id} = {angle:g} 超出角度范围"
+                        f"（{config_path}）：位置值请写成 pos:NNNN，角度只接受 |角度| ≤ 360。"
+                    )
+                angle_table[box_id] = angle
 
         if pos_table and angle_table:
             raise SystemExit(

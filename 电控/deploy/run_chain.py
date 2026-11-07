@@ -132,7 +132,10 @@ _WQY_ZENHEI_TTC = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 # ---------------------------------------------------------------------------
 # DEMO 夹具（仅 --fake-link 开发/冒烟模式使用；全部为演示数据，不是冻结参数）
 # ---------------------------------------------------------------------------
-DEMO_NAMES = {2: "红方柱", 4: "蓝圆柱"}  # class_id -> 货物名称（模拟本地 TF 卡名称表）
+DEMO_NAMES = {
+    1: "演示件1", 2: "红方柱", 3: "演示件3", 4: "蓝圆柱",
+    5: "演示件5", 6: "演示件6",
+}  # class_id -> 货物名称（模拟本地 TF 卡名称表；1..6 供 --demo-items 6 用）
 DEMO_IMAGE_IDS = {2: 2, 4: 4}  # class_id -> image_id（冻结 image_id == class_id 1:1）
 # box_id -> (x, y) 落料点，单位 0.1mm；注入后 ITEM_TASK payload 才可序列化（grip_angle=0xFF）
 DEMO_DROP_POINTS = {1: (100, 200), 2: (300, 400)}
@@ -526,6 +529,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="开发/冒烟模式：FakeSerialLink + 模拟 STM32，无需硬件跑通闭环（非生产路径）",
     )
     parser.add_argument(
+        "--demo-items", type=int, default=2,
+        help="--fake-link 演示件数（默认 2；=6 时喂 code=1..6，用于验证动态分配 1→6 与转盘逐格）",
+    )
+    parser.add_argument(
         "--config",
         default=_env("SORTING_CONFIG", DEFAULT_CONFIG_PATH),
         help="参数配置文件：[DropPoints] 六盒落点 / [BoxMap] 对应表；"
@@ -855,7 +862,8 @@ def build_frame_output(
 
     raise SystemExit(f"未知 --frame-output: {kind}")
 
-def build_placeholder_source(*, round_id: str, round_task_id: int, demo: bool) -> FakeTaskSource:
+def build_placeholder_source(*, round_id: str, round_task_id: int, demo: bool,
+                            items: int = 2) -> FakeTaskSource:
     """视觉数据源占位：FakeTaskSource（演示队列）。
 
     ⚠️ 视觉数据源占位：MaixCAM 的 BATCH_TARGETS 线格式**未冻结**，这里用
@@ -878,20 +886,39 @@ def build_placeholder_source(*, round_id: str, round_task_id: int, demo: bool) -
         scheduler.load_source(FakeTaskSource(contexts))
     """
     if demo:
-        batch = BatchTargets(
-            round_task_id,
-            (
-                VisionTarget(1, 2, box_id=1),  # 红方柱（DEMO）
-                VisionTarget(2, 4, box_id=2),  # 蓝圆柱（DEMO）
-            ),
-        )
-        queue = build_item_task_queue(
-            batch,
-            image_id_for_class=DEMO_IMAGE_IDS.__getitem__,
-            drop_point_for_box=DEMO_DROP_POINTS.__getitem__,
-            # P3：落料点 + 抓取点都给全，payload 才是可序列化的 12 字节。
-            grasp_point_for_target=lambda target: DEMO_GRASP_POINTS.get(target.target_seq),
-        )
+        if items > 2:
+            # 2026-11-07（S2）：多件 demo —— 验证「动态分配 1→6 + 转盘逐格下发」，
+            # code 用 1..items，货格号也先用 1..items（动态分配会把 code 映射成格号）。
+            _targets = tuple(
+                VisionTarget(seq, seq, pixel_x=100 + 40 * seq, pixel_y=100 + 30 * seq,
+                             box_id=seq)
+                for seq in range(1, int(items) + 1)
+            )
+            batch = BatchTargets(round_task_id, _targets)
+            queue = build_item_task_queue(
+                batch,
+                image_id_for_class=lambda class_id: int(class_id),
+                drop_point_for_box=lambda box_id: (100 + 10 * int(box_id),
+                                                   200 + 10 * int(box_id)),
+                grasp_point_for_target=lambda target: (
+                    -300 + 20 * int(target.target_seq), 150),
+            )
+        else:
+            batch = BatchTargets(
+                round_task_id,
+                (
+                    VisionTarget(1, 2, box_id=1),  # 红方柱（DEMO）
+                    VisionTarget(2, 4, box_id=2),  # 蓝圆柱（DEMO）
+                ),
+            )
+            queue = build_item_task_queue(
+                batch,
+                image_id_for_class=DEMO_IMAGE_IDS.__getitem__,
+                drop_point_for_box=DEMO_DROP_POINTS.__getitem__,
+                # P3：落料点 + 抓取点都给全，payload 才是可序列化的 12 字节。
+                grasp_point_for_target=lambda target: DEMO_GRASP_POINTS.get(
+                    target.target_seq),
+            )
     else:
         queue = ()  # 真实模式：等待注入视觉源；接入前一轮开始后即为空源（见 README 限制）
 
@@ -1314,7 +1341,16 @@ def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
             "改成 pos:NNNN 写法（角度表缺绝对基准，±180° 以上会越界）"
         )
 
-    settle_s, tol, timeout_s = 0.6, 20, 2.5
+    # 到位超时默认值必须跟舵机移动时间联动（2026-11-07 复核建议 2）：
+    # 现默认 move_ms=1500 ⇒ max(2.5, 1.5+1.2)=2.7s；现场把 TURNTABLE_MOVE_MS 调大
+    # （如慢转 3000ms）时不会误锁。`[Turntable] arrive_timeout_s` 一旦显式给出则以它为准。
+    move_ms = 1500
+    try:
+        move_ms = int(os.environ.get("TURNTABLE_MOVE_MS", "1500"))
+    except ValueError:
+        logger.warning("TURNTABLE_MOVE_MS 非法：按默认 1500ms 计算到位超时")
+    settle_s, tol = 0.6, 20
+    timeout_s = max(2.5, move_ms / 1000.0 + 1.2)
     try:
         cp = configparser.ConfigParser(inline_comment_prefixes=("#",))
         cp.read(config_path, encoding="utf-8")
@@ -1328,7 +1364,12 @@ def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
 
             settle_s = float(_num("settle_s", settle_s, float))
             tol = int(_num("arrive_tolerance_counts", tol, int))
-            timeout_s = float(_num("arrive_timeout_s", timeout_s, float))
+            if cp.has_option("Turntable", "arrive_timeout_s"):
+                timeout_s = float(_num("arrive_timeout_s", timeout_s, float))
+            else:
+                logger.info(
+                    "[Turntable] 未配 arrive_timeout_s：按 move_ms=%d 推导 = %.1fs",
+                    move_ms, timeout_s)
     except Exception:  # noqa: BLE001 - 配置读失败不应阻断装配（默认值可用）
         logger.warning("读 [Turntable] 段失败：按默认值装配", exc_info=True)
 
@@ -1341,6 +1382,13 @@ def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
         settle_s=settle_s,
     )
     backend = FakeBackend() if demo else make_backend()
+    if demo:
+        # 2026-11-07 复核建议 3：FakeBackend 的 read_pos 会回显刚写入的目标，
+        # 冒烟里的"到位"是构造出来的 —— 只证明时序/接线逻辑，不证明真实串口读回。
+        logger.warning(
+            "方案B 冒烟用的是 FakeBackend：read_pos 回显目标 ⇒ **到位是构造的**，"
+            "不证明真实串口读回；真机验收必须另做（M1–M3 回填后单件真跑）。"
+        )
     turntable = Turntable(config, backend)
     guard = PositionTurnGuard(
         turntable, ArrivalConfig(tolerance_counts=tol, timeout_s=timeout_s)
@@ -1537,9 +1585,25 @@ def run(args: argparse.Namespace) -> int:
     # demo 模式本来就没有复看/动态分配（单件 class_id 直接是货格号），置 None 即正确语义。
     place_runtime = None
     slot_allocator = None
+    box_id_resolver = None
+    if args.slot_mode == "dynamic":
+        # 2026-11-07（S2）：动态分配移到分支之前 —— demo 冒烟也要能验证
+        # "code → box_id → 转盘格" 这条链；选格固定 1→6（已去两侧）。
+        from electrical_control.rpi.slot_allocator import SlotAllocator
+
+        slot_allocator = SlotAllocator(
+            box_ids=(1, 2, 3, 4, 5, 6),
+            mode="dynamic",
+            journal_path=None if demo else args.slot_journal,
+            round_id=round_id,
+        )
+        box_id_resolver = slot_allocator.box_for
+        logger.info("货格动态分配：已启用（选格 1→6，台账=%s，round=%s）",
+                    "(demo 不写台账)" if demo else args.slot_journal, round_id)
     if demo:
         scheduler.load_source(
-            build_placeholder_source(round_id=round_id, round_task_id=round_task_id, demo=demo)
+            build_placeholder_source(round_id=round_id, round_task_id=round_task_id,
+                                     demo=demo, items=max(1, int(args.demo_items)))
         )
     else:
         # 夹取策略（默认 off）：只在启用时构造排序器；构造失败自动退回 off（fail-safe）。
@@ -1615,29 +1679,8 @@ def run(args: argparse.Namespace) -> int:
         except Exception:
             logger.warning("读取 skip_shapes 失败：本次不跳过任何形状", exc_info=True)
 
-        # 2026-11-01（动态分配）：code → box_id。默认 static（走旧静态表，行为不变）。
-        slot_allocator = None
-        box_id_resolver = None
-        if args.slot_mode == "dynamic":
-            from electrical_control.rpi.slot_allocator import SlotAllocator
-
-            side_of_box = {}
-            get_sides = getattr(strategy, "side_of_box", None)
-            if callable(get_sides):
-                try:
-                    side_of_box = dict(get_sides())
-                except Exception:
-                    logger.warning("取转盘侧表失败：动态分配按无侧信息处理", exc_info=True)
-            slot_allocator = SlotAllocator(
-                box_ids=(1, 2, 3, 4, 5, 6),
-                mode="dynamic",
-                side_of_box=side_of_box,
-                journal_path=args.slot_journal,
-                round_id=round_id,
-            )
-            box_id_resolver = slot_allocator.box_for
-            logger.info("货格动态分配：已启用（台账=%s，round=%s）",
-                        args.slot_journal, round_id)
+        # 2026-11-01（动态分配）：code → box_id。装配已上移到 `if demo:` 之前
+        # （2026-11-07 S2：demo 也要验证 code→box_id→转盘格）。这里不再重复构造。
 
         # 2026-11-01：落料位复看（默认 off）。复用同一个 slot_allocator 做台账纠正。
         place_runtime = None

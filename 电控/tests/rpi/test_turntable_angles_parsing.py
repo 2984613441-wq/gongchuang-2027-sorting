@@ -94,6 +94,14 @@ def test_pos_non_integer_is_rejected():
     assert "格式错误" in str(exc.value)
 
 
+def test_angle_out_of_range_without_pos_prefix_is_rejected():
+    """复核建议 1：漏写 pos: 的纯数字（|值|>360）必须提前拒，不能当"角度 2048°"。"""
+    body = ANGLE_SIX.replace("6 = 112.5", "6 = 2048")
+    with pytest.raises(SystemExit) as exc:
+        _load(body)
+    assert "pos:NNNN" in str(exc.value)
+
+
 def test_unknown_box_key_ignored():
     """9 = ... 这类表外键仍按既有行为跳过（不参与完整性检查）。"""
     strat = _load(POS_SIX + "9 = pos:100\n")
