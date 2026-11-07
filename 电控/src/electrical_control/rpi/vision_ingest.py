@@ -66,6 +66,8 @@ BATCH_ID_BYTE_IS_BOX_ID = True
 #   "code"                   ：id 字节 = code(1..30)，由上层按 [BoxMap] 映射货格
 # 环境变量 BATCH_ID_BYTE_MODE 可覆盖（部署时逐台切换，避免两端同时改）。
 BATCH_ID_BYTE_MODE = os.environ.get("BATCH_ID_BYTE_MODE", "box_id").strip().lower()
+# 2026-11-07：上面的旧常量已由 BATCH_ID_BYTE_MODE 取代（run_chain 可用 --id-byte-mode 覆盖）。
+# 保留它只为兼容旧引用；**解析逻辑不再读它**。
 
 #: code(1..30) 的两个分量。shape 1..6、color 1..5。
 SHAPE_COUNT = 6
@@ -159,7 +161,7 @@ def parse_batch_targets(data: bytes) -> BatchTargets:
                 continue
             class_id = id_byte          # 冻结口径：class_id = code(1..30)
             box_id = None               # 由上层 [BoxMap] 映射（不在解析层猜）
-        elif BATCH_ID_BYTE_IS_BOX_ID:
+        elif BATCH_ID_BYTE_MODE == "box_id":
             if not (1 <= id_byte <= 6):
                 # 0（或其它越界值）= 视觉认不出这个件的颜色 → 只丢这一件，
                 # 不能整帧抛错：否则同一帧里认得出来的件会被一起丢掉。

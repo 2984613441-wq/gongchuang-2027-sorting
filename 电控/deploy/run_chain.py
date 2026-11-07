@@ -544,6 +544,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="挡板巡检（S3）：off=关闭（默认）/ observe=只记录 / stop=发现异常即停链",
     )
     parser.add_argument(
+        "--id-byte-mode", choices=("box_id", "code"), default=None,
+        help="BATCH_TARGETS 的 id 字节语义：box_id=货格号（默认，校赛模式）/ "
+             "code=code(1..30)（V1.0，需配合 --slot-mode dynamic）。"
+             "缺省取环境变量 BATCH_ID_BYTE_MODE；必须与 MaixCAM 发送端 --id-mode 一致。",
+    )
+    parser.add_argument(
         "--config",
         default=_env("SORTING_CONFIG", DEFAULT_CONFIG_PATH),
         help="参数配置文件：[DropPoints] 六盒落点 / [BoxMap] 对应表；"
@@ -1504,6 +1510,25 @@ def run(args: argparse.Namespace) -> int:
     logger = logging.getLogger("ec-chain")
     cl = CentralLog(capacity=1024)
 
+    # ---- BATCH_TARGETS 的 id 字节语义（2026-11-07 显式化）----
+    # 默认 box_id（校赛模式，= 现状）；V1.0「颜色进链路」用 code(1..30)。
+    # ⚠️ 必须与 MaixCAM 发送端一致：盒号模式(shape 兼容) ↔ --id-mode shape；code ↔ --id-mode code。
+    # 旧实现只靠模块常量，切换要改源码；现在 --id-byte-mode / 环境变量 BATCH_ID_BYTE_MODE 均可。
+    from electrical_control.rpi import vision_ingest as _vision_ingest
+
+    id_byte_mode = (args.id_byte_mode
+                    or getattr(_vision_ingest, "BATCH_ID_BYTE_MODE", "box_id"))
+    id_byte_mode = str(id_byte_mode).strip().lower()
+    if id_byte_mode not in ("box_id", "code"):
+        logger.warning("BATCH_ID_BYTE_MODE=%r 非法：按 box_id 处理（校赛模式）", id_byte_mode)
+        id_byte_mode = "box_id"
+    _vision_ingest.BATCH_ID_BYTE_MODE = id_byte_mode
+    id_byte_is_box = id_byte_mode == "box_id"
+    logger.info(
+        "BATCH_TARGETS id 字节语义=%s（%s）", id_byte_mode,
+        "id=货格号 1..6" if id_byte_is_box else "id=code 1..30，货格靠动态分配映射",
+    )
+
     demo = bool(args.fake_link)
     if demo:
         round_id = args.round_id or "round-demo"
@@ -1595,14 +1620,13 @@ def run(args: argparse.Namespace) -> int:
             except Exception as exc:  # noqa: BLE001 - 加固失败不阻断开工（会记警告）
                 logger.warning("转盘中位置中失败（不阻断）：%s", exc)
         # 方案C 靠 payload.class_id 当货格号（校赛模式：BATCH_TARGETS 的 id 字节就
-        # 承载 box_id，见 vision_ingest.BATCH_ID_BYTE_IS_BOX_ID）。形状模式下没有这个
+        # 承载 box_id，见 vision_ingest.BATCH_ID_BYTE_MODE）。形状/code 模式下没有这个
         # 等价关系，转盘就不知道该不该翻 ⇒ 拒绝启动，而不是把每件都投到 A 侧。
-        from electrical_control.rpi.vision_ingest import BATCH_ID_BYTE_IS_BOX_ID
-
-        if not BATCH_ID_BYTE_IS_BOX_ID:
+        if not id_byte_is_box:
             raise SystemExit(
-                "方案C 要求 payload.class_id 就是货格号（校赛模式 "
-                "BATCH_ID_BYTE_IS_BOX_ID=True）；当前为形状模式，转盘无法判断该翻不翻。"
+                "方案C 要求 payload.class_id 就是货格号（BATCH_ID_BYTE_MODE=box_id）；"
+                f"当前 id 字节语义={id_byte_mode!r}，转盘无法判断该翻不翻。"
+                "（方案B+动态分配 或 改回 box_id 模式。）"
             )
         logger.warning(
             "方案C 已启用：开工自检会**真的转动转盘**。现场纪律：发 1500µs 时指针应"
@@ -1633,13 +1657,11 @@ def run(args: argparse.Namespace) -> int:
             ) from exc
         # 方案B 落料时转盘必须按「货格号」转；code 模式下 class_id 是 code(1..30)，
         # 不是货格号 ⇒ 必须开动态分配把 code 映射成 box_id，否则会按 code 转错格。
-        from electrical_control.rpi.vision_ingest import BATCH_ID_BYTE_IS_BOX_ID
-
-        if not BATCH_ID_BYTE_IS_BOX_ID and args.slot_mode != "dynamic":
+        if not id_byte_is_box and args.slot_mode != "dynamic":
             raise SystemExit(
                 "方案B（[TurntableAngles]）在 code 模式下需要 --slot-mode dynamic："
                 "class_id 是 code(1..30) 而不是货格号，没有动态分配就会按 code 转错格。"
-                "（或改用 BATCH_TARGETS 校赛模式 BATCH_ID_BYTE_IS_BOX_ID=True。）"
+                "（或改用 BATCH_ID_BYTE_MODE=box_id 校赛模式。）"
             )
         logger.warning(
             "方案B 已启用（位置域转盘）：到位判据 = 读回位置与目标差 ≤ %d counts，"

@@ -117,12 +117,16 @@ class TurntableGuard:
         index_reader: IndexReader | None = None,
         index_side: str | None = None,
         index_timeout_s: float = 0.5,
+        demo: bool = False,
     ) -> None:
         self.turntable = turntable
         self._side_of_box = dict(side_of_box)
         self._index = index_reader
         self._index_side = index_side
         self._index_timeout_s = index_timeout_s
+        # 2026-11-07：--fake-link 下模拟 STM32 会**立刻**回 MOTION_DONE（真实滑台要走十余秒），
+        # 此时 settle_s 还没到并不代表转盘没到位 —— 见 note_motion_done 的 demo 分支。
+        self._demo = bool(demo)
 
         self._side: str | None = None      # 记账：转盘现在在哪一侧（None = 未知）
         self._expect: str | None = None    # 本件要校验的侧（None = 本件不用翻）
@@ -218,9 +222,19 @@ class TurntableGuard:
         转盘在 `before_dispatch` 就起转、滑台要走十余秒，正常情况下 `_expect`
         早已清空。若此刻**仍在等校验**，说明本件的落料发生在"转盘位置未被确认"
         的窗口里 —— 记 ERROR 并锁死，绝不把同一个错误重复到下一件。
+
+        ⚠️ demo（`--fake-link`）例外：模拟 STM32 会**立刻**回 MOTION_DONE，此刻
+        settle_s 当然还没到。这里把"已到期"提前到当下、立即读一次索引：
+        索引对 ⇒ 视为已确认；索引不对/读不到 ⇒ 仍按失败锁死。
         """
         if self._expect is None:
             return
+        if self._demo:
+            self._due_at = 0.0
+            self.poll()
+            if self._expect is None and self._failed is None:
+                logger.debug("[demo] MOTION_DONE 先于 settle_s 到达：已即时校验索引通过")
+                return
         waited = time.monotonic() - self._issued_at
         self.unverified_at_motion_done += 1
         self._failed = (
@@ -292,6 +306,7 @@ def build_turn_guard(strategy, *, demo: bool = False) -> TurntableGuard | None:
         side_of_box=strategy.side_of_box(),
         index_reader=index_reader,
         index_side=index_side,
+        demo=demo,
     )
 
 
@@ -427,14 +442,24 @@ index_pin = 17
     check(g5.failed is None, "     到点即认为到位")
 
     # ---------------------------------------------------------------- 11 落料窗口未确认
+    # 2026-11-07：demo 下"MOTION_DONE 先于 settle_s"是**正常的**（模拟 STM32 立刻回），
+    # 守卫会即时校验索引并放行；用"索引不符"才能复现真正的未确认失败。
     g6 = build_turn_guard(_mk("a"), demo=True)
     assert g6 is not None
     g6.preflight()
-    g6.before_dispatch(4)
+    g6.before_dispatch(4)                    # 翻到 B 侧
+    g6._index = FakeIndexReader(lambda: True)   # 挡片掉了：B 侧却一直读高
     g6.note_motion_done()                    # settle 未到就收到 MOTION_DONE
     check(g6.failed is not None and "MOTION_DONE" in (g6.failed or ""),
-          "[11a] 落料时转盘未确认到位 ⇒ 记 ERROR + 锁死")
+          "[11a] 落料时索引仍不符 ⇒ 记 ERROR + 锁死")
     check(g6.unverified_at_motion_done == 1, "[11b] 计数 +1")
+
+    g6b = build_turn_guard(_mk("a"), demo=True)
+    assert g6b is not None
+    g6b.preflight()
+    g6b.before_dispatch(4)
+    g6b.note_motion_done()                   # demo：索引对 ⇒ 即时校验放行
+    check(g6b.failed is None, "[11c] demo 下 MOTION_DONE 先到 ⇒ 即时校验通过、不锁死")
 
     # ---------------------------------------------------------------- 12 缺侧
     g7 = build_turn_guard(_mk("none"), demo=True)
