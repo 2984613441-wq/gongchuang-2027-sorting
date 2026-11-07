@@ -275,3 +275,6 @@ docs/reports/evidence/**/pytest-tmp-*/
 _deployed_snapshot/
 _three_way_evidence/
 _pi_tools/_snap/
+
+# 2026-11-07：挡板巡检单测的临时 ini（每次运行重写，不入库）
+电控/tests/rpi/_tmp/

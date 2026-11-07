@@ -96,6 +96,12 @@ from electrical_control.rpi.drop_strategy import (
 )
 from electrical_control.rpi.turntable import TurntableError
 from electrical_control.rpi.turntable_guard import build_turn_guard
+# 2026-11-07（S3 骨架）：挡板巡检三态 + D7 动作映射。模块默认 off，off 时一行都不执行。
+from electrical_control.rpi.barrier_check import (
+    BarrierCheckError,
+    BarrierState,
+    unknown_action,
+)
 from electrical_control.rpi.log import (
     DISPLAY,
     FAULT,
@@ -531,6 +537,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--demo-items", type=int, default=2,
         help="--fake-link 演示件数（默认 2；=6 时喂 code=1..6，用于验证动态分配 1→6 与转盘逐格）",
+    )
+    parser.add_argument(
+        "--barrier-check", choices=("off", "observe", "stop"),
+        default=_env("BARRIER_CHECK", "off"),
+        help="挡板巡检（S3）：off=关闭（默认）/ observe=只记录 / stop=发现异常即停链",
     )
     parser.add_argument(
         "--config",
@@ -1353,7 +1364,7 @@ def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
     timeout_s = max(2.5, move_ms / 1000.0 + 1.2)
     try:
         cp = configparser.ConfigParser(inline_comment_prefixes=("#",))
-        cp.read(config_path, encoding="utf-8")
+        cp.read(config_path, encoding="utf-8-sig")   # 容忍 Windows BOM
         if cp.has_section("Turntable"):
             def _num(key: str, default, cast):
                 try:
@@ -1398,6 +1409,91 @@ def _wire_position_turntable(strategy, config_path, *, demo: bool, logger):
         len(config.boxes()), tol, timeout_s, type(backend).__name__,
     )
     return turntable, guard
+
+
+def _load_image_bgr(path: str):
+    """读一张图为 ndarray（BGR）。优先 cv2（Pi/PC 都有），退化到 PIL；都失败即 raise。"""
+    import numpy as np
+
+    try:
+        import cv2  # noqa: PLC0415 - 延迟导入：主机无 cv2 时退化到 PIL
+
+        img = cv2.imread(str(path))
+        if img is not None:
+            return img
+    except Exception:  # noqa: BLE001 - 没有 cv2 就试 PIL
+        pass
+    try:
+        from PIL import Image  # noqa: PLC0415
+
+        with Image.open(str(path)) as im:
+            arr = np.asarray(im.convert("RGB"))
+        return arr[..., ::-1].copy()   # RGB → BGR
+    except Exception as exc:  # noqa: BLE001
+        raise BarrierCheckError("基准帧读不出：%s（%s）" % (path, exc)) from exc
+
+
+def _snapshot_frame_provider(url: str, timeout_s: float):
+    """返回一个"取一帧"的可调用对象（HTTP 快照口）。失败由调用方按 UNKNOWN 处理。"""
+    import numpy as np
+
+    def _fetch():
+        import urllib.request  # noqa: PLC0415
+
+        with urllib.request.urlopen(str(url), timeout=float(timeout_s)) as resp:
+            data = resp.read()
+        if not data:
+            raise BarrierCheckError("快照口返回空（%s）" % url)
+        try:
+            import cv2  # noqa: PLC0415
+
+            arr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+            if arr is None:
+                raise BarrierCheckError("快照解码失败（%s）" % url)
+            return arr
+        except ImportError:
+            from io import BytesIO  # noqa: PLC0415
+
+            from PIL import Image  # noqa: PLC0415
+
+            with Image.open(BytesIO(data)) as im:
+                return np.asarray(im.convert("RGB"))[..., ::-1].copy()
+
+    return _fetch
+
+
+def _build_barrier_checker(args, logger):
+    """按 `--barrier-check` 装配挡板巡检器；off ⇒ None（主循环一行都不执行）。
+
+    ⚠️ S3 **骨架**：判定逻辑/开关/配置已就位，但 ROI、基准帧、阈值必须等 M3 现场标定；
+    配置不全时**启动即拒**（fail-closed），避免"以为开着其实没生效"。
+    """
+    mode = str(args.barrier_check).lower()
+    if mode == "off":
+        return None
+
+    from dataclasses import replace  # noqa: PLC0415
+
+    from electrical_control.rpi.barrier_check import (  # noqa: PLC0415
+        BarrierChecker,
+        load_barrier_config,
+    )
+
+    try:
+        cfg = replace(load_barrier_config(args.config), mode=mode)
+        baseline = _load_image_bgr(cfg.baseline_path)
+        provider = _snapshot_frame_provider(cfg.snapshot_url, cfg.snapshot_timeout_s)
+        checker = BarrierChecker(cfg, provider, baseline)
+    except BarrierCheckError as exc:
+        raise SystemExit("挡板巡检启用失败（fail-closed）：%s" % exc) from exc
+
+    logger.warning(
+        "挡板巡检已启用：mode=%s camera=%s roi=%s diff=%.3f on_unknown=%s"
+        "（⚠️ S3 骨架：ROI/基准帧/阈值需 M3 现场标定；"
+        "OCCUPIED 时\"能判 code 就当正常件抓\"分支尚未接入）",
+        cfg.mode, cfg.camera, cfg.roi, cfg.diff_threshold, cfg.on_unknown,
+    )
+    return checker
 
 
 def run(args: argparse.Namespace) -> int:
@@ -1549,6 +1645,9 @@ def run(args: argparse.Namespace) -> int:
             "方案B 已启用（位置域转盘）：到位判据 = 读回位置与目标差 ≤ %d counts，"
             "超时/读不到 ⇒ 锁死停链。", turn_guard.config.tolerance_counts
         )
+
+    # ---- 挡板巡检（S3，2026-11-07 骨架，默认 off）----
+    barrier = _build_barrier_checker(args, logger)
 
     font_path = resolve_font(args.font, logger)
     names = load_names(args.names_file, demo=demo)
@@ -1807,6 +1906,37 @@ def run(args: argparse.Namespace) -> int:
         # 1) 派发下一件（R-D04：未完成显示前返回 None）
         task = scheduler.next_task()
         if task is not None:
+            # 1a-0) 挡板巡检（S3，2026-11-07 骨架，默认 off）：**去落料点之前**看一眼挡板上
+            #       有没有被崩飞的件（D6/L76）。设计口径：只判"有/无"，不细分类；
+            #       OCCUPIED 且能判 code ⇒ 当正常件抓（上层分支，骨架未接）；判不出 ⇒ 夹爪停住；
+            #       取图失败/判不出 ⇒ UNKNOWN，按 [BarrierCheck] on_unknown 决定继续/停链。
+            if barrier is not None:
+                state, evidence = barrier.check()
+                is_stop_mode = barrier.config.mode == "stop"
+                if state is BarrierState.OCCUPIED:
+                    cl.record(STAGE, now=time.monotonic(),
+                              detail="挡板巡检=OCCUPIED %s" % (evidence,))
+                    if is_stop_mode:
+                        logger.error("挡板上有件（%s）⇒ 停链（fail-closed）；"
+                                     "现场需把件清走再继续", evidence)
+                        cl.record(FAULT, now=time.monotonic(),
+                                  detail="挡板巡检发现有件，停链")
+                        return 1
+                    logger.warning("挡板巡检=OCCUPIED（observe 档：只记录，不拦截）：%s",
+                                   evidence)
+                elif state is BarrierState.UNKNOWN:
+                    cl.record(STAGE, now=time.monotonic(),
+                              detail="挡板巡检=UNKNOWN %s" % (evidence,))
+                    action = unknown_action(barrier.config)
+                    if action == "stop" and is_stop_mode:
+                        logger.error("挡板巡检没看清且 on_unknown=stop ⇒ 停链：%s", evidence)
+                        cl.record(FAULT, now=time.monotonic(),
+                                  detail="挡板巡检 UNKNOWN，按 on_unknown=stop 停链")
+                        return 1
+                    logger.warning("挡板巡检=UNKNOWN（%s）：按 on_unknown=%s 继续",
+                                   evidence, barrier.config.on_unknown)
+                else:
+                    logger.debug("挡板巡检=CLEAR")
             # 1a) 转盘预置（仅方案C）：**发 ITEM_TASK 之前**下发脉宽，但**不等整定**。
             #     写 pw.txt 是 O(1) 原子替换；真正的转角由常驻 pi_pw.py（每 0.1s 读一次）
             #     与舵机在滑台约 12s 的行程里完成 ⇒ **转盘与滑台并行**
